@@ -1,6 +1,6 @@
 [package]
-name = "mesh-vault"
-description = "The vault is the centerpiece of Mesh Security on the provider side, managing all collateral"
+name = "mesh-native-staking"
+description = "Native Staking implements LocalStaking interface, allowing native Cosmos SDK staking of collateral in a Mesh Security Vault"
 version = { workspace = true }
 edition = { workspace = true }
 license       = { workspace = true }

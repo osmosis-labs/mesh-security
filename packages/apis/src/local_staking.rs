@@ -25,6 +25,11 @@ pub trait LocalStakingApi {
         &self,
         ctx: ExecCtx,
         owner: String,
+        // Q: Why is this Binary and not just `validator: String` like before?
+        // A: To make it more flexible. Maybe "local" staking is staking a cw20 collateral in the local DAO is belongs to
+        // and said DAO requires unbonding period as staking argument and not a validator address.
+        //
+        // Basically, it allows iterations on various staking designs without touching Vault
         msg: Binary,
     ) -> Result<Response, Self::Error>;
 
