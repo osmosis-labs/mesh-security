@@ -64,6 +64,16 @@ impl NativeStakingContract<'_> {
         todo!()
     }
 
+    /// If the caller has any delegations, withdraw all rewards from those delegations and
+    /// send the tokens to the caller.
+    #[msg(exec)]
+    fn claim_rewards(&self, _ctx: ExecCtx) -> Result<Response, ContractError> {
+        todo!()
+    }
+
+    // TODO: maybe a better name to differentiate from claim_rewards?
+    // This is about finishing the unbonding process....
+
     /// releases any mature claims this user has from a previous unstake.
     /// this will go back to the vault via release_local
     /// error if the user doesn't have any mature claims
