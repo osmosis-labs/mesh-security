@@ -1,30 +1,24 @@
-use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Binary, Decimal, Response, StdError};
+use cosmwasm_std::{Binary, Response, StdError, Uint128};
 use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
-#[cw_serde]
-pub struct MaxSlashResponse {
-    pub max_slash: Decimal,
-}
+use crate::local_staking::MaxSlashResponse;
 
-// TODO: question - staking should know which is vault, vault should know what is local staking...
-// How to best handle the chicken and egg problem (2 step init with Option?)
-
-/// This is the interface to any local staking contract needed by the vault contract.
+/// This is the interface to any remote staking contract needed by the vault contract.
 /// Users will need to use the custom methods to actually manage funds
 #[interface]
-pub trait LocalStakingApi {
+pub trait RemoteStakingApi {
     type Error: From<StdError>;
 
     /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
     /// specified in msg with it.
     /// Msg is custom to each implementation of the staking contract and opaque to the vault
     #[msg(exec)]
-    fn receive_stake(
+    fn receive_virtual_stake(
         &self,
         ctx: ExecCtx,
         owner: String,
+        amount: Uint128,
         msg: Binary,
     ) -> Result<Response, Self::Error>;
 

@@ -1,14 +1,7 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+mod local_staking;
+mod remote_staking;
+mod vault;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use local_staking::{LocalStakingApi, MaxSlashResponse};
+pub use remote_staking::RemoteStakingApi;
+pub use vault::VaultApi;

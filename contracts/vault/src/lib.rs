@@ -1,12 +1,6 @@
 pub mod contract;
-// mod cw1;
 pub mod error;
 mod types;
-// #[cfg(any(test, feature = "tests"))]
-// pub mod multitest;
-// pub mod responses;
-// pub mod state;
-// mod whitelist;
 
 #[cfg(not(any(feature = "library", tarpaulin_include)))]
 mod entry_points {

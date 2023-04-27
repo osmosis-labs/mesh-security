@@ -7,5 +7,10 @@ license       = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+sylvia = { workspace = true }
+cosmwasm-std     = { workspace = true }
+cosmwasm-schema  = { workspace = true }
+
 thiserror        = { workspace = true }
+serde            = { workspace = true }
 
