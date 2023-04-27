@@ -1,0 +1,40 @@
+[package]
+name = "mesh-vault"
+version = { workspace = true }
+edition = { workspace = true }
+license       = { workspace = true }
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# for more explicit tests, cargo test --features=backtraces
+backtraces = ["cosmwasm-std/backtraces"]
+# use library feature to disable all instantiate/execute/query exports
+library = []
+
+[dependencies]
+mesh-apis        = { workspace = true }
+
+sylvia = { workspace = true }
+cosmwasm-schema  = { workspace = true }
+cosmwasm-std     = { workspace = true }
+cosmwasm-storage = { workspace = true }
+cw-storage-plus  = { workspace = true }
+cw2              = { workspace = true }
+cw-utils         = { workspace = true }
+
+schemars         = { workspace = true }
+serde            = { workspace = true }
+thiserror        = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+test-case     = { workspace = true }
+derivative    = { workspace = true }
+anyhow        = { workspace = true }
+
+[[bin]]
+name = "schema"
+doc  = false
