@@ -8,11 +8,11 @@ mod entry_points {
     use cosmwasm_std::{entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response};
 
     use crate::contract::{
-        ContractExecMsg, ContractQueryMsg, InstantiateMsg, NativeStakingContract,
+        ContractExecMsg, ContractQueryMsg, InstantiateMsg, NativeStakingProxyContract,
     };
     use crate::error::ContractError;
 
-    const CONTRACT: NativeStakingContract = NativeStakingContract::new();
+    const CONTRACT: NativeStakingProxyContract = NativeStakingProxyContract::new();
 
     #[entry_point]
     pub fn instantiate(

@@ -1,6 +1,7 @@
-use cosmwasm_std::{Binary, Response};
+use cosmwasm_std::{ensure_eq, from_slice, Binary, Response};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
+use cw_utils::must_pay;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -8,7 +9,7 @@ use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
 use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCallback};
 
 use crate::error::ContractError;
-use crate::types::{Config, ConfigResponse};
+use crate::types::{Config, ConfigResponse, StakeMsg};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -62,15 +63,28 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     #[msg(exec)]
     fn receive_stake(
         &self,
-        _ctx: ExecCtx,
+        ctx: ExecCtx,
         _owner: String,
-        // TODO: we parse this into types::StakeMsg
-        _msg: Binary,
+        msg: Binary,
     ) -> Result<Response, Self::Error> {
+        // only can be called by the vault
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.vault, ctx.info.sender, ContractError::Unauthorized {});
+
+        // assert funds passed in
+        let _paid = must_pay(&ctx.info, &cfg.denom)?;
+
+        // parse message to find validator to stake on
+        let StakeMsg { validator } = from_slice(&msg)?;
+        let _ = validator;
+
+        // look up if there is a proxy to match
+        // instantiate or call stake on existing
         todo!();
     }
 
     /// Returns the maximum percentage that can be slashed
+    /// TODO: any way to query this from the chain? or we just pass in InstantiateMsg???
     #[msg(query)]
     fn max_slash(&self, _ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
         todo!();

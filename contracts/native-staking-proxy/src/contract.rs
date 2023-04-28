@@ -1,8 +1,7 @@
-use cosmwasm_std::{Binary, Response, Uint128, VoteOption, WeightedVoteOption};
+use cosmwasm_std::{ensure_eq, DistributionMsg, Response, Uint128, VoteOption, WeightedVoteOption};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
-use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -12,14 +11,13 @@ use crate::types::{ClaimsResponse, Config, ConfigResponse};
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub struct NativeStakingContract<'a> {
+pub struct NativeStakingProxyContract<'a> {
     // TODO
     config: Item<'a, Config>,
 }
 
 #[contract(error=ContractError)]
-#[messages(local_staking_api as LocalStakingApi)]
-impl NativeStakingContract<'_> {
+impl NativeStakingProxyContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -34,31 +32,33 @@ impl NativeStakingContract<'_> {
         ctx: InstantiateCtx,
         denom: String,
         owner: String,
-        _validator: String,
+        validator: String,
     ) -> Result<Response, ContractError> {
         let config = Config {
             denom,
-            parent: ctx.info.sender,
+            parent: ctx.info.sender.clone(),
             owner: ctx.deps.api.addr_validate(&owner)?,
         };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-        // TODO: stake info.funds on validator
+        // stake info.funds on validator
+        let res = self.stake(ctx, validator)?;
 
-        Ok(Response::new())
+        // set owner as recipient of future withdrawls
+        let set_withdrawl = DistributionMsg::SetWithdrawAddress {
+            address: config.parent.into_string(),
+        };
+        Ok(res.add_message(set_withdrawl))
     }
 
-    /// unstakes the given amount from the given validator on behalf of the calling user.
-    /// returns an error if the user doesn't have such stake.
-    /// after unbonding period, it will allow the user to claim the tokens (returning to vault)
+    /// stakes the tokens from `info.funds` to the given validator.
+    /// can only be called by the parent contract.
     #[msg(exec)]
-    fn unstake(
-        &self,
-        _ctx: ExecCtx,
-        _validator: String,
-        _amount: Uint128,
-    ) -> Result<Response, ContractError> {
+    fn stake(&self, ctx: ExecCtx, _validator: String) -> Result<Response, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
+
         todo!()
     }
 
@@ -67,11 +67,14 @@ impl NativeStakingContract<'_> {
     #[msg(exec)]
     fn restake(
         &self,
-        _ctx: ExecCtx,
+        ctx: ExecCtx,
         _from_validator: String,
         _to_validator: String,
         _amount: Uint128,
     ) -> Result<Response, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
         todo!()
     }
 
@@ -79,10 +82,13 @@ impl NativeStakingContract<'_> {
     #[msg(exec)]
     fn vote(
         &self,
-        _ctx: ExecCtx,
+        ctx: ExecCtx,
         _proposal_id: String,
         _vote: VoteOption,
     ) -> Result<Response, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
         todo!()
     }
 
@@ -90,25 +96,59 @@ impl NativeStakingContract<'_> {
     #[msg(exec)]
     fn vote_weighted(
         &self,
-        _ctx: ExecCtx,
+        ctx: ExecCtx,
         _proposal_id: String,
         _vote: Vec<WeightedVoteOption>,
     ) -> Result<Response, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
         todo!()
     }
 
     /// If the caller has any delegations, withdraw all rewards from those delegations and
     /// send the tokens to the caller.
+    /// NOTE: must make sure not to release unbonded tokens
     #[msg(exec)]
-    fn withdraw_rewards(&self, _ctx: ExecCtx) -> Result<Response, ContractError> {
+    fn withdraw_rewards(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        // TODO: track all validators
+        let validators = vec!["todo".to_string()];
+
+        // withdraw all delegations to the owner (set as withdrawl address in instantiate)
+        let msgs = validators
+            .into_iter()
+            .map(|validator| DistributionMsg::WithdrawDelegatorReward { validator });
+        let res = Response::new().add_messages(msgs);
+        Ok(res)
+    }
+
+    /// unstakes the given amount from the given validator on behalf of the calling user.
+    /// returns an error if the user doesn't have such stake.
+    /// after unbonding period, it will allow the user to claim the tokens (returning to vault)
+    #[msg(exec)]
+    fn unstake(
+        &self,
+        ctx: ExecCtx,
+        _validator: String,
+        _amount: Uint128,
+    ) -> Result<Response, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
         todo!()
     }
 
-    /// releases any mature claims this user has from a previous unstake.
+    /// releases any tokens that have fully unbonded from a previous unstake.
     /// this will go back to the parent via `release_proxy_stake`
-    /// error if the user doesn't have any mature claims
+    /// error if the proxy doesn't have any liquid tokens
     #[msg(exec)]
-    fn process_unbonded(&self, _ctx: ExecCtx) -> Result<Response, ContractError> {
+    fn release_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
         todo!()
     }
 
@@ -117,34 +157,11 @@ impl NativeStakingContract<'_> {
         todo!()
     }
 
-    /// Returns all open claims for this account, both mature and pending
+    /// Returns all pending unbonding for this account
+    /// TODO: can we do that with contract API?
+    /// Or better they use cosmjs native delegation queries with this proxy address
     #[msg(query)]
     fn unbonding(&self, _ctx: QueryCtx, _account: String) -> Result<ClaimsResponse, ContractError> {
         todo!()
-    }
-}
-
-#[contract]
-impl LocalStakingApi for NativeStakingContract<'_> {
-    type Error = ContractError;
-
-    /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
-    /// specified in msg with it.
-    /// Msg is custom to each implementation of the staking contract and opaque to the vault
-    #[msg(exec)]
-    fn receive_stake(
-        &self,
-        _ctx: ExecCtx,
-        _owner: String,
-        // TODO: we parse this into
-        _msg: Binary,
-    ) -> Result<Response, Self::Error> {
-        todo!();
-    }
-
-    /// Returns the maximum percentage that can be slashed
-    #[msg(query)]
-    fn max_slash(&self, _ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
-        todo!();
     }
 }

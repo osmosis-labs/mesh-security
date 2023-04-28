@@ -32,5 +32,5 @@ pub struct ConfigResponse {
 /// This is the message that is binary encoded in receive_stake(..msg)
 #[cw_serde]
 pub struct StakeMsg {
-    validator: String,
+    pub validator: String,
 }
