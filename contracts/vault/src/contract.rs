@@ -1,8 +1,12 @@
-use cosmwasm_std::{Addr, Binary, Response, SubMsg, Uint128, WasmMsg};
+use cosmwasm_std::{
+    entry_point, Addr, Binary, DepsMut, Env, Reply, Response, SubMsg, SubMsgResponse, Uint128,
+    WasmMsg,
+};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
+use cw_utils::parse_instantiate_response_data;
 
-use mesh_apis::VaultApi;
+use mesh_apis::{LocalStakingQueryMsg, MaxSlashResponse, VaultApi};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -103,6 +107,38 @@ impl VaultContract<'_> {
     #[msg(query)]
     fn config(&self, _ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         todo!()
+    }
+
+    fn reply_init_callback(
+        &self,
+        deps: DepsMut,
+        reply: SubMsgResponse,
+    ) -> Result<Response, ContractError> {
+        let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
+        let local_staking = Addr::unchecked(init_data.contract_address);
+
+        // we want to calculate the slashing rate on this contract and store it locally...
+        let query = LocalStakingQueryMsg::MaxSlash {};
+        let MaxSlashResponse { max_slash } =
+            deps.querier.query_wasm_smart(&local_staking, &query)?;
+        // TODO: store this when we actually implement the other logic
+        let _ = max_slash;
+
+        let mut cfg = self.config.load(deps.storage)?;
+        cfg.local_staking = local_staking;
+        self.config.save(deps.storage, &cfg)?;
+
+        Ok(Response::new())
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, ContractError> {
+    match reply.id {
+        REPLY_ID_INSTANTIATE => {
+            VaultContract::new().reply_init_callback(deps, reply.result.unwrap())
+        }
+        _ => Err(ContractError::InvalidReplyId(reply.id)),
     }
 }
 
