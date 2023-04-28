@@ -4,10 +4,14 @@ use sylvia::{interface, schemars};
 
 use crate::local_staking::MaxSlashResponse;
 
-/// This is the interface to any remote staking contract needed by the vault contract.
-/// Users will need to use the custom methods to actually manage funds
+/// This is the interface to any cross staking contract needed by the vault contract.
+/// That is, using the vault collateral to stake on a system that doesn't use the collateral
+/// as the native staking token. This involves the concept of "virtual stake"
+///
+/// Users will need to use implementation-specific methods to actually manage funds,
+/// this just clarifies the interaction with the Vault contract
 #[interface]
-pub trait RemoteStakingApi {
+pub trait CrossStakingApi {
     type Error: From<StdError>;
 
     /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action

@@ -96,7 +96,7 @@ impl VaultApi for VaultContract<'_> {
 
     /// This must be called by the remote staking contract to release this claim
     #[msg(exec)]
-    fn release_remote(
+    fn release_cross_stake(
         &self,
         _ctx: ExecCtx,
         // address of the user who originally called stake_remote
@@ -110,7 +110,7 @@ impl VaultApi for VaultContract<'_> {
     /// This must be called by the local staking contract to release this claim
     /// Amount of tokens unstaked are those included in ctx.info.funds
     #[msg(exec)]
-    fn release_local(
+    fn release_local_stake(
         &self,
         _ctx: ExecCtx,
         // address of the user who originally called stake_remote

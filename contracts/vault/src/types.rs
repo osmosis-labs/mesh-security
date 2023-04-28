@@ -5,8 +5,7 @@ use cosmwasm_std::{Addr, Uint128};
 
 #[cw_serde]
 pub struct Config {
-    /// The denom we accept for staking
-    // FIXME: support cw20 as well later
+    /// The denom we accept for staking (only native tokens)
     pub denom: String,
 
     /// The address of the local staking contract (where actual tokens go)
