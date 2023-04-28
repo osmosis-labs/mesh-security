@@ -8,9 +8,6 @@ pub struct Config {
     /// The denom we accept for staking
     pub denom: String,
 
-    /// This is the code id for native-staking-proxy contract we will be managing
-    pub proxy_code_id: u64,
-
     /// The address of the vault contract (where we get and return stake)
     pub vault: Addr,
 }
@@ -19,11 +16,7 @@ pub struct Config {
 
 #[cw_serde]
 pub struct ConfigResponse {
-    /// The denom we accept for staking
     pub denom: String,
-
-    /// This is the code id for native-staking-proxy contract we will be managing
-    pub proxy_code_id: u64,
 
     /// The address of the vault contract (where we get and return stake)
     pub vault: String,

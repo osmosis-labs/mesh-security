@@ -1,6 +1,6 @@
 [package]
-name = "mesh-native-staking"
-description = "Native Staking implements LocalStaking interface, allowing native Cosmos SDK staking of collateral in a Mesh Security Vault"
+name = "mesh-native-staking-proxy"
+description = "Per-user proxy contract to manage your stake deposited into native-staking"
 version = { workspace = true }
 edition = { workspace = true }
 license       = { workspace = true }
@@ -17,7 +17,6 @@ library = []
 
 [dependencies]
 mesh-apis        = { workspace = true }
-mesh-native-staking-proxy        = { workspace = true }
 
 sylvia = { workspace = true }
 cosmwasm-schema  = { workspace = true }

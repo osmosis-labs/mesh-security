@@ -10,6 +10,8 @@ repository    = "https://github.com/osmosis-labs/mesh-security"
 [workspace.dependencies]
 mesh-apis        = { path = "./packages/apis" }
 mesh-vault    = { path = "./contracts/vault" }
+mesh-native-staking    = { path = "./contracts/native-staking" }
+mesh-native-staking-proxy    = { path = "./contracts/native-staking-proxy" }
 #mesh-slasher     = { path = "./contracts/mesh-slasher" }
 #meta-staking     = { path = "./contracts/meta-staking" }
 #mesh-provider    = { path = "./contracts/mesh-provider" }

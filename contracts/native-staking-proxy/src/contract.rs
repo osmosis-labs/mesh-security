@@ -31,11 +31,9 @@ impl NativeStakingContract<'_> {
         &self,
         ctx: InstantiateCtx,
         denom: String,
-        proxy_code_id: u64,
     ) -> Result<Response, ContractError> {
         let config = Config {
             denom,
-            proxy_code_id,
             vault: ctx.info.sender,
         };
         self.config.save(ctx.deps.storage, &config)?;
