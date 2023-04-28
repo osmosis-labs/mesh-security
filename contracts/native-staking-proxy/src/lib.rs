@@ -1,5 +1,6 @@
 pub mod contract;
 pub mod error;
+pub mod native_staking_callback;
 mod types;
 
 #[cfg(not(any(feature = "library", tarpaulin_include)))]

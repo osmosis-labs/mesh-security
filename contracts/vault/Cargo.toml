@@ -4,6 +4,7 @@ description = "The vault is the centerpiece of Mesh Security on the provider sid
 version = { workspace = true }
 edition = { workspace = true }
 license       = { workspace = true }
+repository       = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
@@ -31,6 +32,7 @@ serde            = { workspace = true }
 thiserror        = { workspace = true }
 
 [dev-dependencies]
+#sylvia = { workspace = true, features = ["mt"] }
 cw-multi-test = { workspace = true }
 test-case     = { workspace = true }
 derivative    = { workspace = true }

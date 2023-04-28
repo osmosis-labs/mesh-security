@@ -8,8 +8,11 @@ pub struct Config {
     /// The denom we accept for staking
     pub denom: String,
 
-    /// The address of the vault contract (where we get and return stake)
-    pub vault: Addr,
+    /// The address of the users who controls restaking, voting, unbonding
+    pub owner: Addr,
+
+    /// The address of the parent contract (where we get and return stake)
+    pub parent: Addr,
 }
 
 /**** api ****/
@@ -18,17 +21,14 @@ pub struct Config {
 pub struct ConfigResponse {
     pub denom: String,
 
-    /// The address of the vault contract (where we get and return stake)
-    pub vault: String,
+    /// The address of the users who controls restaking, voting, unbonding
+    pub owner: String,
+
+    /// The address of the parent contract (where we get and return stake)
+    pub parent: String,
 }
 
 #[cw_serde]
 pub struct ClaimsResponse {
     // TODO
-}
-
-/// This is the message that is binary encoded in receive_stake(..msg)
-#[cw_serde]
-pub struct StakeMsg {
-    validator: String,
 }

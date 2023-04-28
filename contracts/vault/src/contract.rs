@@ -6,7 +6,8 @@ use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::parse_instantiate_response_data;
 
-use mesh_apis::{LocalStakingQueryMsg, MaxSlashResponse, VaultApi};
+use mesh_apis::local_staking_api::{LocalStakingApiQueryMsg, MaxSlashResponse};
+use mesh_apis::vault_api::{self, VaultApi};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -24,6 +25,7 @@ pub struct VaultContract<'a> {
 }
 
 #[contract(error=ContractError)]
+#[messages(vault_api as VaultApi)]
 impl VaultContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -118,7 +120,7 @@ impl VaultContract<'_> {
         let local_staking = Addr::unchecked(init_data.contract_address);
 
         // we want to calculate the slashing rate on this contract and store it locally...
-        let query = LocalStakingQueryMsg::MaxSlash {};
+        let query = LocalStakingApiQueryMsg::MaxSlash {};
         let MaxSlashResponse { max_slash } =
             deps.querier.query_wasm_smart(&local_staking, &query)?;
         // TODO: store this when we actually implement the other logic

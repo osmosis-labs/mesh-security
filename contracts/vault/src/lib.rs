@@ -2,6 +2,7 @@ pub mod contract;
 pub mod error;
 mod types;
 
+#[allow(dead_code)]
 #[cfg(not(any(feature = "library", tarpaulin_include)))]
 mod entry_points {
     use cosmwasm_std::{entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response};
@@ -36,6 +37,3 @@ mod entry_points {
         msg.dispatch(&CONTRACT, (deps, env))
     }
 }
-
-#[cfg(not(any(feature = "library", tarpaulin_include)))]
-pub use crate::entry_points::*;

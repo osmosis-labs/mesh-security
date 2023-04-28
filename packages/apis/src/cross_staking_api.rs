@@ -2,7 +2,7 @@ use cosmwasm_std::{Binary, Response, StdError, Uint128};
 use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
-use crate::local_staking::MaxSlashResponse;
+pub use crate::local_staking_api::MaxSlashResponse;
 
 /// This is the interface to any cross staking contract needed by the vault contract.
 /// That is, using the vault collateral to stake on a system that doesn't use the collateral
