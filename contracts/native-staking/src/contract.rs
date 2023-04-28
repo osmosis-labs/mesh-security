@@ -25,14 +25,17 @@ impl NativeStakingContract<'_> {
         }
     }
 
+    /// The caller of the instantiation will be the vault contract
     #[msg(instantiate)]
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx,
         denom: String,
-        // Question: how to register vault_contract??
     ) -> Result<Response, ContractError> {
-        let config = Config { denom, vault: None };
+        let config = Config {
+            denom,
+            vault: ctx.info.sender,
+        };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         Ok(Response::new())

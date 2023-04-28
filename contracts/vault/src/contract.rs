@@ -1,4 +1,4 @@
-use cosmwasm_std::{Binary, Response, Uint128};
+use cosmwasm_std::{Addr, Binary, Response, SubMsg, Uint128, WasmMsg};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
@@ -7,10 +7,12 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::types::{BalanceResponse, Config, ConfigResponse};
+use crate::types::{BalanceResponse, Config, ConfigResponse, StakingInitInfo};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub const REPLY_ID_INSTANTIATE: u64 = 1;
 
 pub struct VaultContract<'a> {
     // TODO
@@ -30,15 +32,29 @@ impl VaultContract<'_> {
         &self,
         ctx: InstantiateCtx,
         denom: String,
-        local_staking: String,
+        local_staking: StakingInitInfo,
     ) -> Result<Response, ContractError> {
         let config = Config {
             denom,
-            local_staking: ctx.deps.api.addr_validate(&local_staking)?,
+            // We set this in reply, so proper once the
+            local_staking: Addr::unchecked(""),
         };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-        Ok(Response::new())
+
+        // instantiate local_staking and handle reply
+        let msg = WasmMsg::Instantiate {
+            admin: local_staking.admin,
+            code_id: local_staking.code_id,
+            msg: local_staking.msg,
+            funds: vec![],
+            label: local_staking
+                .label
+                .unwrap_or_else(|| "Mesh Security Local Staking".to_string()),
+        };
+        // TODO: how to handle reply in sylvia?
+        let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
+        Ok(Response::new().add_submessage(sub_msg))
     }
 
     #[msg(exec)]

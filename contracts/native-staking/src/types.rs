@@ -6,11 +6,10 @@ use cosmwasm_std::Addr;
 #[cw_serde]
 pub struct Config {
     /// The denom we accept for staking
-    // FIXME: support cw20 as well later
     pub denom: String,
 
-    /// The address of the local staking contract (where actual tokens go)
-    pub vault: Option<Addr>,
+    /// The address of the vault contract (where we get and return stake)
+    pub vault: Addr,
 }
 
 /**** api ****/
@@ -19,8 +18,8 @@ pub struct Config {
 pub struct ConfigResponse {
     pub denom: String,
 
-    /// The address of the local staking contract (where actual tokens go)
-    pub vault: Option<String>,
+    /// The address of the vault contract (where we get and return stake)
+    pub vault: String,
 }
 
 #[cw_serde]
