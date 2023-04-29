@@ -47,7 +47,7 @@ impl NativeStakingProxyContract<'_> {
 
         // set owner as recipient of future withdrawls
         let set_withdrawl = DistributionMsg::SetWithdrawAddress {
-            address: config.parent.into_string(),
+            address: config.owner.into_string(),
         };
         Ok(res.add_message(set_withdrawl))
     }
