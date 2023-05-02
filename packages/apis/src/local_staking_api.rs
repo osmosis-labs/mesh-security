@@ -8,7 +8,6 @@ pub struct MaxSlashResponse {
     pub max_slash: Decimal,
 }
 
-
 /// This is the interface to any local staking contract needed by the vault contract.
 /// Users will need to use the custom methods to actually manage funds
 #[interface]
