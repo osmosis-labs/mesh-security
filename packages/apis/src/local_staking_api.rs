@@ -8,8 +8,6 @@ pub struct MaxSlashResponse {
     pub max_slash: Decimal,
 }
 
-// TODO: question - staking should know which is vault, vault should know what is local staking...
-// How to best handle the chicken and egg problem (2 step init with Option?)
 
 /// This is the interface to any local staking contract needed by the vault contract.
 /// Users will need to use the custom methods to actually manage funds

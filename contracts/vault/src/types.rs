@@ -33,9 +33,9 @@ pub struct StakingInitInfo {
     pub admin: Option<String>,
     /// Code id used to instantiate the local staking contract
     pub code_id: u64,
-    /// msg is the JSON-encoded InstantiateMsg struct (as raw Binary)
+    /// JSON-encoded local staking `InstantiateMsg` struct (as raw `Binary`)
     pub msg: Binary,
-    /// A human-readable label for the contract (will use a default if not provided)
+    /// A human-readable label for the local staking contract (will use a default if not provided)
     pub label: Option<String>,
 }
 

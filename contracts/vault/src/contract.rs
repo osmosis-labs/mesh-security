@@ -42,7 +42,7 @@ impl VaultContract<'_> {
     ) -> Result<Response, ContractError> {
         let config = Config {
             denom,
-            // We set this in reply, so proper once the
+            // We set this in reply, so proper once the reply message completes successfully
             local_staking: Addr::unchecked(""),
         };
         self.config.save(ctx.deps.storage, &config)?;
