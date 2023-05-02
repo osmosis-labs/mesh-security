@@ -1,0 +1,52 @@
+[workspace]
+members = ["packages/*", "contracts/*"]
+
+[workspace.package]
+edition       = "2021"
+version       = "0.1.0"
+license       = "MIT"
+repository    = "https://github.com/osmosis-labs/mesh-security"
+
+[workspace.dependencies]
+mesh-apis        = { path = "./packages/apis" }
+mesh-vault    = { path = "./contracts/vault" }
+mesh-native-staking    = { path = "./contracts/native-staking" }
+mesh-native-staking-proxy    = { path = "./contracts/native-staking-proxy" }
+#mesh-slasher     = { path = "./contracts/mesh-slasher" }
+#meta-staking     = { path = "./contracts/meta-staking" }
+#mesh-provider    = { path = "./contracts/mesh-provider" }
+#mesh-testing  = { path = "./packages/mesh-testing" }
+
+sylvia = { version = "0.3.2" }
+#sylvia = { version = "0.3.2", features = ["mt"] }
+cosmwasm-schema  = "1.2"
+cosmwasm-std     = { version = "1.2", features = ["ibc3", "cosmwasm_1_2"] }
+cosmwasm-storage = "1.2"
+cw-storage-plus  = "1.0"
+cw-utils         = "1.0"
+cw-controllers   = "1.0"
+cw2              = "1.0"
+schemars         = "0.8.11"
+serde            = { version = "1.0.152", default-features = false, features = ["derive"] }
+thiserror        = "1.0.38"
+
+# dev deps
+anyhow        = "1"
+cw-multi-test = "0.16"
+derivative    = "2"
+test-case     = "2.2.0"
+
+[profile.release]
+codegen-units    = 1
+debug            = false
+debug-assertions = false
+lto              = true
+panic            = 'abort'
+rpath            = false
+opt-level        = 3
+overflow-checks  = true
+
+[profile.release.package.mesh-vault]
+codegen-units = 1
+incremental   = false
+
