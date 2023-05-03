@@ -64,7 +64,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     fn receive_stake(
         &self,
         ctx: ExecCtx,
-        _owner: String,
+        owner: String,
         msg: Binary,
     ) -> Result<Response, Self::Error> {
         // only can be called by the vault
@@ -77,6 +77,8 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         // parse message to find validator to stake on
         let StakeMsg { validator } = from_slice(&msg)?;
         let _ = validator;
+
+        let _ = owner;
 
         // look up if there is a proxy to match
         // instantiate or call stake on existing

@@ -55,10 +55,11 @@ impl NativeStakingProxyContract<'_> {
     /// stakes the tokens from `info.funds` to the given validator.
     /// can only be called by the parent contract.
     #[msg(exec)]
-    fn stake(&self, ctx: ExecCtx, _validator: String) -> Result<Response, ContractError> {
+    fn stake(&self, ctx: ExecCtx, validator: String) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
 
+        let _ = validator;
         todo!()
     }
 
@@ -68,13 +69,14 @@ impl NativeStakingProxyContract<'_> {
     fn restake(
         &self,
         ctx: ExecCtx,
-        _from_validator: String,
-        _to_validator: String,
-        _amount: Uint128,
+        from_validator: String,
+        to_validator: String,
+        amount: Uint128,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
+        let _ = (from_validator, to_validator, amount);
         todo!()
     }
 
@@ -83,12 +85,13 @@ impl NativeStakingProxyContract<'_> {
     fn vote(
         &self,
         ctx: ExecCtx,
-        _proposal_id: String,
-        _vote: VoteOption,
+        proposal_id: String,
+        vote: VoteOption,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
+        let _ = (proposal_id, vote);
         todo!()
     }
 
@@ -97,12 +100,13 @@ impl NativeStakingProxyContract<'_> {
     fn vote_weighted(
         &self,
         ctx: ExecCtx,
-        _proposal_id: String,
-        _vote: Vec<WeightedVoteOption>,
+        proposal_id: String,
+        vote: Vec<WeightedVoteOption>,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
+        let _ = (proposal_id, vote);
         todo!()
     }
 
@@ -132,12 +136,13 @@ impl NativeStakingProxyContract<'_> {
     fn unstake(
         &self,
         ctx: ExecCtx,
-        _validator: String,
-        _amount: Uint128,
+        validator: String,
+        amount: Uint128,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
+        let _ = (validator, amount);
         todo!()
     }
 
@@ -161,7 +166,8 @@ impl NativeStakingProxyContract<'_> {
     /// TODO: can we do that with contract API?
     /// Or better they use cosmjs native delegation queries with this proxy address
     #[msg(query)]
-    fn unbonding(&self, _ctx: QueryCtx, _account: String) -> Result<ClaimsResponse, ContractError> {
+    fn unbonding(&self, _ctx: QueryCtx, account: String) -> Result<ClaimsResponse, ContractError> {
+        let _ = account;
         todo!()
     }
 }
