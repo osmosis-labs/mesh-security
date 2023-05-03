@@ -1,0 +1,76 @@
+# Based on https://github.com/actions-rs/example/blob/master/.github/workflows/quickstart.yml
+
+on: [push, pull_request]
+
+name: Basic Checks
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.65.0
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Run build
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.65.0
+          command: build
+          args: --workspace
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.65.0
+          command: test
+          args: --workspace
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Compile WASM contract
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.65.0
+          command: wasm
+        env:
+          RUSTFLAGS: "-C link-arg=-s"
+
+  lints:
+    name: Lints
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.65.0
+          override: true
+          components: rustfmt, clippy
+
+      - name: Run cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.65.0
+          command: fmt
+          args: --all -- --check
+
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.65.0
+          command: clippy
+          args: --all-targets -- -D warnings
