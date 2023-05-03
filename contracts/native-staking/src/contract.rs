@@ -9,7 +9,7 @@ use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
 use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCallback};
 
 use crate::error::ContractError;
-use crate::types::{Config, ConfigResponse, StakeMsg};
+use crate::types::{Config, ConfigResponse, OwnerByProxyResponse, ProxyByOwnerResponse, StakeMsg};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -51,6 +51,26 @@ impl NativeStakingContract<'_> {
     fn config(&self, _ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         todo!()
     }
+
+    #[msg(query)]
+    fn proxy_by_owner(
+        &self,
+        _ctx: QueryCtx,
+        owner: String,
+    ) -> Result<ProxyByOwnerResponse, ContractError> {
+        let _ = owner;
+        todo!()
+    }
+
+    #[msg(query)]
+    fn owner_by_proxy(
+        &self,
+        _ctx: QueryCtx,
+        proxy: String,
+    ) -> Result<OwnerByProxyResponse, ContractError> {
+        let _ = proxy;
+        todo!()
+    }
 }
 
 #[contract]
@@ -87,6 +107,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
 
     /// Returns the maximum percentage that can be slashed
     /// TODO: any way to query this from the chain? or we just pass in InstantiateMsg???
+    /// NOTE: Let's use hardcode and make an issue to revisit for v1
     #[msg(query)]
     fn max_slash(&self, _ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
         todo!();

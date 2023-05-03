@@ -48,7 +48,7 @@ pub struct ConfigResponse {
 }
 
 #[cw_serde]
-pub struct BalanceResponse {
+pub struct AccountResponse {
     pub bonded: Uint128,
     pub free: Uint128,
     pub claims: Vec<Lein>,

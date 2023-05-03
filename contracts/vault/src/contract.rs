@@ -12,7 +12,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::types::{BalanceResponse, Config, ConfigResponse, StakingInitInfo};
+use crate::types::{AccountResponse, Config, ConfigResponse, StakingInitInfo};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -105,7 +105,7 @@ impl VaultContract<'_> {
     }
 
     #[msg(query)]
-    fn balance(&self, _ctx: QueryCtx, account: String) -> Result<BalanceResponse, ContractError> {
+    fn account(&self, _ctx: QueryCtx, account: String) -> Result<AccountResponse, ContractError> {
         let _ = account;
         todo!()
     }

@@ -162,12 +162,11 @@ impl NativeStakingProxyContract<'_> {
         todo!()
     }
 
-    /// Returns all pending unbonding for this account
+    /// Returns all pending unbonding
     /// TODO: can we do that with contract API?
     /// Or better they use cosmjs native delegation queries with this proxy address
     #[msg(query)]
-    fn unbonding(&self, _ctx: QueryCtx, account: String) -> Result<ClaimsResponse, ContractError> {
-        let _ = account;
+    fn unbonding(&self, _ctx: QueryCtx) -> Result<ClaimsResponse, ContractError> {
         todo!()
     }
 }

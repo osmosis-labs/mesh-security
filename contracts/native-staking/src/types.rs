@@ -29,6 +29,16 @@ pub struct ConfigResponse {
     pub vault: String,
 }
 
+#[cw_serde]
+pub struct ProxyByOwnerResponse {
+    pub proxy: String,
+}
+
+#[cw_serde]
+pub struct OwnerByProxyResponse {
+    pub owner: String,
+}
+
 /// This is the message that is binary encoded in receive_stake(..msg)
 #[cw_serde]
 pub struct StakeMsg {
