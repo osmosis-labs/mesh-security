@@ -67,7 +67,7 @@ impl MockCrossStakingContract<'_> {
         let cfg = self.config.load(ctx.deps.storage)?;
         let wasm = cfg
             .vault
-            .release_cross_stake(ctx.info.sender.into_string(), amount)?;
+            .release_cross_stake(ctx.info.sender.into_string(), amount, vec![])?;
         Ok(Response::new().add_message(wasm))
     }
 }

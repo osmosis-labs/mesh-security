@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Binary, Coin, DepsMut, Env, Reply, Response, StdError, SubMsg,
-    SubMsgResponse, Uint128, WasmMsg,
+    Addr, BankMsg, Binary, Coin, DepsMut, Env, Reply, Response, StdError, SubMsg, SubMsgResponse,
+    Uint128, WasmMsg,
 };
 use cw_utils::{must_pay, nonpayable, ParseReplyError, PaymentError};
 use thiserror::Error;
@@ -9,8 +9,8 @@ use thiserror::Error;
 use cw_storage_plus::Item;
 use cw_utils::parse_instantiate_response_data;
 
-use mesh_apis::cross_staking_api::CrossStakingApiExecMsg;
-use mesh_apis::local_staking_api::LocalStakingApiExecMsg;
+use mesh_apis::cross_staking_api::CrossStakingApiHelper;
+use mesh_apis::local_staking_api::LocalStakingApiHelper;
 use mesh_apis::vault_api::{self, VaultApi};
 use sylvia::types::{ExecCtx, InstantiateCtx};
 use sylvia::{contract, schemars};
@@ -38,7 +38,7 @@ pub struct Config {
     pub denom: String,
 
     /// The address of the local staking contract (where actual tokens go)
-    pub local_staking: Addr,
+    pub local_staking: LocalStakingApiHelper,
 }
 
 /// This is the info used to construct the native staking contract
@@ -77,7 +77,7 @@ impl MockVaultContract<'_> {
         let config = Config {
             denom,
             // We set this in reply, so proper once the reply message completes successfully
-            local_staking: Addr::unchecked(""),
+            local_staking: LocalStakingApiHelper(Addr::unchecked("")),
         };
         self.config.save(ctx.deps.storage, &config)?;
 
@@ -130,17 +130,13 @@ impl MockVaultContract<'_> {
         nonpayable(&ctx.info)?;
 
         // embed user-message in the actual message we want
-        let stake_msg = CrossStakingApiExecMsg::ReceiveVirtualStake {
-            owner: ctx.info.sender.into_string(),
+        let cross_staking = CrossStakingApiHelper(ctx.deps.api.addr_validate(&contract)?);
+        let wasm_msg = cross_staking.receive_virtual_stake(
+            ctx.info.sender.into_string(),
             amount,
             msg,
-        };
-        let wasm_msg = WasmMsg::Execute {
-            contract_addr: contract,
-            msg: to_binary(&stake_msg)?,
-            funds: vec![],
-        };
-
+            vec![],
+        )?;
         Ok(Response::new().add_message(wasm_msg))
     }
 
@@ -160,16 +156,8 @@ impl MockVaultContract<'_> {
             local_staking,
         } = self.config.load(ctx.deps.storage)?;
 
-        // embed user-message in the actual message we want
-        let stake_msg = LocalStakingApiExecMsg::ReceiveStake {
-            owner: ctx.info.sender.into_string(),
-            msg,
-        };
-        let wasm_msg = WasmMsg::Execute {
-            contract_addr: local_staking.into_string(),
-            msg: to_binary(&stake_msg)?,
-            funds: vec![Coin { denom, amount }],
-        };
+        let funds = vec![Coin { denom, amount }];
+        let wasm_msg = local_staking.receive_stake(ctx.info.sender.into_string(), msg, funds)?;
 
         Ok(Response::new().add_message(wasm_msg))
     }
@@ -183,7 +171,7 @@ impl MockVaultContract<'_> {
         let local_staking = Addr::unchecked(init_data.contract_address);
 
         let mut cfg = self.config.load(deps.storage)?;
-        cfg.local_staking = local_staking;
+        cfg.local_staking = LocalStakingApiHelper(local_staking);
         self.config.save(deps.storage, &cfg)?;
 
         Ok(Response::new())

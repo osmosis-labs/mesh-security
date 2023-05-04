@@ -54,12 +54,13 @@ impl VaultApiHelper {
         owner: String,
         // amount to unstake on that contract
         amount: Uint128,
+        funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {
         let msg = VaultApiExecMsg::ReleaseCrossStake { owner, amount };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,
-            funds: vec![],
+            funds,
         };
         Ok(wasm)
     }
@@ -69,13 +70,13 @@ impl VaultApiHelper {
         // address of the user who originally called stake_remote
         owner: String,
         // tokens to send along with this
-        funds: Coin,
+        funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {
         let msg = VaultApiExecMsg::ReleaseLocalStake { owner };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,
-            funds: vec![funds],
+            funds,
         };
         Ok(wasm)
     }

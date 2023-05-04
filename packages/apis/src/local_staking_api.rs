@@ -1,5 +1,6 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Binary, Decimal, Response, StdError};
+use cosmwasm_std::{to_binary, Addr, Binary, Coin, Decimal, Deps, Response, StdError, WasmMsg};
+use std::ops::Deref;
 use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
@@ -33,4 +34,43 @@ pub trait LocalStakingApi {
     /// Returns the maximum percentage that can be slashed
     #[msg(query)]
     fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error>;
+}
+
+#[cw_serde]
+pub struct LocalStakingApiHelper(pub Addr);
+
+impl Deref for LocalStakingApiHelper {
+    type Target = Addr;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl LocalStakingApiHelper {
+    pub fn addr(&self) -> &Addr {
+        &self.0
+    }
+
+    pub fn receive_stake(
+        &self,
+        // address of the user who originally called stake_remote
+        owner: String,
+        // amount to unstake on that contract
+        msg: Binary,
+        funds: Vec<Coin>,
+    ) -> Result<WasmMsg, StdError> {
+        let msg = LocalStakingApiExecMsg::ReceiveStake { owner, msg };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds,
+        };
+        Ok(wasm)
+    }
+
+    pub fn max_slash(&self, deps: Deps) -> Result<MaxSlashResponse, StdError> {
+        let query = LocalStakingApiQueryMsg::MaxSlash {};
+        deps.querier.query_wasm_smart(&self.0, &query)
+    }
 }

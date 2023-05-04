@@ -75,7 +75,7 @@ impl MockLocalStakingContract<'_> {
         };
         let wasm = cfg
             .vault
-            .release_local_stake(ctx.info.sender.into_string(), funds)?;
+            .release_local_stake(ctx.info.sender.into_string(), vec![funds])?;
         Ok(Response::new().add_message(wasm))
     }
 }
