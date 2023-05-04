@@ -22,11 +22,11 @@ pub enum ContractError {
     #[error("The address doesn't have sufficient balance for this operation")]
     InsufficentBalance,
 
-    #[error("The leinholder doesn't have any claims")]
-    UnknownLeinholder,
+    #[error("The lienholder doesn't have any claims")]
+    UnknownLienholder,
 
-    #[error("The leinholder doesn't have enough claims for the action")]
-    InsufficientLein,
+    #[error("The lienholder doesn't have enough claims for the action")]
+    InsufficientLien,
 
     #[error("Invalid reply id: {0}")]
     InvalidReplyId(u64),

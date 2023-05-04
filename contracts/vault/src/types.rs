@@ -15,12 +15,12 @@ pub struct Config {
 #[cw_serde]
 pub struct Balance {
     pub bonded: Uint128,
-    pub claims: Vec<LeinAddr>,
+    pub claims: Vec<LienAddr>,
 }
 
 #[cw_serde]
-pub struct LeinAddr {
-    pub leinholder: Addr,
+pub struct LienAddr {
+    pub lienholder: Addr,
     pub amount: Uint128,
 }
 
@@ -48,14 +48,14 @@ pub struct ConfigResponse {
 }
 
 #[cw_serde]
-pub struct BalanceResponse {
+pub struct AccountResponse {
     pub bonded: Uint128,
     pub free: Uint128,
-    pub claims: Vec<Lein>,
+    pub claims: Vec<Lien>,
 }
 
 #[cw_serde]
-pub struct Lein {
-    pub leinholder: String,
+pub struct Lien {
+    pub lienholder: String,
     pub amount: Uint128,
 }

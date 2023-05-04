@@ -12,7 +12,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::types::{BalanceResponse, Config, ConfigResponse, StakingInitInfo};
+use crate::types::{AccountResponse, Config, ConfigResponse, StakingInitInfo};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -69,7 +69,8 @@ impl VaultContract<'_> {
     }
 
     #[msg(exec)]
-    fn unbond(&self, _ctx: ExecCtx, _amount: Uint128) -> Result<Response, ContractError> {
+    fn unbond(&self, _ctx: ExecCtx, amount: Uint128) -> Result<Response, ContractError> {
+        let _ = amount;
         todo!()
     }
 
@@ -79,12 +80,13 @@ impl VaultContract<'_> {
         &self,
         _ctx: ExecCtx,
         // address of the contract to virtually stake on
-        _contract: String,
+        contract: String,
         // amount to stake on that contract
-        _amount: Uint128,
+        amount: Uint128,
         // action to take with that stake
-        _msg: Binary,
+        msg: Binary,
     ) -> Result<Response, ContractError> {
+        let _ = (contract, amount, msg);
         todo!()
     }
 
@@ -94,15 +96,17 @@ impl VaultContract<'_> {
         &self,
         _ctx: ExecCtx,
         // amount to stake on that contract
-        _amount: Uint128,
+        amount: Uint128,
         // action to take with that stake
-        _msg: Binary,
+        msg: Binary,
     ) -> Result<Response, ContractError> {
+        let _ = (amount, msg);
         todo!()
     }
 
     #[msg(query)]
-    fn balance(&self, _ctx: QueryCtx, _account: String) -> Result<BalanceResponse, ContractError> {
+    fn account(&self, _ctx: QueryCtx, account: String) -> Result<AccountResponse, ContractError> {
+        let _ = account;
         todo!()
     }
 
@@ -154,10 +158,11 @@ impl VaultApi for VaultContract<'_> {
         &self,
         _ctx: ExecCtx,
         // address of the user who originally called stake_remote
-        _owner: String,
+        owner: String,
         // amount to unstake on that contract
-        _amount: Uint128,
+        amount: Uint128,
     ) -> Result<Response, ContractError> {
+        let _ = (owner, amount);
         todo!()
     }
 
@@ -168,8 +173,9 @@ impl VaultApi for VaultContract<'_> {
         &self,
         _ctx: ExecCtx,
         // address of the user who originally called stake_remote
-        _owner: String,
+        owner: String,
     ) -> Result<Response, ContractError> {
+        let _ = owner;
         todo!()
     }
 }
