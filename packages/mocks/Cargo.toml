@@ -1,5 +1,5 @@
 [package]
-name = "mesh-apis"
+name = "mesh-mocks"
 version = { workspace = true }
 edition = { workspace = true }
 license       = { workspace = true }
@@ -8,6 +8,9 @@ license       = { workspace = true }
 sylvia = { workspace = true }
 cosmwasm-std     = { workspace = true }
 cosmwasm-schema  = { workspace = true }
+cw-utils     = { workspace = true }
+cw-storage-plus     = { workspace = true }
+mesh-apis     = { workspace = true }
 
 thiserror        = { workspace = true }
 serde            = { workspace = true }
