@@ -3,14 +3,12 @@ use sylvia::{contract, schemars};
 use thiserror::Error;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, Binary, Coin, Decimal, Response, StdError, Uint128, WasmMsg,
-};
+use cosmwasm_std::{ensure_eq, Binary, Coin, Decimal, Response, StdError, Uint128};
 use cw_storage_plus::Item;
 use cw_utils::{must_pay, nonpayable, PaymentError};
 
 use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
-use mesh_apis::vault_api::VaultApiExecMsg;
+use mesh_apis::vault_api::VaultApiHelper;
 
 #[derive(Error, Debug)]
 pub enum StakingError {
@@ -30,7 +28,7 @@ pub struct Config {
     pub denom: String,
 
     /// The address of the vault contract (where we get and return stake)
-    pub vault: Addr,
+    pub vault: VaultApiHelper,
 
     pub max_slash: Decimal,
 }
@@ -58,7 +56,7 @@ impl MockLocalStakingContract<'_> {
     ) -> Result<Response, StakingError> {
         let config = Config {
             denom,
-            vault: ctx.info.sender,
+            vault: VaultApiHelper(ctx.info.sender),
             max_slash,
         };
         self.config.save(ctx.deps.storage, &config)?;
@@ -71,18 +69,13 @@ impl MockLocalStakingContract<'_> {
 
         // blindly send money back to vault
         let cfg = self.config.load(ctx.deps.storage)?;
-        let funds = vec![Coin {
+        let funds = Coin {
             denom: cfg.denom,
             amount,
-        }];
-        let msg = VaultApiExecMsg::ReleaseLocalStake {
-            owner: ctx.info.sender.into_string(),
         };
-        let wasm = WasmMsg::Execute {
-            contract_addr: cfg.vault.into_string(),
-            msg: to_binary(&msg)?,
-            funds,
-        };
+        let wasm = cfg
+            .vault
+            .release_local_stake(ctx.info.sender.into_string(), funds)?;
         Ok(Response::new().add_message(wasm))
     }
 }
@@ -103,7 +96,11 @@ impl LocalStakingApi for MockLocalStakingContract<'_> {
     ) -> Result<Response, Self::Error> {
         // only can be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
-        ensure_eq!(cfg.vault, ctx.info.sender, StakingError::Unauthorized {});
+        ensure_eq!(
+            cfg.vault.addr(),
+            &ctx.info.sender,
+            StakingError::Unauthorized {}
+        );
 
         // assert funds passed in
         let _paid = must_pay(&ctx.info, &cfg.denom)?;
