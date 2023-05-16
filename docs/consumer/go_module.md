@@ -37,8 +37,8 @@ message MsgSetVirtualStakingMaxCap {
 
 #### Contract messages
 Example of the custom messages that can be sent by an authorized contract to mint virtual tokens and delegate to a validator:   
-```json
-ype CustomMsg struct {
+```go
+type CustomMsg struct {
 	VirtualStake *VirtualStakeMsg `json:"virtual_stake,omitempty"`
 }
 
@@ -52,8 +52,10 @@ type BondMsg struct {
 	Validator string           `json:"validator"`
 }
 ```
+
 #### Custom Message Handler
 Example for an extension to wasmd custom message handler:
+
 ```go
 func (h CustomMsgHandler) DispatchMsg(ctx sdk.Context, contractAddr sdk.AccAddress, _ string, msg wasmvmtypes.CosmosMsg) ([]sdk.Event, [][]byte, error) {
 	if msg.Custom == nil {
@@ -144,7 +146,85 @@ func (k Keeper) Delegate(pCtx sdk.Context, actor sdk.AccAddress, valAddr sdk.Val
   // TODO: add to telemetry?
     return imAddr, err
 }
+```
+### Unbond Virtual Stake
 
+#### Contract messages
+Example of the custom messages that can be sent by an authorized contract to unbond from a delegator and burn virtual tokens:
+```go
+type VirtualStakeMsg struct {
+	Bond   *BondMsg   `json:"bond,omitempty"`
+	Unbond *UnbondMsg `json:"unbond,omitempty"`
+}
+
+type UnbondMsg struct {
+  Amount    wasmvmtypes.Coin `json:"amount"`
+  Validator string           `json:"validator"`
+}
+
+```
+
+#### Custom Message Handler
+Example for an extension to wasmd custom message handler:
+
+```go
+	switch {
+    case customMsg.VirtualStake.Bond != nil:
+    ...
+    case customMsg.VirtualStake.Unbond != nil:
+        events, i, err := h.handleUnbondMsg(ctx, contractAddr, customMsg.VirtualStake.Unbond)
+        if err != nil {
+            return events, i, err
+        }
+}
+```
+#### Unbond Logic
+Decreases `SupplyOffset` used by Osmosis
+```go
+func (k Keeper) Undelegate(pCtx sdk.Context, actor sdk.AccAddress, valAddr sdk.ValAddress, amt sdk.Coin) error {
+	if amt.Amount.IsZero() || amt.Amount.IsNegative() {
+		return errors.ErrInvalidRequest.Wrap("amount")
+	}
+
+	// Ensure staking constraints
+	bondDenom := k.staking.BondDenom(pCtx)
+	if amt.Denom != bondDenom {
+		return errors.ErrInvalidRequest.Wrapf("invalid coin denomination: got %s, expected %s", amt.Denom, bondDenom)
+	}
+
+	// get intermediary address for validator from index
+	imAddr := k.getIntermediaryAccount(pCtx, actor, valAddr)
+
+	cacheCtx, done := pCtx.CacheContext() // work in a cached store (safety net?)
+	shares, err := k.staking.ValidateUnbondAmount(cacheCtx, imAddr, valAddr, amt.Amount)
+	if err == stakingtypes.ErrNoDelegation {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	undelegatedCoins, err := k.staking.InstantUndelegate(cacheCtx, imAddr, valAddr, shares)
+	if err != nil {
+		return err
+	}
+	err = k.bank.SendCoinsFromAccountToModule(cacheCtx, imAddr, types.ModuleName, undelegatedCoins)
+	if err != nil {
+		return err
+	}
+
+	err = k.bank.BurnCoins(cacheCtx, types.ModuleName, undelegatedCoins)
+	if err != nil {
+		return err
+	}
+
+	unbondedAmount := undelegatedCoins.AmountOf(bondDenom)
+	k.bank.AddSupplyOffset(cacheCtx, bondDenom, unbondedAmount)
+	newDelegatedAmt := k.getTotalDelegatedAmount(cacheCtx, actor).Sub(unbondedAmount)
+	k.setTotalDelegatedAmount(cacheCtx, actor, newDelegatedAmt)
+
+	done()
+	return nil
+}
 ```
 
 ## Integration of Cosmos-SDK and Osmosis Fork
@@ -162,3 +242,70 @@ There should be extension points and adapters provided so that both SDKs are sup
   triggers a refresh of the intermediary delegations; this can either be achieved by a decorator to the Cosmos-SDK `staking/keeper.go`  Slash + SlashWithInfractionReason methods or
   an async process that registers the action on the `BeforeValidatorSlashed` hook for non Cosmos-SDK chains
 
+### Adapters
+In order to not add switches for Cosmos-SDK or the Osmosis fork in the code, adapters can be used to provide the missing functionality.
+#### Bank
+For example:
+```go
+// BankKeeperAdapter adapter to vanilla SDK bank keeper
+type BankKeeperAdapter struct {
+	types.SDKBankKeeper
+}
+
+// NewBankKeeperAdapter constructor
+func NewBankKeeperAdapter(k types.SDKBankKeeper) *BankKeeperAdapter {
+	return &BankKeeperAdapter{SDKBankKeeper: k}
+}
+
+// AddSupplyOffset noop
+func (b BankKeeperAdapter) AddSupplyOffset(ctx sdk.Context, denom string, offsetAmount sdk.Int) {
+}
+```
+#### Staking
+For example:
+```go
+type StakingKeeperAdapter struct {
+	types.SDKStakingKeeper
+	bank types.SDKBankKeeper
+}
+
+// NewStakingKeeperAdapter constructor
+func NewStakingKeeperAdapter(k types.SDKStakingKeeper, b types.SDKBankKeeper) *StakingKeeperAdapter {
+	return &StakingKeeperAdapter{SDKStakingKeeper: k, bank: b}
+}
+
+// InstantUndelegate allows another module account to undelegate while bypassing unbonding time.
+// This function is a combination of Undelegate and CompleteUnbonding,
+// but skips the creation and deletion of UnbondingDelegationEntry
+//
+// This is copied from the Osmosis sdk fork
+func (s StakingKeeperAdapter) InstantUndelegate(ctx sdk.Context, delAddr sdk.AccAddress, valAddr sdk.ValAddress, sharesAmount sdk.Dec) (sdk.Coins, error) {
+	validator, found := s.GetValidator(ctx, valAddr)
+	if !found {
+		return nil, stakingtypes.ErrNoDelegatorForAddress
+	}
+
+	returnAmount, err := s.Unbond(ctx, delAddr, valAddr, sharesAmount)
+	if err != nil {
+		return nil, err
+	}
+
+	bondDenom := s.BondDenom(ctx)
+
+	amt := sdk.NewCoin(bondDenom, returnAmount)
+	res := sdk.NewCoins(amt)
+
+	moduleName := stakingtypes.NotBondedPoolName
+	if validator.IsBonded() {
+		moduleName = stakingtypes.BondedPoolName
+	}
+	err = s.bank.UndelegateCoinsFromModuleToAccount(ctx, moduleName, delAddr, res)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+```
+
+### AfterValidatorSlashed Hook
+TBD
