@@ -1,6 +1,5 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{to_binary, Addr, Coin, Response, StdError, Uint128, WasmMsg};
-use std::ops::Deref;
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -34,14 +33,6 @@ pub trait VaultApi {
 
 #[cw_serde]
 pub struct VaultApiHelper(pub Addr);
-
-impl Deref for VaultApiHelper {
-    type Target = Addr;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 impl VaultApiHelper {
     pub fn addr(&self) -> &Addr {

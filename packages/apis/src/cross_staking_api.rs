@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{to_binary, Addr, Binary, Coin, Deps, Response, StdError, Uint128, WasmMsg};
 use sylvia::types::{ExecCtx, QueryCtx};
@@ -36,14 +34,6 @@ pub trait CrossStakingApi {
 
 #[cw_serde]
 pub struct CrossStakingApiHelper(pub Addr);
-
-impl Deref for CrossStakingApiHelper {
-    type Target = Addr;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 impl CrossStakingApiHelper {
     pub fn addr(&self) -> &Addr {

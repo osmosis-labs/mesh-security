@@ -1,6 +1,5 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{to_binary, Addr, Binary, Coin, Decimal, Deps, Response, StdError, WasmMsg};
-use std::ops::Deref;
 use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
@@ -38,14 +37,6 @@ pub trait LocalStakingApi {
 
 #[cw_serde]
 pub struct LocalStakingApiHelper(pub Addr);
-
-impl Deref for LocalStakingApiHelper {
-    type Target = Addr;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 impl LocalStakingApiHelper {
     pub fn addr(&self) -> &Addr {
