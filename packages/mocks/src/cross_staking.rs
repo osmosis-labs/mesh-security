@@ -3,14 +3,12 @@ use sylvia::{contract, schemars};
 use thiserror::Error;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, Binary, Decimal, Response, StdError, Uint128, WasmMsg,
-};
+use cosmwasm_std::{ensure_eq, Binary, Decimal, Response, StdError, Uint128};
 use cw_storage_plus::Item;
 use cw_utils::{nonpayable, PaymentError};
 
 use mesh_apis::cross_staking_api::{self, CrossStakingApi, MaxSlashResponse};
-use mesh_apis::vault_api::VaultApiExecMsg;
+use mesh_apis::vault_api::VaultApiHelper;
 
 #[derive(Error, Debug)]
 pub enum StakingError {
@@ -27,7 +25,7 @@ pub enum StakingError {
 #[cw_serde]
 pub struct Config {
     /// The address of the vault contract (where we get and return stake)
-    pub vault: Addr,
+    pub vault: VaultApiHelper,
 
     pub max_slash: Decimal,
 }
@@ -54,7 +52,7 @@ impl MockCrossStakingContract<'_> {
         vault: String,
     ) -> Result<Response, StakingError> {
         let config = Config {
-            vault: ctx.deps.api.addr_validate(&vault)?,
+            vault: VaultApiHelper(ctx.deps.api.addr_validate(&vault)?),
             max_slash,
         };
         self.config.save(ctx.deps.storage, &config)?;
@@ -67,15 +65,9 @@ impl MockCrossStakingContract<'_> {
 
         // blindly reduce lien on vault
         let cfg = self.config.load(ctx.deps.storage)?;
-        let msg = VaultApiExecMsg::ReleaseCrossStake {
-            owner: ctx.info.sender.into_string(),
-            amount,
-        };
-        let wasm = WasmMsg::Execute {
-            contract_addr: cfg.vault.into_string(),
-            msg: to_binary(&msg)?,
-            funds: vec![],
-        };
+        let wasm = cfg
+            .vault
+            .release_cross_stake(ctx.info.sender.into_string(), amount, vec![])?;
         Ok(Response::new().add_message(wasm))
     }
 }
@@ -99,7 +91,11 @@ impl CrossStakingApi for MockCrossStakingContract<'_> {
 
         // only can be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
-        ensure_eq!(cfg.vault, ctx.info.sender, StakingError::Unauthorized {});
+        ensure_eq!(
+            cfg.vault.addr(),
+            &ctx.info.sender,
+            StakingError::Unauthorized {}
+        );
 
         // ignore args
         let _ = (owner, msg, amount);
