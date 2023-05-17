@@ -54,6 +54,16 @@ type UnbondMsg struct {
 }
 ```
 
+### Enforcing max cap limit and system integrity
+It is important to reject `Delegate`, `Undelegate`, `Redelegate` messages from any contract that has a max cap limit set. 
+Virtual tokens can only be burned. To enforce this behaviour an additional message handler can be chained before the default one that
+checks messages for malicious behaviour. This is just a safety net.
+The handler would reject all:
+* [`wasm.Staking`](https://github.com/CosmWasm/wasmvm/blob/v1.2.3/types/msg.go#L226),
+* [`wasm.Stargate`](https://github.com/CosmWasm/wasmvm/blob/v1.2.3/types/msg.go#L269)
+
+Out of scope are [SDK `Authz`](https://github.com/cosmos/cosmos-sdk/tree/main/x/authz) permissions.
+
 
 ## Integration of Cosmos-SDK and Osmosis Fork
 Osmosis was pioneering the superfluid staking module. With this work additional methods were added to the Osmosis fork that make sense for mesh-security, too.
