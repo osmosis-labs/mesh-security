@@ -24,12 +24,12 @@ The `Converter` should be able to call into the `Virtual Staking` contract with 
 pub enum VirtualStakeExecMsg {
   /// This mints "virtual stake" if possible and bonds to this validator.
   Bond {
-    amount: Uint128,
+    amount: Coin,
     validator: String,
   },
   /// This unbonds immediately, not like standard staking Undelegate
   Unbond {
-    amount: Uint128,
+    amount: Coin,
     validator: String,
   },
 }
@@ -44,8 +44,8 @@ pub enum VirtualStakeQueryMsg {
 }
 
 pub struct BondStatusResponse {
-  pub cap: Uint128,
-  pub delegated: Uint128,
+  pub cap: Coin,
+  pub delegated: Coin,
 }
 ```
 
@@ -67,7 +67,7 @@ pub enum ConverterExecMsg {
 
 pub struct RewardInfo {
   pub validator: String,
-  pub reward: Uint128,
+  pub reward: Coin,
 }
 ```
 
@@ -108,12 +108,12 @@ pub enum CustomMsg {
 pub enum VirtualStakeMsg {
   /// This mints "virtual stake" if possible and bonds to this validator.
   Bond {
-    amount: Uint128,
+    amount: Coin,
     validator: String,
   },
   /// This unbonds immediately, not like standard staking Undelegate
   Unbond {
-    amount: Uint128,
+    amount: Coin,
     validator: String,
   },
 }
@@ -137,7 +137,7 @@ pub enum VirtualStakeQuery {
 }
 
 pub struct MaxCapResponse {
-  pub cap: Uint128,
+  pub cap: Coin,
 }
 ```
 
