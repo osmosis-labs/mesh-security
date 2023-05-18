@@ -1,6 +1,6 @@
 # Based on https://github.com/actions-rs/example/blob/master/.github/workflows/quickstart.yml
 
-on: [push, pull_request]
+on: [pull_request]
 
 name: Basic Checks
 
@@ -19,6 +19,11 @@ jobs:
           toolchain: 1.65.0
           target: wasm32-unknown-unknown
           override: true
+
+      - name: Use Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: "test"
 
       - name: Run build
         uses: actions-rs/cargo@v1
@@ -60,6 +65,11 @@ jobs:
           toolchain: 1.65.0
           override: true
           components: rustfmt, clippy
+
+      - name: Use Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: "lints"
 
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1
