@@ -166,17 +166,47 @@ I request to bond 120 more to B, which turns into 20 bond to B. There is an actu
 stakers have delegated at a ration of 2:3. This gets worse if eg. someone unbonds all A. We end up with 120 requested for B,
 but 80 delegated to A and 20 delegated to B.
 
-To properly handle this, we should use Redelegations to rebalance when the amounts are updated. This may be quite some messages
-(if we have 50 validators, each time we stake one more, we need to add a bit to that one and decrease the other 50... a smart
-solution may use some batches). Limiting the interface to custom SDK modules, we would first "immediately unbond"
-all other validators, then bond that virtual stake to the newly bonded validator. Much care must be take with rounding issues
-to avoid going 0.000001 token above the max cap.
+To properly handle this, we should use Redelegations to rebalance when the amounts are updated. 
+This may be quite some messages (if we have 50 validators, each time we stake one more, we need to 
+add a bit to that one and decrease the other 50). We describe a solution to this in the next section.
 
-Note: in an alternate implementation this redelegation could be in the native Go module, but we chose to put majority of logic into contracts
-for portability.
+### Epochs
 
-Note: this example demonstrates why the immediate unbond power is required to properly implement this, and we cannot just do a pure contract
-calling normal staking commands (or we would be limited to shifting validators once per unbond period).
+For efficiency rewards will be withdrawn for all cross-stakers at a regular rhythm, once per epoch.
+This is done to reduce the number of IBC messages sent, and reduce computation (gas) overhead.
+Note that one provider will like have to withdraw for dozens of validators and then distribute
+to the proper cross-stakers, so this is a significant amount of computation, and shouldn't be
+triggered every few blocks.
+
+While staking and unstaking can be quite cheap below the max cap, it becomes quite expensive once
+the number of tokens exceeds the max cap, as it will require a rebalance. If a provider is
+over the max cap and someone stakes 10 tokens on validator V, the provider will have to unstake
+some tokens proportionally from every other validator. Likewise, if someone unstakes 10 tokens,
+it will trigger a staking on the remaining validators to keep the total at max cap.
+
+It makes sense to do this rebalance only once per epoch, as it is quite expensive. These could
+be different epoch periods for two different purposes, but it is recommended to keep them
+the same for simplicity. However, we do suggest that the epochs of each provider be offset,
+so we don't blog up the network with a bunch of IBC messages at the same time.
+
+Implementation of this will require another binding with the native Go module. Our proposed
+mechanism is to add a special `SudoMsg` that is triggered once per epoch on each contract with
+a max cap. Each contract will have a `next_epoch` value and they all will share an `epoch_length`
+parameter.
+
+Calling `sudo` will be done in EndBlock once per epoch, and will have a gas limit to prevent
+any freezing of the chain. We suggest something like 50-100% of the normal block gas limit.
+The calling code should also catch any error (including out of gas) and log it, but not fail.
+It will revert all state changes made by the `sudo` message, mark it as ran and continue.
+This provides a way to trigger the contract regularly with a large gas allowance, but not
+be susceptible to any DoS attacks.
+
+```rust
+#[cw_serde]
+pub enum SudoMsg {
+  Rebalance{},
+}
+```
 
 ### Module
 
@@ -194,33 +224,37 @@ The Virtual Staking **Module** also maintains the current state of each of the r
 
 ```go
 type StakePermission struct {
-  /// Limit we cap the virtual stake of this converter.
-  /// Defined as a number of "virtual native tokens" this can mint.
+  // Limit we cap the virtual stake of this converter.
+  // Defined as a number of "virtual native tokens" this can mint.
   MaxStakingRatio: sdk.Int,
+  // Next time (unix seconds) we trigger the sudo message
+  // When the contract is first registered, it is set to block time + epoch length
+  NextEpoch: uint64,
 }
 ```
 
 Beyond MVP, we wish to add the following functionality:
 
-* Provide WithdrawReward callbacks each epoch (eg 1 day) on BeginBlock to all registered contracts
-* Provide configuration for optional governance multiplier (eg 1 virtual stake leads to 1 tendermint power,
-but may be 0 or 1 or even 0.5 gov voting power)
+* Provide configuration for optional governance multiplier (eg 1 virtual stake leads to 1 tendermint power, but may be 0 or 1 or even 0.5 gov voting power)
 
 ### Reward Withdrawls
 
-We need to trigger each Virtual Staking contract once an epoch.
-This can be done via CronCat or other bot (for MVP), and ideally via a BeginBlock hook for v1.
+The Virtual Staking Module uses an [EndBlock hook called once per epoch](#epochs)
+(param setting, eg 1 day).
+This will trigger a `SudoMsg` to each Virtual Staking contract, allowing them to both do a rebalancing
+with any staking/unstaking in that period, as well as withdraw rewards from all validators.
 
-The Virtual Staking Module also has a BeginBlock hook called once per epoch (param setting, eg 1 day), that will trigger all reward withdrawals.
-This epoch has a different start for each converter (based on when they were authorized), so they happen staggered over time.
-When the epoch finishes for one Converter, the Module will withdraw rewards from all delegations that converter made, and send those tokens
-to the Converter along with the info of which validator these are for.
+When the epoch finishes for one Converter, the Module will withdraw rewards from all delegations
+that converter made, and send those tokens to the Converter along with the info of which
+validator these are for.
 
-The initial implementation will call the Converter eg 50 times, once for each validator. If dev time permits, we can use a more optimized
-structure and call it once, with all the info it needs to map which token corresponds to which validator. (See both [variants of
+The initial implementation will call the Converter eg 50 times, once for each validator.
+If dev time permits, we can use a more optimized structure and call it once, with all the
+info it needs to map which token corresponds to which validator. (See both [variants of
 `ConverterExecMsg`](#interface))
 
-The Converter in turn will make a number of IBC packets to send the tokens and this metadata back to the External Staking module on the Provider chain.
+The Converter in turn will make a number of IBC packets to send the tokens and this metadata back
+to the External Staking module on the Provider chain.
 
 ## Roadmap
 
