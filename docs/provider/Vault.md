@@ -23,7 +23,7 @@ there may be many different implementations of both the _Local Staking_ concept 
 as the _External Staking_ concept. However, we must define
 standard interfaces here that can plug into the Vault.
 
-We define this interface as a _Creditor_ (as it accepts leins).
+We define this interface as a _Creditor_ (as it accepts liens).
 
 ## Definitions
 
@@ -31,9 +31,9 @@ TODO: refine this
 
 * **Native Token** - The native staking token of this blockchain. More specifically,
   the token in which all collateral is measured.
-* **Slashable Collateral** - `Leins(user).map(|x| x.amount * x.slashable).sum()`
-* **Maximum Lein** - `Leins(user).map(|x| x.amount).max()`
-* **Free Collateral** - `Collateral(user) - max(SlashableCollateral(user), MaximumLein(user))`
+* **Slashable Collateral** - `Liens(user).map(|x| x.amount * x.slashable).sum()`
+* **Maximum Lien** - `Liens(user).map(|x| x.amount).max()`
+* **Free Collateral** - `Collateral(user) - max(SlashableCollateral(user), MaximumLien(user))`
 
 ## Design Decisions
 
@@ -73,14 +73,14 @@ it is much less clear than the corresponding code.
 ### State
 
 * Collateral: `User -> Amount`
-* Leins: `User -> {Creditor, Amount, Slashable}[]`
+* Liens: `User -> {Creditor, Amount, Slashable}[]`
 * Credit `Creditor -> Amount`
 
 ### Invariants
 
 * `SlashableCollateral(user) <= Collateral(user)` - for all users
-* `MaximumLein(user) <= Collateral(user)` - for all users
-* `Leins(user).map(|x| x.creditor).isUnique()` - for all users
+* `MaximumLien(user) <= Collateral(user)` - for all users
+* `Liens(user).map(|x| x.creditor).isUnique()` - for all users
 
 ### Transitions
 
@@ -95,13 +95,13 @@ Any user may withdraw any _Free Collateral_ credited to their account.
 Their collateral is reduced by this amount and these native tokens are
 immediately transferred to their account.
 
-**Provide Lein**
+**Provide Lien**
 
 TODO. Promise collateral as slashable to some creditor.
 Args `(creditor, amount, slashable)`. 
 This is updated locally
 
-**Release Lein**
+**Release Lien**
 
 TODO
 
@@ -113,4 +113,4 @@ TODO
 
 ## Footnotes
 
-For MVP, Slashable Collateral and Maximum Lein can be up to 100% of total Collateral.
+For MVP, Slashable Collateral and Maximum Lien can be up to 100% of total Collateral.

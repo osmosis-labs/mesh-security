@@ -14,8 +14,8 @@ flowchart LR
   A{{$OSMO}} -- User Deposit --> B(Vault);
   B -- $OSMO --> C(Local Staker);
   C -- Stake --> D[Native Staking]
-  B -- Lein --> E(External Staker Juno);
-  B -- Lein --> G(External Staker Stars);
+  B -- Lien --> E(External Staker Juno);
+  B -- Lien --> G(External Staker Stars);
   end
 
   E -. IBC .-> F{{Juno Consumer}};
@@ -28,13 +28,13 @@ flowchart LR
 The first action the user must undertake is depositing
 the native staking token into the vault. This must be liquid
 (unbonded and fully vested). This gives them a credit on the vault,
-which they can withdraw assuming there are no outstanding leins on that amount.
+which they can withdraw assuming there are no outstanding liens on that amount.
 [Read more about the vault](./Vault.md).
 
 Each vault contains *exactly one* denom and has *exactly one* local staking
 module.  This local staker can stake the vault token with the
 native staking module.  It actually accepts the original token, which makes
-it different than external stakers, which accept leins. By depositing in the vault
+it different than external stakers, which accept liens. By depositing in the vault
 and staking in the local staker, I will have achieved the same effect
 (and get the same rewards) as directly staking... but I can now use my balance
 for more.
@@ -44,7 +44,7 @@ The external stakers allow us to cross-stake the native vault
 token on other chains (or other DAOs) that use a different native
 staking token, but have opt-ed in to accepting a portion
 of their security from this vault in exchange for a portion
-of their rewards. In the basic model, these accept a lein
+of their rewards. In the basic model, these accept a lien
 from the vault and will communicate with a consumer interface
 to inform how much stake is locked to which validator and
 to receive rewards.
@@ -118,7 +118,7 @@ flowchart LR
   A{{$JUNO}} -- User Deposit --> B(Vault);
   B -- $JUNO --> C(Local Staker);
   C -- Stake --> D[Native Staking]
-  B -- Lein --> E(External Staker Neta);
+  B -- Lien --> E(External Staker Neta);
   E -- virtual $NETA --> F(Neta Staking contract);
 ```
 
@@ -164,7 +164,7 @@ flowchart LR
   A{{$WYND}} -- User Deposit --> B(Vault);
   B -- $WYND --> C(Local Staker);
   C -- Stake --> D(WYND DAO Staking)
-  B -- Lein --> E(External Staker Juno);
+  B -- Lien --> E(External Staker Juno);
   E -- virtual stake --> F(Meta-Staking);
   F -- $JUNO --> G[Native Staking];
 ```

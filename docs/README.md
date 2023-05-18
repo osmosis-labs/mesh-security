@@ -13,8 +13,8 @@ flowchart TD
   A{{$OSMO}} -- User Deposit --> B(Vault);
   B -- $OSMO --> C(Local Staker);
   C -- $OSMO --> D[Native Staking]
-  B -- Lein --> E(External Staker Juno);
-  B -- Lein --> G(External Staker Stars);
+  B -- Lien --> E(External Staker Juno);
+  B -- Lien --> G(External Staker Stars);
   end
   
   E -. IBC .-> M;
