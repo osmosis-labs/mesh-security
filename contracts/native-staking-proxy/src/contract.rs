@@ -1,4 +1,4 @@
-use cosmwasm_std::{ensure_eq, DistributionMsg, Response, Uint128, VoteOption, WeightedVoteOption};
+use cosmwasm_std::{ensure_eq, Coin, DistributionMsg, Response, VoteOption, WeightedVoteOption};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
@@ -71,7 +71,7 @@ impl NativeStakingProxyContract<'_> {
         ctx: ExecCtx,
         from_validator: String,
         to_validator: String,
-        amount: Uint128,
+        amount: Coin,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
@@ -137,7 +137,7 @@ impl NativeStakingProxyContract<'_> {
         &self,
         ctx: ExecCtx,
         validator: String,
-        amount: Uint128,
+        amount: Coin,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});

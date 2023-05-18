@@ -3,7 +3,7 @@ use sylvia::{contract, schemars};
 use thiserror::Error;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure_eq, Binary, Coin, Decimal, Response, StdError, Uint128};
+use cosmwasm_std::{ensure_eq, Binary, Coin, Decimal, Response, StdError};
 use cw_storage_plus::Item;
 use cw_utils::{must_pay, nonpayable, PaymentError};
 
@@ -20,12 +20,15 @@ pub enum StakingError {
 
     #[error("Unauthorized")]
     Unauthorized {},
+
+    #[error("Staking must be in this denom: {0}")]
+    WrongDenom(String),
 }
 
 #[cw_serde]
 pub struct Config {
     /// The denom we accept for staking
-    pub denom: String,
+    pub stake_denom: String,
 
     /// The address of the vault contract (where we get and return stake)
     pub vault: VaultApiHelper,
@@ -51,11 +54,11 @@ impl MockLocalStakingContract<'_> {
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx,
-        denom: String,
+        stake_denom: String,
         max_slash: Decimal,
     ) -> Result<Response, StakingError> {
         let config = Config {
-            denom,
+            stake_denom,
             vault: VaultApiHelper(ctx.info.sender),
             max_slash,
         };
@@ -64,18 +67,21 @@ impl MockLocalStakingContract<'_> {
     }
 
     #[msg(exec)]
-    fn release_stake(&self, ctx: ExecCtx, amount: Uint128) -> Result<Response, StakingError> {
+    fn release_stake(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, StakingError> {
         nonpayable(&ctx.info)?;
 
-        // blindly send money back to vault
+        // assert proper denom
         let cfg = self.config.load(ctx.deps.storage)?;
-        let funds = Coin {
-            denom: cfg.denom,
-            amount,
-        };
+        ensure_eq!(
+            cfg.stake_denom,
+            amount.denom,
+            StakingError::WrongDenom(cfg.stake_denom)
+        );
+
+        // blindly send money back to vault
         let wasm = cfg
             .vault
-            .release_local_stake(ctx.info.sender.into_string(), vec![funds])?;
+            .release_local_stake(ctx.info.sender.into_string(), vec![amount])?;
         Ok(Response::new().add_message(wasm))
     }
 }
@@ -103,7 +109,7 @@ impl LocalStakingApi for MockLocalStakingContract<'_> {
         );
 
         // assert funds passed in
-        let _paid = must_pay(&ctx.info, &cfg.denom)?;
+        let _paid = must_pay(&ctx.info, &cfg.stake_denom)?;
 
         // ignore args
         let _ = (owner, msg);

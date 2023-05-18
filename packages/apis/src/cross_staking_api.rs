@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_binary, Addr, Binary, Coin, Deps, Response, StdError, Uint128, WasmMsg};
+use cosmwasm_std::{to_binary, Addr, Binary, Coin, Deps, Response, StdError, WasmMsg};
 use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
@@ -15,7 +15,7 @@ pub use crate::local_staking_api::MaxSlashResponse;
 pub trait CrossStakingApi {
     type Error: From<StdError>;
 
-    /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
+    /// Receives stake from vault contract on behalf of owner and performs the action
     /// specified in msg with it.
     /// Msg is custom to each implementation of the staking contract and opaque to the vault
     #[msg(exec)]
@@ -23,7 +23,7 @@ pub trait CrossStakingApi {
         &self,
         ctx: ExecCtx,
         owner: String,
-        amount: Uint128,
+        amount: Coin,
         msg: Binary,
     ) -> Result<Response, Self::Error>;
 
@@ -43,7 +43,7 @@ impl CrossStakingApiHelper {
     pub fn receive_virtual_stake(
         &self,
         owner: String,
-        amount: Uint128,
+        amount: Coin,
         msg: Binary,
         funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {

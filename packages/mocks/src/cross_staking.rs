@@ -3,7 +3,7 @@ use sylvia::{contract, schemars};
 use thiserror::Error;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure_eq, Binary, Decimal, Response, StdError, Uint128};
+use cosmwasm_std::{ensure_eq, Binary, Coin, Decimal, Response, StdError};
 use cw_storage_plus::Item;
 use cw_utils::{nonpayable, PaymentError};
 
@@ -20,6 +20,9 @@ pub enum StakingError {
 
     #[error("Unauthorized")]
     Unauthorized {},
+
+    #[error("Staking must be in this denom: {0}")]
+    WrongDenom(String),
 }
 
 #[cw_serde]
@@ -28,6 +31,8 @@ pub struct Config {
     pub vault: VaultApiHelper,
 
     pub max_slash: Decimal,
+
+    pub stake_denom: String,
 }
 
 pub struct MockCrossStakingContract<'a> {
@@ -50,21 +55,30 @@ impl MockCrossStakingContract<'_> {
         ctx: InstantiateCtx,
         max_slash: Decimal,
         vault: String,
+        stake_denom: String,
     ) -> Result<Response, StakingError> {
         let config = Config {
             vault: VaultApiHelper(ctx.deps.api.addr_validate(&vault)?),
             max_slash,
+            stake_denom,
         };
         self.config.save(ctx.deps.storage, &config)?;
         Ok(Response::new())
     }
 
     #[msg(exec)]
-    fn release_stake(&self, ctx: ExecCtx, amount: Uint128) -> Result<Response, StakingError> {
+    fn release_stake(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, StakingError> {
         nonpayable(&ctx.info)?;
 
-        // blindly reduce lien on vault
+        // assert proper denom
         let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(
+            cfg.stake_denom,
+            amount.denom,
+            StakingError::WrongDenom(cfg.stake_denom)
+        );
+
+        // blindly reduce lien on vault
         let wasm = cfg
             .vault
             .release_cross_stake(ctx.info.sender.into_string(), amount, vec![])?;
@@ -84,7 +98,7 @@ impl CrossStakingApi for MockCrossStakingContract<'_> {
         &self,
         ctx: ExecCtx,
         owner: String,
-        amount: Uint128,
+        amount: Coin,
         msg: Binary,
     ) -> Result<Response, Self::Error> {
         nonpayable(&ctx.info)?;
@@ -95,6 +109,12 @@ impl CrossStakingApi for MockCrossStakingContract<'_> {
             cfg.vault.addr(),
             &ctx.info.sender,
             StakingError::Unauthorized {}
+        );
+        // assert proper denom
+        ensure_eq!(
+            cfg.stake_denom,
+            amount.denom,
+            StakingError::WrongDenom(cfg.stake_denom)
         );
 
         // ignore args
