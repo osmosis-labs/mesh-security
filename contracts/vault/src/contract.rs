@@ -1,6 +1,5 @@
 use cosmwasm_std::{
-    entry_point, Addr, Binary, DepsMut, Env, Reply, Response, SubMsg, SubMsgResponse, Uint128,
-    WasmMsg,
+    entry_point, Addr, Binary, Coin, DepsMut, Env, Reply, Response, SubMsg, SubMsgResponse, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -58,18 +57,18 @@ impl VaultContract<'_> {
                 .label
                 .unwrap_or_else(|| "Mesh Security Local Staking".to_string()),
         };
-        // TODO: how to handle reply in sylvia?
         let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
         Ok(Response::new().add_submessage(sub_msg))
     }
 
     #[msg(exec)]
     fn bond(&self, _ctx: ExecCtx) -> Result<Response, ContractError> {
+        // this assets the proper token is sent in info.funds
         todo!()
     }
 
     #[msg(exec)]
-    fn unbond(&self, _ctx: ExecCtx, amount: Uint128) -> Result<Response, ContractError> {
+    fn unbond(&self, _ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
         let _ = amount;
         todo!()
     }
@@ -82,7 +81,7 @@ impl VaultContract<'_> {
         // address of the contract to virtually stake on
         contract: String,
         // amount to stake on that contract
-        amount: Uint128,
+        amount: Coin,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
@@ -96,7 +95,7 @@ impl VaultContract<'_> {
         &self,
         _ctx: ExecCtx,
         // amount to stake on that contract
-        amount: Uint128,
+        amount: Coin,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
@@ -160,7 +159,7 @@ impl VaultApi for VaultContract<'_> {
         // address of the user who originally called stake_remote
         owner: String,
         // amount to unstake on that contract
-        amount: Uint128,
+        amount: Coin,
     ) -> Result<Response, ContractError> {
         let _ = (owner, amount);
         todo!()

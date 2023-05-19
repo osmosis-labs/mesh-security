@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_binary, Addr, Coin, Response, StdError, Uint128, WasmMsg};
+use cosmwasm_std::{to_binary, Addr, Coin, Response, StdError, WasmMsg};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -17,7 +17,7 @@ pub trait VaultApi {
         // address of the user who originally called stake_remote
         owner: String,
         // amount to unstake on that contract
-        amount: Uint128,
+        amount: Coin,
     ) -> Result<Response, Self::Error>;
 
     /// This must be called by the local staking contract to release this claim
@@ -44,7 +44,7 @@ impl VaultApiHelper {
         // address of the user who originally called stake_remote
         owner: String,
         // amount to unstake on that contract
-        amount: Uint128,
+        amount: Coin,
         funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {
         let msg = VaultApiExecMsg::ReleaseCrossStake { owner, amount };

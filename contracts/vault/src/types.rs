@@ -12,6 +12,7 @@ pub struct Config {
     pub local_staking: Addr,
 }
 
+/// All values are in Config.denom
 #[cw_serde]
 pub struct Balance {
     pub bonded: Uint128,
@@ -49,6 +50,8 @@ pub struct ConfigResponse {
 
 #[cw_serde]
 pub struct AccountResponse {
+    // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
+    pub denom: String,
     pub bonded: Uint128,
     pub free: Uint128,
     pub claims: Vec<Lien>,

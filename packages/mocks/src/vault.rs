@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    Addr, BankMsg, Binary, Coin, DepsMut, Env, Reply, Response, StdError, SubMsg, SubMsgResponse,
-    Uint128, WasmMsg,
+    ensure_eq, Addr, BankMsg, Binary, Coin, DepsMut, Env, Reply, Response, StdError, SubMsg,
+    SubMsgResponse, WasmMsg,
 };
 use cw_utils::{must_pay, nonpayable, ParseReplyError, PaymentError};
 use thiserror::Error;
@@ -30,6 +30,9 @@ pub enum VaultError {
 
     #[error("Invalid reply id: {0}")]
     InvalidReplyId(u64),
+
+    #[error("Staking must be in this denom: {0}")]
+    WrongDenom(String),
 }
 
 #[cw_serde]
@@ -105,12 +108,13 @@ impl MockVaultContract<'_> {
 
     // mock so no checks
     #[msg(exec)]
-    fn unbond(&self, ctx: ExecCtx, amount: Uint128) -> Result<Response, VaultError> {
+    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, VaultError> {
         nonpayable(&ctx.info)?;
         let Config { denom, .. } = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(amount.denom, denom, VaultError::WrongDenom(denom));
         let msg = BankMsg::Send {
             to_address: ctx.info.sender.to_string(),
-            amount: vec![Coin { amount, denom }],
+            amount: vec![amount],
         };
         Ok(Response::new().add_message(msg))
     }
@@ -123,7 +127,7 @@ impl MockVaultContract<'_> {
         // address of the contract to virtually stake on
         contract: String,
         // amount to stake on that contract
-        amount: Uint128,
+        amount: Coin,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, VaultError> {
@@ -146,7 +150,7 @@ impl MockVaultContract<'_> {
         &self,
         ctx: ExecCtx,
         // amount to stake on that contract
-        amount: Uint128,
+        amount: Coin,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, VaultError> {
@@ -156,7 +160,8 @@ impl MockVaultContract<'_> {
             local_staking,
         } = self.config.load(ctx.deps.storage)?;
 
-        let funds = vec![Coin { denom, amount }];
+        ensure_eq!(amount.denom, denom, VaultError::WrongDenom(denom));
+        let funds = vec![amount];
         let wasm_msg = local_staking.receive_stake(ctx.info.sender.into_string(), msg, funds)?;
 
         Ok(Response::new().add_message(wasm_msg))
@@ -199,7 +204,7 @@ impl VaultApi for MockVaultContract<'_> {
         // address of the user who originally called stake_remote
         owner: String,
         // amount to unstake on that contract
-        amount: Uint128,
+        amount: Coin,
     ) -> Result<Response, VaultError> {
         let _ = (owner, amount);
         // we don't track liens so no-op
