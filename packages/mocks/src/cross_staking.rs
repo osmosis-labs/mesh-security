@@ -39,8 +39,9 @@ pub struct MockCrossStakingContract<'a> {
     config: Item<'a, Config>,
 }
 
-#[contract(error=StakingError)]
+#[contract]
 #[messages(cross_staking_api as CrossStakingApi)]
+#[error(StakingError)]
 impl MockCrossStakingContract<'_> {
     pub const fn new() -> Self {
         Self {

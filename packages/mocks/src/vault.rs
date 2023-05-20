@@ -61,8 +61,9 @@ pub struct MockVaultContract<'a> {
     config: Item<'a, Config>,
 }
 
-#[contract(error=VaultError)]
+#[contract]
 #[messages(vault_api as VaultApi)]
+#[error(VaultError)]
 impl MockVaultContract<'_> {
     pub const fn new() -> Self {
         Self {

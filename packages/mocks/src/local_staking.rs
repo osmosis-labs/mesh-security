@@ -40,8 +40,9 @@ pub struct MockLocalStakingContract<'a> {
     config: Item<'a, Config>,
 }
 
-#[contract(error=StakingError)]
+#[contract]
 #[messages(local_staking_api as LocalStakingApi)]
+#[error(StakingError)]
 impl MockLocalStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
