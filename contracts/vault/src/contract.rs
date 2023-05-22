@@ -1,11 +1,12 @@
 use cosmwasm_std::{
-    coins, ensure, entry_point, Addr, Binary, Coin, Decimal, DepsMut, Env, Order, Reply, Response,
-    StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coin, coins, ensure, entry_point, Addr, Binary, Coin, Decimal, DepsMut, Env, Order, Reply,
+    Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::{must_pay, parse_instantiate_response_data};
 
+use mesh_apis::cross_staking_api::CrossStakingApiHelper;
 use mesh_apis::local_staking_api::{
     LocalStakingApiHelper, LocalStakingApiQueryMsg, MaxSlashResponse,
 };
@@ -129,16 +130,38 @@ impl VaultContract<'_> {
     #[msg(exec)]
     fn stake_remote(
         &self,
-        _ctx: ExecCtx,
+        ctx: ExecCtx,
         // address of the contract to virtually stake on
         contract: String,
         // amount to stake on that contract
-        amount: Coin,
+        amount: Uint128,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
-        let _ = (contract, amount, msg);
-        todo!()
+        let addr = ctx.deps.api.addr_validate(&contract)?;
+        let contract = CrossStakingApiHelper(addr);
+        let slashable = contract.max_slash(ctx.deps.as_ref())?;
+
+        self.stake(&ctx, &addr, slashable.max_slash, amount)?;
+
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+
+        // TODO: Not sure why amount is passed separately to funds passed here, I suppose it is
+        // actually different amount (amount of the "remote" value?) - to be verified
+        let stake_msg = contract.receive_virtual_stake(
+            ctx.info.sender.to_string(),
+            coin(amount.u128(), denom),
+            msg,
+            coins(amount.u128(), &denom),
+        )?;
+
+        let resp = Response::new()
+            .add_message(stake_msg)
+            .add_attribute("action", "stake_remote")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("amount", amount.to_string());
+
+        Ok(resp)
     }
 
     /// This sends actual tokens to the local staking contract
@@ -151,44 +174,14 @@ impl VaultContract<'_> {
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
-        let collateral = self
-            .collateral
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
-            .unwrap_or_default();
-
         let config = self.config.load(ctx.deps.storage)?;
 
-        let mut lien = self
-            .liens
-            .may_load(
-                ctx.deps.storage,
-                (&ctx.info.sender, &config.local_staking.contract.0),
-            )?
-            .unwrap_or(Lien {
-                amount: Uint128::zero(),
-                slashable: config.local_staking.max_slash,
-            });
-        lien.amount += amount;
-
-        let mut user = self
-            .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
-            .unwrap_or_default();
-        user.max_lien = user.max_lien.max(lien.amount);
-        user.total_slashable += amount * lien.slashable;
-
-        ensure!(
-            collateral >= user.used_collateral(),
-            ContractError::InsufficentBalance
-        );
-
-        self.liens.save(
-            ctx.deps.storage,
-            (&ctx.info.sender, &config.local_staking.contract.0),
-            &lien,
+        self.stake(
+            &ctx,
+            &config.local_staking.contract.0,
+            config.local_staking.max_slash,
+            amount,
         )?;
-
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
         let stake_msg = config.local_staking.contract.receive_stake(
             ctx.info.sender.to_string(),
@@ -241,6 +234,48 @@ impl VaultContract<'_> {
         self.config.save(deps.storage, &cfg)?;
 
         Ok(Response::new())
+    }
+
+    /// Updates the local stake for staking on any contract
+    fn stake(
+        &self,
+        ctx: &ExecCtx,
+        addr: &Addr,
+        slashable: Decimal,
+        amount: Uint128,
+    ) -> Result<(), ContractError> {
+        let collateral = self
+            .collateral
+            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .unwrap_or_default();
+
+        let mut lien = self
+            .liens
+            .may_load(ctx.deps.storage, (&ctx.info.sender, addr))?
+            .unwrap_or(Lien {
+                amount: Uint128::zero(),
+                slashable,
+            });
+        lien.amount += amount;
+
+        let mut user = self
+            .users
+            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .unwrap_or_default();
+        user.max_lien = user.max_lien.max(lien.amount);
+        user.total_slashable += amount * lien.slashable;
+
+        ensure!(
+            collateral >= user.used_collateral(),
+            ContractError::InsufficentBalance
+        );
+
+        self.liens
+            .save(ctx.deps.storage, (&ctx.info.sender, addr), &lien)?;
+
+        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+
+        Ok(())
     }
 }
 
