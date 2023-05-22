@@ -40,7 +40,9 @@ The `Converter` should be able to query the following info from the contract:
 ```rust
 pub enum VirtualStakeQueryMsg {
   #[returns(BondStatusResponse)]
-  BondStatus { },
+  BondStatus {
+    contract: String,
+  },
 }
 
 pub struct BondStatusResponse {
