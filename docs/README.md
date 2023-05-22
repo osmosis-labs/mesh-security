@@ -80,7 +80,7 @@ to take over more than one-third, or even two-thirds or the power of a smaller c
 
 Clearly the consumer chain wants to put some limits. The first limit is the 
 [discount applied during the conversion](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-normalization).
-This doesn't just provide margin for price fluxuations but also means that on average
+This doesn't just provide margin for price fluctuations but also means that on average
 a remote token has less voting power (and rewards) per USD-value than a local token, favoring
 local stakers.
 
@@ -114,7 +114,7 @@ on the provider chain's influence in all circumstances, so this isn't a large pr
 
 For a rapid price decrease, we must consider the time frame.
 It is a [requirement of an oracle](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-feeds)
-to provide timely feeds, say once a day or week, so we should focus the relative price movement
+to provide timely feeds, say once a day or week, so we should focus on the relative price movement
 in such a period. [The discount](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-normalization)
 provides such a buffer. If there is a discount of 40% and the provider tokens drop 30% relative to
 the consumer tokens in one oracle epoch, then it is still over-collateralized relative to voting power.

@@ -165,7 +165,7 @@ The simplest solution is:
 
 However, there is an issue here, as we are staking on different validators. Imagine I have a cap of 100. 80 is bonded to A.
 I request to bond 120 more to B, which turns into 20 bond to B. There is an actual ration of 4:1 A:B bonded, but the remote
-stakers have delegated at a ration of 2:3. This gets worse if eg. someone unbonds all A. We end up with 120 requested for B,
+stakers have delegated at a ratio of 2:3. This gets worse if eg. someone unbonds all A. We end up with 120 requested for B,
 but 80 delegated to A and 20 delegated to B.
 
 To properly handle this, we should use Redelegations to rebalance when the amounts are updated. 
@@ -174,9 +174,9 @@ add a bit to that one and decrease the other 50). We describe a solution to this
 
 ### Epochs
 
-For efficiency rewards will be withdrawn for all cross-stakers at a regular rhythm, once per epoch.
+For efficiency, rewards will be withdrawn for all cross-stakers at a regular rhythm, once per epoch.
 This is done to reduce the number of IBC messages sent, and reduce computation (gas) overhead.
-Note that one provider will like have to withdraw for dozens of validators and then distribute
+Note that one provider will likely have to withdraw from dozens of validators and then distribute
 to the proper cross-stakers, so this is a significant amount of computation, and shouldn't be
 triggered every few blocks.
 
@@ -186,10 +186,12 @@ over the max cap and someone stakes 10 tokens on validator V, the provider will 
 some tokens proportionally from every other validator. Likewise, if someone unstakes 10 tokens,
 it will trigger a staking on the remaining validators to keep the total at max cap.
 
+#### CosmWasm Contract
+
 It makes sense to do this rebalance only once per epoch, as it is quite expensive. These could
 be different epoch periods for two different purposes, but it is recommended to keep them
 the same for simplicity. However, we do suggest that the epochs of each provider be offset,
-so we don't blog up the network with a bunch of IBC messages at the same time.
+so we don't clog up the network with a bunch of IBC messages at the same time.
 
 Implementation of this will require another binding with the native Go module. Our proposed
 mechanism is to add a special `SudoMsg` that is triggered once per epoch on each contract with
@@ -210,7 +212,7 @@ pub enum SudoMsg {
 }
 ```
 
-### Module
+### SDK Module
 
 The module maintains a list of addresses (for Virtual Staking contracts), along with a max cap of
 virtual tokens for each. It's main purpose is to process `Bond` and `Unbond` messages from
@@ -226,8 +228,8 @@ The Virtual Staking **Module** also maintains the current state of each of the r
 
 ```go
 type StakePermission struct {
-  // Limit we cap the virtual stake of this converter.
-  // Defined as a number of "virtual native tokens" this can mint.
+  // Limits the cap of the virtual stake of this converter.
+  // Defined as a number of "virtual native tokens" the given contract can mint.
   MaxStakingRatio: sdk.Int,
   // Next time (unix seconds) we trigger the sudo message
   // When the contract is first registered, it is set to block time + epoch length
@@ -239,14 +241,14 @@ Beyond MVP, we wish to add the following functionality:
 
 * Provide configuration for optional governance multiplier (eg 1 virtual stake leads to 1 tendermint power, but may be 0 or 1 or even 0.5 gov voting power)
 
-### Reward Withdrawls
+### Reward Withdrawals
 
 The Virtual Staking Module uses an [EndBlock hook called once per epoch](#epochs)
 (param setting, eg 1 day).
 This will trigger a `SudoMsg` to each Virtual Staking contract, allowing them to both do a rebalancing
 with any staking/unstaking in that period, as well as withdraw rewards from all validators.
 
-When the epoch finishes for one Converter, the Module will withdraw rewards from all delegations
+When the epoch finishes for one Converter, the Virtual Staking Module will withdraw rewards from all delegations
 that converter made, and send those tokens to the Converter along with the info of which
 validator these are for.
 
