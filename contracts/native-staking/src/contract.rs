@@ -19,7 +19,8 @@ pub struct NativeStakingContract<'a> {
     config: Item<'a, Config>,
 }
 
-#[contract(error=ContractError)]
+#[contract]
+#[error(ContractError)]
 #[messages(local_staking_api as LocalStakingApi)]
 #[messages(native_staking_callback as NativeStakingCallback)]
 impl NativeStakingContract<'_> {

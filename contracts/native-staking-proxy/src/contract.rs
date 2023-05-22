@@ -16,7 +16,8 @@ pub struct NativeStakingProxyContract<'a> {
     config: Item<'a, Config>,
 }
 
-#[contract(error=ContractError)]
+#[contract]
+#[error(ContractError)]
 impl NativeStakingProxyContract<'_> {
     pub const fn new() -> Self {
         Self {

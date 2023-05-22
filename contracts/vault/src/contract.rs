@@ -23,7 +23,8 @@ pub struct VaultContract<'a> {
     config: Item<'a, Config>,
 }
 
-#[contract(error=ContractError)]
+#[contract]
+#[error(ContractError)]
 #[messages(vault_api as VaultApi)]
 impl VaultContract<'_> {
     pub const fn new() -> Self {
