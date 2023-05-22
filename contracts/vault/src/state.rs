@@ -1,13 +1,23 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Uint128};
+use mesh_apis::local_staking_api::LocalStakingApiHelper;
 
 #[cw_serde]
 pub struct Config {
     /// The denom we accept for staking (only native tokens)
     pub denom: String,
 
-    /// The address of the local staking contract (where actual tokens go)
-    pub local_staking: Addr,
+    /// info about the local staking contract (where actual tokens go)
+    pub local_staking: LocalStaking,
+}
+
+#[cw_serde]
+pub struct LocalStaking {
+    /// Local staking address
+    pub contract: LocalStakingApiHelper,
+
+    /// Max slashing on local staking
+    pub max_slash: Decimal,
 }
 
 /// Single Lien description

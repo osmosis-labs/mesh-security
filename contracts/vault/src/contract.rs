@@ -1,19 +1,22 @@
 use cosmwasm_std::{
-    ensure, entry_point, Addr, Binary, Coin, DepsMut, Env, Order, Reply, Response, StdResult,
-    Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coins, ensure, entry_point, Addr, Binary, Coin, Decimal, DepsMut, Env, Order, Reply, Response,
+    StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::{must_pay, parse_instantiate_response_data};
 
-use mesh_apis::local_staking_api::{LocalStakingApiQueryMsg, MaxSlashResponse};
+use mesh_apis::local_staking_api::{
+    LocalStakingApiHelper, LocalStakingApiQueryMsg, MaxSlashResponse,
+};
 use mesh_apis::vault_api::{self, VaultApi};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
+use crate::collateral::UsedCollateral;
 use crate::error::ContractError;
 use crate::msg::{AccountResponse, StakingInitInfo};
-use crate::state::{Config, Lien};
+use crate::state::{Config, Lien, LocalStaking};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -53,7 +56,10 @@ impl VaultContract<'_> {
         let config = Config {
             denom,
             // We set this in reply, so proper once the reply message completes successfully
-            local_staking: Addr::unchecked(""),
+            local_staking: LocalStaking {
+                contract: LocalStakingApiHelper(Addr::unchecked("")),
+                max_slash: Decimal::one(),
+            },
         };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -133,14 +139,57 @@ impl VaultContract<'_> {
     #[msg(exec)]
     fn stake_local(
         &self,
-        _ctx: ExecCtx,
+        ctx: ExecCtx,
         // amount to stake on that contract
-        amount: Coin,
+        amount: Uint128,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
-        let _ = (amount, msg);
-        todo!()
+        let collateral = self
+            .collateral
+            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .unwrap_or_default();
+
+        let config = self.config.load(ctx.deps.storage)?;
+
+        let mut used_collateral = self.used_collateral(ctx.deps.storage, &ctx.info.sender)?;
+        used_collateral.add_lien(amount, config.local_staking.max_slash);
+
+        ensure!(
+            collateral >= used_collateral.used(),
+            ContractError::InsufficentBalance
+        );
+
+        let mut lien = self
+            .liens
+            .may_load(
+                ctx.deps.storage,
+                (&ctx.info.sender, &config.local_staking.contract.0),
+            )?
+            .unwrap_or(Lien {
+                amount: Uint128::zero(),
+                slashable: config.local_staking.max_slash,
+            });
+        lien.amount += amount;
+        self.liens.save(
+            ctx.deps.storage,
+            (&ctx.info.sender, &config.local_staking.contract.0),
+            &lien,
+        )?;
+
+        let stake_msg = config.local_staking.contract.receive_stake(
+            ctx.info.sender.to_string(),
+            msg,
+            coins(amount.u128(), config.denom),
+        )?;
+
+        let resp = Response::new()
+            .add_message(stake_msg)
+            .add_attribute("action", "stake_local")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("amount", amount.to_string());
+
+        Ok(resp)
     }
 
     #[msg(query)]
@@ -162,30 +211,31 @@ impl VaultContract<'_> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let local_staking = Addr::unchecked(init_data.contract_address);
 
-        // we want to calculate the slashing rate on this contract and store it locally...
+        // As we control the local staking contract it might be better to just raw-query it
+        // on demand instead of duplicating the data.
         let query = LocalStakingApiQueryMsg::MaxSlash {};
         let MaxSlashResponse { max_slash } =
             deps.querier.query_wasm_smart(&local_staking, &query)?;
-        // TODO: store this when we actually implement the other logic
-        let _ = max_slash;
 
-        let mut cfg = self.config.load(deps.storage)?;
-        cfg.local_staking = local_staking;
+        let cfg = Config {
+            local_staking: LocalStaking {
+                contract: LocalStakingApiHelper(local_staking),
+                max_slash,
+            },
+            ..self.config.load(deps.storage)?
+        };
+
         self.config.save(deps.storage, &cfg)?;
 
         Ok(Response::new())
     }
 
-    /// Calculates free collateral for an user
+    /// Calculates how much collateral is used by maximum lien and total slashable
+    /// amount
     ///
     /// Collateral amount is provided, so when it hs to be used int he contract
     /// itself, it is not read twice from the storage
-    fn free_collateral(
-        &self,
-        storage: &dyn Storage,
-        user: &Addr,
-        collateral: Uint128,
-    ) -> StdResult<Uint128> {
+    fn used_collateral(&self, storage: &dyn Storage, user: &Addr) -> StdResult<UsedCollateral> {
         // Calculating both maximum lien and the slashable collateral in the single
         // range pass to avoid collecting the data, or even worse = multiple state
         // reading
@@ -206,7 +256,27 @@ impl VaultContract<'_> {
                 },
             )?;
 
-        Ok(collateral - max_lien.max(total_slashable))
+        let used = UsedCollateral {
+            max_lien,
+            total_slashable,
+        };
+
+        Ok(used)
+    }
+
+    /// Calculates free collateral user has bound
+    ///
+    /// Collateral amount is provided, so when it hs to be used int he contract
+    /// itself, it is not read twice from the storage
+    fn free_collateral(
+        &self,
+        storage: &dyn Storage,
+        user: &Addr,
+        collateral: Uint128,
+    ) -> StdResult<Uint128> {
+        let used_collateral = self.used_collateral(storage, user)?;
+
+        Ok(collateral - used_collateral.used())
     }
 }
 
