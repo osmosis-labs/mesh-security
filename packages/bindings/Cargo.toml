@@ -1,0 +1,9 @@
+[package]
+name = "mesh-bindings"
+version = { workspace = true }
+edition = { workspace = true }
+license       = { workspace = true }
+
+[dependencies]
+cosmwasm-std     = { workspace = true }
+cosmwasm-schema  = { workspace = true }
