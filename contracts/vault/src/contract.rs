@@ -3,7 +3,7 @@ use cosmwasm_std::{
     Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
-use cw_storage_plus::{IndexedMap, Item, Map};
+use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
 
 use mesh_apis::local_staking_api::{LocalStakingApiQueryMsg, MaxSlashResponse};
@@ -13,7 +13,7 @@ use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
 use crate::msg::{AccountResponse, StakingInitInfo};
-use crate::state::{Config, Lien, LiensIndex};
+use crate::state::{Config, Lien};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -25,24 +25,21 @@ pub struct VaultContract<'a> {
     config: Item<'a, Config>,
     /// Collateral amount of all users
     collateral: Map<'a, &'a Addr, Uint128>,
-    /// All liens hold by users
+    /// All liens in the protocol
     ///
-    /// TODO: veryfiy that `IndexedMap` with creditor as `UniqueIndex` is enough to disallow
-    /// creditor collision
-    liens: IndexedMap<'a, &'a Addr, Lien, LiensIndex<'a>>,
+    /// Liens are indexed with (user, creditor), as this pair has to be unique
+    liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
 }
 
 #[contract]
 #[error(ContractError)]
 #[messages(vault_api as VaultApi)]
 impl VaultContract<'_> {
-    pub fn new() -> Self {
-        let liens_index = LiensIndex::new();
-
+    pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
             collateral: Map::new("collateral"),
-            liens: IndexedMap::new("liens", liens_index),
+            liens: Map::new("liens"),
         }
     }
 
