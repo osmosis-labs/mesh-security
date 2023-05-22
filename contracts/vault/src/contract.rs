@@ -1,10 +1,10 @@
 use cosmwasm_std::{
-    entry_point, Addr, Binary, Coin, DepsMut, Env, Reply, Response, SubMsg, SubMsgResponse,
-    Uint128, WasmMsg,
+    entry_point, Addr, Binary, Coin, DepsMut, Env, Reply, Response, StdResult, SubMsg,
+    SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
-use cw_utils::parse_instantiate_response_data;
+use cw_utils::{must_pay, parse_instantiate_response_data};
 
 use mesh_apis::local_staking_api::{LocalStakingApiQueryMsg, MaxSlashResponse};
 use mesh_apis::vault_api::{self, VaultApi};
@@ -73,9 +73,22 @@ impl VaultContract<'_> {
     }
 
     #[msg(exec)]
-    fn bond(&self, _ctx: ExecCtx) -> Result<Response, ContractError> {
-        // this assets the proper token is sent in info.funds
-        todo!()
+    fn provide_collateral(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+        let amount = must_pay(&ctx.info, &denom)?;
+
+        self.collateral.update(
+            ctx.deps.storage,
+            &ctx.info.sender,
+            |collat| -> StdResult<_> { Ok(collat.unwrap_or_default() + amount) },
+        )?;
+
+        let resp = Response::new()
+            .add_attribute("action", "provide_collateral")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("amount", amount.to_string());
+
+        Ok(resp)
     }
 
     #[msg(exec)]
