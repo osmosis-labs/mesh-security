@@ -16,7 +16,7 @@ use sylvia::{contract, schemars};
 use crate::collateral::UsedCollateral;
 use crate::error::ContractError;
 use crate::msg::{AccountResponse, StakingInitInfo};
-use crate::state::{Config, Lien, LocalStaking};
+use crate::state::{Config, Lien, LocalStaking, UserInfo};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -32,6 +32,8 @@ pub struct VaultContract<'a> {
     ///
     /// Liens are indexed with (user, creditor), as this pair has to be unique
     liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
+    /// Information cached per user
+    users: Map<'a, &'a Addr, UserInfo>,
 }
 
 #[contract]
@@ -43,6 +45,7 @@ impl VaultContract<'_> {
             config: Item::new("config"),
             collateral: Map::new("collateral"),
             liens: Map::new("liens"),
+            users: Map::new("users"),
         }
     }
 
@@ -100,9 +103,12 @@ impl VaultContract<'_> {
     #[msg(exec)]
     fn unbond(&self, ctx: ExecCtx, amount: Uint128) -> Result<Response, ContractError> {
         let collateral = self.collateral.load(ctx.deps.storage, &ctx.info.sender)?;
+        let user = self
+            .users
+            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .unwrap_or_default();
 
-        let free_collateral =
-            self.free_collateral(ctx.deps.storage, &ctx.info.sender, collateral)?;
+        let free_collateral = collateral - user.used_collateral();
         ensure!(
             free_collateral >= amount,
             ContractError::ClaimsLocked(free_collateral)
@@ -152,14 +158,6 @@ impl VaultContract<'_> {
 
         let config = self.config.load(ctx.deps.storage)?;
 
-        let mut used_collateral = self.used_collateral(ctx.deps.storage, &ctx.info.sender)?;
-        used_collateral.add_lien(amount, config.local_staking.max_slash);
-
-        ensure!(
-            collateral >= used_collateral.used(),
-            ContractError::InsufficentBalance
-        );
-
         let mut lien = self
             .liens
             .may_load(
@@ -171,11 +169,26 @@ impl VaultContract<'_> {
                 slashable: config.local_staking.max_slash,
             });
         lien.amount += amount;
+
+        let mut user = self
+            .users
+            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .unwrap_or_default();
+        user.max_lien = user.max_lien.max(lien.amount);
+        user.total_slashable += amount * lien.slashable;
+
+        ensure!(
+            collateral >= user.used_collateral(),
+            ContractError::InsufficentBalance
+        );
+
         self.liens.save(
             ctx.deps.storage,
             (&ctx.info.sender, &config.local_staking.contract.0),
             &lien,
         )?;
+
+        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
         let stake_msg = config.local_staking.contract.receive_stake(
             ctx.info.sender.to_string(),
@@ -228,55 +241,6 @@ impl VaultContract<'_> {
         self.config.save(deps.storage, &cfg)?;
 
         Ok(Response::new())
-    }
-
-    /// Calculates how much collateral is used by maximum lien and total slashable
-    /// amount
-    ///
-    /// Collateral amount is provided, so when it hs to be used int he contract
-    /// itself, it is not read twice from the storage
-    fn used_collateral(&self, storage: &dyn Storage, user: &Addr) -> StdResult<UsedCollateral> {
-        // Calculating both maximum lien and the slashable collateral in the single
-        // range pass to avoid collecting the data, or even worse = multiple state
-        // reading
-        let (max_lien, total_slashable) = self
-            .liens
-            .prefix(user)
-            .range(storage, None, None, Order::Ascending)
-            // (amount, slashable) per lien
-            .map(|lien| lien.map(|(_, lien)| (lien.amount, lien.slashable_collateral())))
-            // (max_amount, total_slashable) per user
-            .try_fold(
-                (Uint128::zero(), Uint128::zero()),
-                |(max_amount, total_slashable), lien| -> StdResult<_> {
-                    let (amount, slashable) = lien?;
-                    let max_amount = max_amount.max(amount);
-                    let total_slashable = total_slashable + slashable;
-                    Ok((max_amount, total_slashable))
-                },
-            )?;
-
-        let used = UsedCollateral {
-            max_lien,
-            total_slashable,
-        };
-
-        Ok(used)
-    }
-
-    /// Calculates free collateral user has bound
-    ///
-    /// Collateral amount is provided, so when it hs to be used int he contract
-    /// itself, it is not read twice from the storage
-    fn free_collateral(
-        &self,
-        storage: &dyn Storage,
-        user: &Addr,
-        collateral: Uint128,
-    ) -> StdResult<Uint128> {
-        let used_collateral = self.used_collateral(storage, user)?;
-
-        Ok(collateral - used_collateral.used())
     }
 }
 

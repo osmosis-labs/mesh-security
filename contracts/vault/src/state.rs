@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, Uint128};
+use cosmwasm_std::{Decimal, Uint128};
 use mesh_apis::local_staking_api::LocalStakingApiHelper;
 
 #[cw_serde]
@@ -36,15 +36,18 @@ impl Lien {
     }
 }
 
-/// All values are in Config.denom
 #[cw_serde]
-pub struct Balance {
-    pub bonded: Uint128,
-    pub claims: Vec<LienAddr>,
+#[derive(Default)]
+pub struct UserInfo {
+    // Highes user lien
+    pub max_lien: Uint128,
+    // Tatal slashable amount for user
+    pub total_slashable: Uint128,
 }
 
-#[cw_serde]
-pub struct LienAddr {
-    pub lienholder: Addr,
-    pub amount: Uint128,
+impl UserInfo {
+    // Return total used collateral
+    pub fn used_collateral(&self) -> Uint128 {
+        self.max_lien.max(self.total_slashable)
+    }
 }
