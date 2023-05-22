@@ -11,7 +11,8 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::types::{AccountResponse, Config, ConfigResponse, StakingInitInfo};
+use crate::msg::{AccountResponse, ConfigResponse, StakingInitInfo};
+use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,6 +1,7 @@
 pub mod contract;
 pub mod error;
-mod types;
+pub mod msg;
+mod state;
 
 #[allow(dead_code)]
 #[cfg(not(any(feature = "library", tarpaulin_include)))]
