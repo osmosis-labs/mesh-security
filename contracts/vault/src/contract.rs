@@ -12,7 +12,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::msg::{AccountResponse, ConfigResponse, StakingInitInfo};
+use crate::msg::{AccountResponse, StakingInitInfo};
 use crate::state::{Config, Lien, LiensIndex};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -124,8 +124,8 @@ impl VaultContract<'_> {
     }
 
     #[msg(query)]
-    fn config(&self, _ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
-        todo!()
+    fn config(&self, ctx: QueryCtx) -> Result<Config, ContractError> {
+        self.config.load(ctx.deps.storage).map_err(Into::into)
     }
 
     fn reply_init_callback(

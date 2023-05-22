@@ -15,14 +15,6 @@ pub struct StakingInitInfo {
 }
 
 #[cw_serde]
-pub struct ConfigResponse {
-    pub denom: String,
-
-    /// The address of the local staking contract (where actual tokens go)
-    pub local_staking: String,
-}
-
-#[cw_serde]
 pub struct AccountResponse {
     // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
     pub denom: String,
