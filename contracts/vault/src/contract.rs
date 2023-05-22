@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    entry_point, Addr, Binary, Coin, DepsMut, Env, Reply, Response, StdResult, SubMsg,
-    SubMsgResponse, Uint128, WasmMsg,
+    ensure, entry_point, Addr, Binary, Coin, DepsMut, Env, Order, Reply, Response, StdResult,
+    Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -73,7 +73,7 @@ impl VaultContract<'_> {
     }
 
     #[msg(exec)]
-    fn provide_collateral(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
+    fn bond(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let amount = must_pay(&ctx.info, &denom)?;
 
@@ -84,7 +84,7 @@ impl VaultContract<'_> {
         )?;
 
         let resp = Response::new()
-            .add_attribute("action", "provide_collateral")
+            .add_attribute("action", "bond")
             .add_attribute("sender", ctx.info.sender)
             .add_attribute("amount", amount.to_string());
 
@@ -92,9 +92,25 @@ impl VaultContract<'_> {
     }
 
     #[msg(exec)]
-    fn unbond(&self, _ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
-        let _ = amount;
-        todo!()
+    fn unbond(&self, ctx: ExecCtx, amount: Uint128) -> Result<Response, ContractError> {
+        let collateral = self.collateral.load(ctx.deps.storage, &ctx.info.sender)?;
+
+        let free_collateral =
+            self.free_collateral(ctx.deps.storage, &ctx.info.sender, collateral)?;
+        ensure!(
+            free_collateral >= amount,
+            ContractError::ClaimsLocked(free_collateral)
+        );
+
+        self.collateral
+            .save(ctx.deps.storage, &ctx.info.sender, &(collateral - amount))?;
+
+        let resp = Response::new()
+            .add_attribute("action", "unbond")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("amount", amount.to_string());
+
+        Ok(resp)
     }
 
     /// This assigns a claim of amount tokens to the remote contract, which can take some action with it
@@ -158,6 +174,39 @@ impl VaultContract<'_> {
         self.config.save(deps.storage, &cfg)?;
 
         Ok(Response::new())
+    }
+
+    /// Calculates free collateral for an user
+    ///
+    /// Collateral amount is provided, so when it hs to be used int he contract
+    /// itself, it is not read twice from the storage
+    fn free_collateral(
+        &self,
+        storage: &dyn Storage,
+        user: &Addr,
+        collateral: Uint128,
+    ) -> StdResult<Uint128> {
+        // Calculating both maximum lien and the slashable collateral in the single
+        // range pass to avoid collecting the data, or even worse = multiple state
+        // reading
+        let (max_lien, total_slashable) = self
+            .liens
+            .prefix(user)
+            .range(storage, None, None, Order::Ascending)
+            // (amount, slashable) per lien
+            .map(|lien| lien.map(|(_, lien)| (lien.amount, lien.slashable_collateral())))
+            // (max_amount, total_slashable) per user
+            .try_fold(
+                (Uint128::zero(), Uint128::zero()),
+                |(max_amount, total_slashable), lien| -> StdResult<_> {
+                    let (amount, slashable) = lien?;
+                    let max_amount = max_amount.max(amount);
+                    let total_slashable = total_slashable + slashable;
+                    Ok((max_amount, total_slashable))
+                },
+            )?;
+
+        Ok(collateral - max_lien.max(total_slashable))
     }
 }
 
