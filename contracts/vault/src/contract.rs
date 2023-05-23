@@ -277,6 +277,40 @@ impl VaultContract<'_> {
 
         Ok(())
     }
+
+    fn unstake(&self, ctx: &ExecCtx, owner: String, amount: Coin) -> Result<(), ContractError> {
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+        ensure!(amount.denom == denom, ContractError::UnexpectedDenom(denom));
+        let amount = amount.amount;
+
+        let owner = Addr::unchecked(owner);
+        let mut lien = self
+            .liens
+            .may_load(ctx.deps.storage, (&owner, &ctx.info.sender))?
+            .ok_or(ContractError::UnknownLienholder)?;
+
+        ensure!(lien.amount >= amount, ContractError::InsufficientLien);
+        lien.amount -= amount;
+        self.liens
+            .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien)?;
+
+        let mut user = self.users.load(ctx.deps.storage, &owner)?;
+
+        // Max lien has to be recalculatd from scratch; the just released lien
+        // is already decreased in cache
+        user.max_lien = self
+            .liens
+            .prefix(&owner)
+            .range(ctx.deps.storage, None, None, Order::Ascending)
+            .try_fold(Uint128::zero(), |max_lien, lien| {
+                lien.map(|(_, lien)| max_lien.max(lien.amount))
+            })?;
+
+        user.total_slashable -= amount * lien.slashable;
+        self.users.save(ctx.deps.storage, &owner, &user)?;
+
+        Ok(())
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -297,14 +331,21 @@ impl VaultApi for VaultContract<'_> {
     #[msg(exec)]
     fn release_cross_stake(
         &self,
-        _ctx: ExecCtx,
+        ctx: ExecCtx,
         // address of the user who originally called stake_remote
         owner: String,
         // amount to unstake on that contract
         amount: Coin,
     ) -> Result<Response, ContractError> {
-        let _ = (owner, amount);
-        todo!()
+        self.unstake(&ctx, owner, amount)?;
+
+        let resp = Response::new()
+            .add_attribute("action", "release_cross_stake")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("owner", owner)
+            .add_attribute("amount", amount.amount.to_string());
+
+        Ok(resp)
     }
 
     /// This must be called by the local staking contract to release this claim
@@ -312,11 +353,21 @@ impl VaultApi for VaultContract<'_> {
     #[msg(exec)]
     fn release_local_stake(
         &self,
-        _ctx: ExecCtx,
+        ctx: ExecCtx,
         // address of the user who originally called stake_remote
         owner: String,
     ) -> Result<Response, ContractError> {
-        let _ = owner;
-        todo!()
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+        let amount = must_pay(&ctx.info, &denom)?;
+
+        self.unstake(&ctx, owner, coin(amount.u128(), denom))?;
+
+        let resp = Response::new()
+            .add_attribute("action", "release_cross_stake")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("owner", owner)
+            .add_attribute("amount", amount.to_string());
+
+        Ok(resp)
     }
 }

@@ -16,6 +16,9 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
+    #[error("All denoms are expected to be {0}")]
+    UnexpectedDenom(String),
+
     #[error("Claim is locked, only {0} can be unbonded")]
     ClaimsLocked(Uint128),
 
