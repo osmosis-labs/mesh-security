@@ -36,6 +36,7 @@ pub struct VaultContract<'a> {
     users: Map<'a, &'a Addr, UserInfo>,
 }
 
+#[cfg_attr(not(feautre = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
 #[messages(vault_api as VaultApi)]
