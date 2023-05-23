@@ -4,7 +4,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
-use cw_utils::{must_pay, parse_instantiate_response_data};
+use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
 
 use mesh_apis::cross_staking_api::CrossStakingApiHelper;
 use mesh_apis::local_staking_api::{
@@ -56,6 +56,8 @@ impl VaultContract<'_> {
         denom: String,
         local_staking: StakingInitInfo,
     ) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         let config = Config {
             denom,
             // We set this in reply, so proper once the reply message completes successfully
@@ -102,6 +104,8 @@ impl VaultContract<'_> {
 
     #[msg(exec)]
     fn unbond(&self, ctx: ExecCtx, amount: Uint128) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         let collateral = self.collateral.load(ctx.deps.storage, &ctx.info.sender)?;
         let user = self
             .users
@@ -137,6 +141,8 @@ impl VaultContract<'_> {
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         let contract = ctx.deps.api.addr_validate(&contract)?;
         let contract = CrossStakingApiHelper(contract);
         let slashable = contract.max_slash(ctx.deps.as_ref())?;
@@ -145,13 +151,11 @@ impl VaultContract<'_> {
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
 
-        // TODO: Not sure why amount is passed separately to funds passed here, I suppose it is
-        // actually different amount (amount of the "remote" value?) - to be verified
         let stake_msg = contract.receive_virtual_stake(
             ctx.info.sender.to_string(),
             coin(amount.u128(), denom.clone()),
             msg,
-            coins(amount.u128(), &denom),
+            vec![],
         )?;
 
         let resp = Response::new()
@@ -336,6 +340,8 @@ impl VaultApi for VaultContract<'_> {
         // amount to unstake on that contract
         amount: Coin,
     ) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         self.unstake(&mut ctx, owner.clone(), amount.clone())?;
 
         let resp = Response::new()
