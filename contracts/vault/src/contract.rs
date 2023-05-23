@@ -15,7 +15,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::msg::{AccountResponse, LienInfo, StakingInitInfo};
+use crate::msg::{AccountResponse, ConfigResp, LienInfo, StakingInitInfo};
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -226,8 +226,16 @@ impl VaultContract<'_> {
     }
 
     #[msg(query)]
-    fn config(&self, ctx: QueryCtx) -> Result<Config, ContractError> {
-        self.config.load(ctx.deps.storage).map_err(Into::into)
+    fn config(&self, ctx: QueryCtx) -> Result<ConfigResp, ContractError> {
+        let config = self.config.load(ctx.deps.storage)?;
+        let local_staking = self.local_staking.load(ctx.deps.storage)?;
+
+        let resp = ConfigResp {
+            denom: config.denom,
+            local_staking: local_staking.contract.0.into(),
+        };
+
+        Ok(resp)
     }
 
     fn reply_init_callback(

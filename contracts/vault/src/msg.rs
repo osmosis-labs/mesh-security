@@ -28,3 +28,9 @@ pub struct LienInfo {
     pub lienholder: String,
     pub amount: Uint128,
 }
+
+#[cw_serde]
+pub struct ConfigResp {
+    pub denom: String,
+    pub local_staking: String,
+}
