@@ -9,7 +9,8 @@ use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
 use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCallback};
 
 use crate::error::ContractError;
-use crate::types::{Config, ConfigResponse, OwnerByProxyResponse, ProxyByOwnerResponse, StakeMsg};
+use crate::msg::{ConfigResponse, OwnerByProxyResponse, ProxyByOwnerResponse, StakeMsg};
+use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
