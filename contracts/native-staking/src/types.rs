@@ -8,7 +8,7 @@ pub struct Config {
     /// The denom we accept for staking
     pub denom: String,
 
-    /// This is the code id for native-staking-proxy contract we will be managing
+    /// The code id for the `native-staking-proxy` contracts we will be managing
     pub proxy_code_id: u64,
 
     /// The address of the vault contract (where we get and return stake)
@@ -22,7 +22,7 @@ pub struct ConfigResponse {
     /// The denom we accept for staking
     pub denom: String,
 
-    /// This is the code id for native-staking-proxy contract we will be managing
+    /// The code id for the `native-staking-proxy` contracts we will be managing
     pub proxy_code_id: u64,
 
     /// The address of the vault contract (where we get and return stake)
@@ -39,7 +39,7 @@ pub struct OwnerByProxyResponse {
     pub owner: String,
 }
 
-/// This is the message that is binary encoded in receive_stake(..msg)
+/// The message that is binary encoded in `receive_stake(..msg)`
 #[cw_serde]
 pub struct StakeMsg {
     pub validator: String,
