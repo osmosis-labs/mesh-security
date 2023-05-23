@@ -49,8 +49,8 @@ impl NativeStakingContract<'_> {
     }
 
     #[msg(query)]
-    fn config(&self, _ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
-        todo!()
+    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+        Ok(self.config.load(ctx.deps.storage)?)
     }
 
     #[msg(query)]
