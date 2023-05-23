@@ -31,9 +31,9 @@ pub struct Lien {
 pub struct UserInfo {
     // User collateral
     pub collateral: Uint128,
-    // Highes user lien
+    // Highest user lien
     pub max_lien: Uint128,
-    // Tatal slashable amount for user
+    // Total slashable amount for user
     pub total_slashable: Uint128,
 }
 

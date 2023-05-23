@@ -97,8 +97,10 @@ impl VaultContract<'_> {
     }
 
     #[msg(exec)]
-    fn unbond(&self, ctx: ExecCtx, amount: Uint128) -> Result<Response, ContractError> {
+    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
+
+        let amount = amount.amount;
 
         let mut user = self
             .users
@@ -130,7 +132,7 @@ impl VaultContract<'_> {
         // address of the contract to virtually stake on
         contract: String,
         // amount to stake on that contract
-        amount: Uint128,
+        amount: Coin,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
@@ -140,9 +142,12 @@ impl VaultContract<'_> {
         let contract = CrossStakingApiHelper(contract);
         let slashable = contract.max_slash(ctx.deps.as_ref())?;
 
-        self.stake(&mut ctx, &contract.0, slashable.max_slash, amount)?;
-
         let denom = self.config.load(ctx.deps.storage)?.denom;
+        ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
+
+        let amount = amount.amount;
+
+        self.stake(&mut ctx, &contract.0, slashable.max_slash, amount)?;
 
         let stake_msg = contract.receive_virtual_stake(
             ctx.info.sender.to_string(),
@@ -166,11 +171,15 @@ impl VaultContract<'_> {
         &self,
         mut ctx: ExecCtx,
         // amount to stake on that contract
-        amount: Uint128,
+        amount: Coin,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
+        ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
+
+        let amount = amount.amount;
+
         let local_staking = self.local_staking.load(ctx.deps.storage)?;
 
         self.stake(
@@ -263,16 +272,19 @@ impl VaultContract<'_> {
     }
 
     /// Updates the local stake for staking on any contract
+    ///
+    /// Stake (both local and remote) is always called by the tokens owner, so the `sender` is
+    /// ued as an owner address.
     fn stake(
         &self,
         ctx: &mut ExecCtx,
-        addr: &Addr,
+        lienholder: &Addr,
         slashable: Decimal,
         amount: Uint128,
     ) -> Result<(), ContractError> {
         let mut lien = self
             .liens
-            .may_load(ctx.deps.storage, (&ctx.info.sender, addr))?
+            .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
             .unwrap_or(Lien {
                 amount: Uint128::zero(),
                 slashable,
@@ -289,7 +301,7 @@ impl VaultContract<'_> {
         ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
         self.liens
-            .save(ctx.deps.storage, (&ctx.info.sender, addr), &lien)?;
+            .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien)?;
 
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
@@ -297,6 +309,9 @@ impl VaultContract<'_> {
     }
 
     /// Updates the local stake for unstaking from any contract
+    ///
+    /// The unstake (both local and remote) is always called by the staking contract
+    /// (aka leinholder), so the `sender` address is used for that.
     fn unstake(&self, ctx: &mut ExecCtx, owner: String, amount: Coin) -> Result<(), ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         ensure!(amount.denom == denom, ContractError::UnexpectedDenom(denom));
