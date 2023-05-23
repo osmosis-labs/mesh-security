@@ -15,7 +15,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::msg::{AccountResponse, StakingInitInfo};
+use crate::msg::{AccountResponse, LienInfo, StakingInitInfo};
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -199,9 +199,34 @@ impl VaultContract<'_> {
     }
 
     #[msg(query)]
-    fn account(&self, _ctx: QueryCtx, account: String) -> Result<AccountResponse, ContractError> {
-        let _ = account;
-        todo!()
+    fn account(&self, ctx: QueryCtx, account: String) -> Result<AccountResponse, ContractError> {
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+
+        let account = Addr::unchecked(account);
+
+        let claims = self
+            .liens
+            .prefix(&account)
+            .range(ctx.deps.storage, None, None, Order::Ascending)
+            .map(|lien| {
+                lien.map(|(lienholder, lien)| LienInfo {
+                    lienholder: lienholder.into(),
+                    amount: lien.amount,
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        let bonded = self.collateral.load(ctx.deps.storage, &account)?;
+        let user = self.users.load(ctx.deps.storage, &account)?;
+
+        let resp = AccountResponse {
+            denom,
+            bonded,
+            free: bonded - user.used_collateral(),
+            claims,
+        };
+
+        Ok(resp)
     }
 
     #[msg(query)]
