@@ -29,13 +29,6 @@ pub struct Lien {
     pub slashable: Decimal,
 }
 
-impl Lien {
-    /// Calculates collateral slashable for this lien
-    pub fn slashable_collateral(&self) -> Uint128 {
-        self.amount * self.slashable
-    }
-}
-
 #[cw_serde]
 #[derive(Default)]
 pub struct UserInfo {

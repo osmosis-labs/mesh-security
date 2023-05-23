@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     coin, coins, ensure, entry_point, Addr, Binary, Coin, Decimal, DepsMut, Env, Order, Reply,
-    Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    Response, StdResult, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -14,7 +14,6 @@ use mesh_apis::vault_api::{self, VaultApi};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
-use crate::collateral::UsedCollateral;
 use crate::error::ContractError;
 use crate::msg::{AccountResponse, StakingInitInfo};
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
@@ -130,7 +129,7 @@ impl VaultContract<'_> {
     #[msg(exec)]
     fn stake_remote(
         &self,
-        ctx: ExecCtx,
+        mut ctx: ExecCtx,
         // address of the contract to virtually stake on
         contract: String,
         // amount to stake on that contract
@@ -138,11 +137,11 @@ impl VaultContract<'_> {
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
-        let addr = ctx.deps.api.addr_validate(&contract)?;
-        let contract = CrossStakingApiHelper(addr);
+        let contract = ctx.deps.api.addr_validate(&contract)?;
+        let contract = CrossStakingApiHelper(contract);
         let slashable = contract.max_slash(ctx.deps.as_ref())?;
 
-        self.stake(&ctx, &addr, slashable.max_slash, amount)?;
+        self.stake(&mut ctx, &contract.0, slashable.max_slash, amount)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
 
@@ -150,7 +149,7 @@ impl VaultContract<'_> {
         // actually different amount (amount of the "remote" value?) - to be verified
         let stake_msg = contract.receive_virtual_stake(
             ctx.info.sender.to_string(),
-            coin(amount.u128(), denom),
+            coin(amount.u128(), denom.clone()),
             msg,
             coins(amount.u128(), &denom),
         )?;
@@ -168,7 +167,7 @@ impl VaultContract<'_> {
     #[msg(exec)]
     fn stake_local(
         &self,
-        ctx: ExecCtx,
+        mut ctx: ExecCtx,
         // amount to stake on that contract
         amount: Uint128,
         // action to take with that stake
@@ -177,7 +176,7 @@ impl VaultContract<'_> {
         let config = self.config.load(ctx.deps.storage)?;
 
         self.stake(
-            &ctx,
+            &mut ctx,
             &config.local_staking.contract.0,
             config.local_staking.max_slash,
             amount,
@@ -239,7 +238,7 @@ impl VaultContract<'_> {
     /// Updates the local stake for staking on any contract
     fn stake(
         &self,
-        ctx: &ExecCtx,
+        ctx: &mut ExecCtx,
         addr: &Addr,
         slashable: Decimal,
         amount: Uint128,
@@ -278,7 +277,7 @@ impl VaultContract<'_> {
         Ok(())
     }
 
-    fn unstake(&self, ctx: &ExecCtx, owner: String, amount: Coin) -> Result<(), ContractError> {
+    fn unstake(&self, ctx: &mut ExecCtx, owner: String, amount: Coin) -> Result<(), ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         ensure!(amount.denom == denom, ContractError::UnexpectedDenom(denom));
         let amount = amount.amount;
@@ -331,13 +330,13 @@ impl VaultApi for VaultContract<'_> {
     #[msg(exec)]
     fn release_cross_stake(
         &self,
-        ctx: ExecCtx,
+        mut ctx: ExecCtx,
         // address of the user who originally called stake_remote
         owner: String,
         // amount to unstake on that contract
         amount: Coin,
     ) -> Result<Response, ContractError> {
-        self.unstake(&ctx, owner, amount)?;
+        self.unstake(&mut ctx, owner.clone(), amount.clone())?;
 
         let resp = Response::new()
             .add_attribute("action", "release_cross_stake")
@@ -353,14 +352,14 @@ impl VaultApi for VaultContract<'_> {
     #[msg(exec)]
     fn release_local_stake(
         &self,
-        ctx: ExecCtx,
+        mut ctx: ExecCtx,
         // address of the user who originally called stake_remote
         owner: String,
     ) -> Result<Response, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let amount = must_pay(&ctx.info, &denom)?;
 
-        self.unstake(&ctx, owner, coin(amount.u128(), denom))?;
+        self.unstake(&mut ctx, owner.clone(), coin(amount.u128(), denom))?;
 
         let resp = Response::new()
             .add_attribute("action", "release_cross_stake")
