@@ -146,7 +146,7 @@ impl VaultContract<'_> {
 
         let stake_msg = contract.receive_virtual_stake(
             ctx.info.sender.to_string(),
-            coin(amount.u128(), denom.clone()),
+            coin(amount.u128(), denom),
             msg,
             vec![],
         )?;
@@ -343,6 +343,7 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, Contrac
 }
 
 #[contract]
+#[messages(vault_api as VaultApi)]
 impl VaultApi for VaultContract<'_> {
     type Error = ContractError;
 
