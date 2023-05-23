@@ -219,7 +219,7 @@ virtual tokens for each. It's main purpose is to process `Bond` and `Unbond` mes
 any registered contract up to the max cap. Note that it mints "virtual tokens" that don't affect
 max supply queries and can only be used for staking.
 
-The permissions defined in the Meta-Staking module to cap the influence of the various provider is of cirtical importance
+The permissions defined in the Virtual Staking module to cap the influence of the various provider is of cirtical importance
 for the security design of Mesh Security. Not all remote chains are treated equally and we need to be selective
 of how much security we allow to rest on any given token.
 
