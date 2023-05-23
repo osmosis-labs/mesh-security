@@ -1,4 +1,4 @@
-use cosmwasm_std::{ensure_eq, from_slice, Binary, Response};
+use cosmwasm_std::{ensure_eq, from_slice, Binary, Decimal, Response};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::must_pay;
@@ -13,6 +13,9 @@ use crate::types::{Config, ConfigResponse, OwnerByProxyResponse, ProxyByOwnerRes
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// TODO: Hardcoded for now. Revisit for v1.
+pub const MAX_SLASH_PERCENTAGE: u64 = 10;
 
 pub struct NativeStakingContract<'a> {
     // TODO
@@ -107,11 +110,12 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     }
 
     /// Returns the maximum percentage that can be slashed
-    /// TODO: any way to query this from the chain? or we just pass in InstantiateMsg???
-    /// NOTE: Let's use hardcode and make an issue to revisit for v1
+    /// TODO: Any way to query this from the chain? Or we just pass in InstantiateMsg?
     #[msg(query)]
     fn max_slash(&self, _ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
-        todo!();
+        Ok(MaxSlashResponse {
+            max_slash: Decimal::percent(MAX_SLASH_PERCENTAGE),
+        })
     }
 }
 
