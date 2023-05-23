@@ -29,6 +29,8 @@ pub struct Lien {
 #[cw_serde]
 #[derive(Default)]
 pub struct UserInfo {
+    // User collateral
+    pub collateral: Uint128,
     // Highes user lien
     pub max_lien: Uint128,
     // Tatal slashable amount for user
@@ -39,5 +41,15 @@ impl UserInfo {
     // Return total used collateral
     pub fn used_collateral(&self) -> Uint128 {
         self.max_lien.max(self.total_slashable)
+    }
+
+    /// Returns free collateral
+    pub fn free_collateral(&self) -> Uint128 {
+        self.collateral - self.used_collateral()
+    }
+
+    /// Checks if the collateral covers staked liens
+    pub fn verify_collateral(&self) -> bool {
+        self.collateral >= self.used_collateral()
     }
 }

@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     coin, coins, ensure, entry_point, Addr, Binary, Coin, Decimal, DepsMut, Env, Order, Reply,
-    Response, StdResult, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    Response, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -28,13 +28,11 @@ pub struct VaultContract<'a> {
     config: Item<'a, Config>,
     /// Local staking info
     local_staking: Item<'a, LocalStaking>,
-    /// Collateral amount of all users
-    collateral: Map<'a, &'a Addr, Uint128>,
     /// All liens in the protocol
     ///
     /// Liens are indexed with (user, creditor), as this pair has to be unique
     liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
-    /// Information cached per user
+    /// Per-user information
     users: Map<'a, &'a Addr, UserInfo>,
 }
 
@@ -46,7 +44,6 @@ impl VaultContract<'_> {
         Self {
             config: Item::new("config"),
             local_staking: Item::new("local_staking"),
-            collateral: Map::new("collateral"),
             liens: Map::new("liens"),
             users: Map::new("users"),
         }
@@ -84,11 +81,12 @@ impl VaultContract<'_> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let amount = must_pay(&ctx.info, &denom)?;
 
-        self.collateral.update(
-            ctx.deps.storage,
-            &ctx.info.sender,
-            |collat| -> StdResult<_> { Ok(collat.unwrap_or_default() + amount) },
-        )?;
+        let mut user = self
+            .users
+            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .unwrap_or_default();
+        user.collateral += amount;
+        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
         let resp = Response::new()
             .add_attribute("action", "bond")
@@ -102,20 +100,19 @@ impl VaultContract<'_> {
     fn unbond(&self, ctx: ExecCtx, amount: Uint128) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
-        let collateral = self.collateral.load(ctx.deps.storage, &ctx.info.sender)?;
-        let user = self
+        let mut user = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
 
-        let free_collateral = collateral - user.used_collateral();
+        let free_collateral = user.free_collateral();
         ensure!(
-            free_collateral >= amount,
+            user.free_collateral() >= amount,
             ContractError::ClaimsLocked(free_collateral)
         );
 
-        self.collateral
-            .save(ctx.deps.storage, &ctx.info.sender, &(collateral - amount))?;
+        user.collateral -= amount;
+        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
         let resp = Response::new()
             .add_attribute("action", "unbond")
@@ -216,13 +213,12 @@ impl VaultContract<'_> {
             })
             .collect::<Result<_, _>>()?;
 
-        let bonded = self.collateral.load(ctx.deps.storage, &account)?;
         let user = self.users.load(ctx.deps.storage, &account)?;
 
         let resp = AccountResponse {
             denom,
-            bonded,
-            free: bonded - user.used_collateral(),
+            bonded: user.collateral,
+            free: user.free_collateral(),
             claims,
         };
 
@@ -266,11 +262,6 @@ impl VaultContract<'_> {
         slashable: Decimal,
         amount: Uint128,
     ) -> Result<(), ContractError> {
-        let collateral = self
-            .collateral
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
-            .unwrap_or_default();
-
         let mut lien = self
             .liens
             .may_load(ctx.deps.storage, (&ctx.info.sender, addr))?
@@ -287,10 +278,7 @@ impl VaultContract<'_> {
         user.max_lien = user.max_lien.max(lien.amount);
         user.total_slashable += amount * lien.slashable;
 
-        ensure!(
-            collateral >= user.used_collateral(),
-            ContractError::InsufficentBalance
-        );
+        ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
         self.liens
             .save(ctx.deps.storage, (&ctx.info.sender, addr), &lien)?;
