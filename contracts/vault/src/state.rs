@@ -6,9 +6,6 @@ use mesh_apis::local_staking_api::LocalStakingApiHelper;
 pub struct Config {
     /// The denom we accept for staking (only native tokens)
     pub denom: String,
-
-    /// info about the local staking contract (where actual tokens go)
-    pub local_staking: LocalStaking,
 }
 
 #[cw_serde]

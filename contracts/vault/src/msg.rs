@@ -20,11 +20,11 @@ pub struct AccountResponse {
     pub denom: String,
     pub bonded: Uint128,
     pub free: Uint128,
-    pub claims: Vec<Lien>,
+    pub claims: Vec<LienInfo>,
 }
 
 #[cw_serde]
-pub struct Lien {
+pub struct LienInfo {
     pub lienholder: String,
     pub amount: Uint128,
 }

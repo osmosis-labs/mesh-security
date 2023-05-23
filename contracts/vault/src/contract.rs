@@ -26,6 +26,8 @@ pub const REPLY_ID_INSTANTIATE: u64 = 1;
 pub struct VaultContract<'a> {
     /// General contract configuration
     config: Item<'a, Config>,
+    /// Local staking info
+    local_staking: Item<'a, LocalStaking>,
     /// Collateral amount of all users
     collateral: Map<'a, &'a Addr, Uint128>,
     /// All liens in the protocol
@@ -43,6 +45,7 @@ impl VaultContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
+            local_staking: Item::new("local_staking"),
             collateral: Map::new("collateral"),
             liens: Map::new("liens"),
             users: Map::new("users"),
@@ -58,14 +61,7 @@ impl VaultContract<'_> {
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
-        let config = Config {
-            denom,
-            // We set this in reply, so proper once the reply message completes successfully
-            local_staking: LocalStaking {
-                contract: LocalStakingApiHelper(Addr::unchecked("")),
-                max_slash: Decimal::one(),
-            },
-        };
+        let config = Config { denom };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
@@ -177,19 +173,20 @@ impl VaultContract<'_> {
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
-        let config = self.config.load(ctx.deps.storage)?;
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+        let local_staking = self.local_staking.load(ctx.deps.storage)?;
 
         self.stake(
             &mut ctx,
-            &config.local_staking.contract.0,
-            config.local_staking.max_slash,
+            &local_staking.contract.0,
+            local_staking.max_slash,
             amount,
         )?;
 
-        let stake_msg = config.local_staking.contract.receive_stake(
+        let stake_msg = local_staking.contract.receive_stake(
             ctx.info.sender.to_string(),
             msg,
-            coins(amount.u128(), config.denom),
+            coins(amount.u128(), denom),
         )?;
 
         let resp = Response::new()
@@ -226,15 +223,12 @@ impl VaultContract<'_> {
         let MaxSlashResponse { max_slash } =
             deps.querier.query_wasm_smart(&local_staking, &query)?;
 
-        let cfg = Config {
-            local_staking: LocalStaking {
-                contract: LocalStakingApiHelper(local_staking),
-                max_slash,
-            },
-            ..self.config.load(deps.storage)?
+        let local_staking = LocalStaking {
+            contract: LocalStakingApiHelper(local_staking),
+            max_slash,
         };
 
-        self.config.save(deps.storage, &cfg)?;
+        self.local_staking.save(deps.storage, &local_staking)?;
 
         Ok(Response::new())
     }
@@ -281,6 +275,7 @@ impl VaultContract<'_> {
         Ok(())
     }
 
+    /// Updates the local stake for unstaking from any contract
     fn unstake(&self, ctx: &mut ExecCtx, owner: String, amount: Coin) -> Result<(), ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         ensure!(amount.denom == denom, ContractError::UnexpectedDenom(denom));
