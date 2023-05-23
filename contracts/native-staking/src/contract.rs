@@ -1,6 +1,6 @@
-use cosmwasm_std::{ensure_eq, from_slice, Binary, Decimal, Response};
+use cosmwasm_std::{ensure_eq, from_slice, Addr, Binary, Decimal, Response, SubMsg, WasmMsg};
 use cw2::set_contract_version;
-use cw_storage_plus::Item;
+use cw_storage_plus::{Item, Map};
 use cw_utils::must_pay;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
@@ -15,12 +15,15 @@ use crate::state::Config;
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+pub const REPLY_ID_INSTANTIATE: u64 = 2;
+
 // TODO: Hardcoded for now. Revisit for v1.
 pub const MAX_SLASH_PERCENTAGE: u64 = 10;
 
 pub struct NativeStakingContract<'a> {
     // TODO
     config: Item<'a, Config>,
+    proxies: Map<'a, &'a Addr, Addr>,
 }
 
 #[contract]
@@ -31,6 +34,7 @@ impl NativeStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
+            proxies: Map::new("proxies"),
         }
     }
 
@@ -92,22 +96,44 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         owner: String,
         msg: Binary,
     ) -> Result<Response, Self::Error> {
-        // only can be called by the vault
+        // Can only be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.vault, ctx.info.sender, ContractError::Unauthorized {});
 
-        // assert funds passed in
+        // Assert funds are passed in
         let _paid = must_pay(&ctx.info, &cfg.denom)?;
 
-        // parse message to find validator to stake on
+        // Parse message to find validator to stake on
         let StakeMsg { validator } = from_slice(&msg)?;
+        // TODO?: Validate validator address
         let _ = validator;
 
-        let _ = owner;
+        let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 
-        // look up if there is a proxy to match
-        // instantiate or call stake on existing
-        todo!();
+        // Look up if there is a proxy to match. Instantiate or call stake on existing
+        let sub_msg = match self.proxies.may_load(ctx.deps.storage, &owner_addr)? {
+            None => {
+                // Instantiate proxy contract and send stake message, with reply handling on success
+                let msg = WasmMsg::Instantiate {
+                    admin: Some(ctx.env.contract.address.into()),
+                    code_id: cfg.proxy_code_id,
+                    msg,
+                    funds: ctx.info.funds,
+                    label: format!("LSP for {owner}"), // FIXME: Check / cap label length
+                };
+                SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE)
+            }
+            Some(proxy_addr) => {
+                // Send stake message to the proxy contract
+                let msg = WasmMsg::Execute {
+                    contract_addr: proxy_addr.into(),
+                    msg,
+                    funds: ctx.info.funds,
+                };
+                SubMsg::new(msg)
+            }
+        };
+        Ok(Response::new().add_submessage(sub_msg))
     }
 
     /// Returns the maximum percentage that can be slashed
