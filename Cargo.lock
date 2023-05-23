@@ -540,6 +540,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-bindings"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+]
+
+[[package]]
 name = "mesh-mocks"
 version = "0.1.0"
 dependencies = [

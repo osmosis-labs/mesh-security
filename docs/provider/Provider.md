@@ -165,7 +165,7 @@ flowchart LR
   B -- $WYND --> C(Local Staker);
   C -- Stake --> D(WYND DAO Staking)
   B -- Lien --> E(External Staker Juno);
-  E -- virtual stake --> F(Meta-Staking);
+  E -- virtual stake --> F(Virtual Staking);
   F -- $JUNO --> G[Native Staking];
 ```
 

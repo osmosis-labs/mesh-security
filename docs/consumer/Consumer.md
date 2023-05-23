@@ -53,21 +53,3 @@ a total limit of tokens it can stake. It performs 3 high level tasks:
 * Unstaking "virtual tokens" as requested by the Converter. This must be immediate and
 avoid the "7 concurrent unbonding" limit on the `x/staking` module to be properly usable.
 
-## Handling Failures
-
-**TODO**
-
-Explain how this system limits systemic failures in a few cases.
-(Does this section belong here? Or in a higher level doc?)
-
-Price issues:
-
-* Foreign Provider price moons (Existing stake hits the max cap)
-* Foreign Provider price crashes (Usually accounted by discount, generally should not get more power staking
-$1 of foreign tokens than $1 of local tokens)
-* Consumer price crashes (All providers get better conversion, but limited by max cap)
-
-Byzantine Actors:
-
-* Foreign Provider goes Byzantine (okay as long as their max cap is less than circa 30% of total stake)
-* Consumer goes Byzantine (Can force unbond, withhold rewards, but not slash or permanently lock up tokens)

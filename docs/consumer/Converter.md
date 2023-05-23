@@ -54,6 +54,11 @@ Thus this cross-stake will trigger the converter to request the virtual staking 
 
 The discount is stored in the Converter contract and can only be updated by the admin (on-chain governance).
 
+**Important** When we calculate the virtual stake (eg 1080 CONS in the example above), those
+tokens will be staked as if they were native CONS tokens. They have the same influence on the
+validator's voting power, and will receive the same rewards. The only difference is that they
+can never be withdrawn and slashing is managed remotely on the Provider chain.
+
 ### Price Feeds
 
 In order to perform the conversion of remote stake into local units, the Converter needs a 
@@ -86,37 +91,31 @@ to the particular chain it is being deployed on. With this TWAP we convert eg. 1
 
 ### Virtual Staking
 
-Each Converter is connected 1:1 with a [Virtual Staking Contract](./VirtualStaking.md). This contract manages
-the stake and has limited permissions to call into a native SDK module to mint "virtual tokens" and stake them,
-as well as immediately unbonding them. This contract ensures the delegations are properly distributed.
+Each Converter is connected 1:1 with a [Virtual Staking Contract](./VirtualStaking.md). This contract
+manages the stake and has limited permissions to [call into a native SDK module](./GoModule.md)
+to mint "virtual tokens" and stake them, as well as immediately unbonding them. The contract
+ensures the delegations are properly distributed.
 
-The Converter simply tells the virtual staking contract it wishes to bond/unbond N tokens and that contract
-manages all minting of tokens and distribution among multiple validators.
+The Converter simply tells the virtual staking contract it wishes to bond/unbond N tokens 
+and that contract manages all minting of tokens and distribution among multiple validators.
+We dig more into the mechanics of the virtual staking contract in the
+[Virtual Staking](./VirtualStaking.md) document.
 
 ## Rewards Flow
 
-Once per epoch, the virtual staking module will trigger rewards. This will send a number of messages to the Converter,
-specifying which validators the rewards belong to, along with the native reward tokens themselves. 
+Once per epoch, the virtual staking module will trigger rewards. This will send a number of 
+messages to the Converter, specifying which validators the rewards belong to, along with the
+native reward tokens themselves. 
 
-The Converter will then [transfer all these tokens via ICS20](../ibc/Overview.md) to the corresponding `External Staking` contract
-on the Provider chain, and send a message over the standard IBC channel to inform the `External Staking` contract how to distribute them.
-(If we get callbacks on ics20, we send the metadata only after tokens have arrived. Until then (for MVP), we send them concurrently and hope)
+The Converter will then [transfer all these tokens via ICS20](../ibc/Overview.md) to the 
+corresponding `External Staking` contract on the Provider chain, and send a message over the
+standard IBC channel to inform the `External Staking` contract how to distribute them.
+(If we get callbacks on ics20, we send the metadata only after tokens have arrived. Until then 
+(for MVP), we send them concurrently and hope)
 
 ## Unstaking Flow
 
-The Converter can also unstake some tokens. These will be held in escrow on the Provider and are susceptible to slashing upon proper evidence
-submission. Since the virtual stake is, well, "virtual" and slashing has no impact, the delegation numbers can be immediately reduced
+The Converter can also unstake some tokens. These will be held in escrow on the Provider and
+are susceptible to slashing upon proper evidence submission. Since the virtual stake is, well, 
+"virtual" and slashing has no impact, the delegation numbers can be immediately reduced
 on the consumer's native staking module.
-
-For MVP, we just trigger and unbonding, and when the tokens return to the Virtual Staking Module, they can be burnt (or reused for future delegations).
-The native x/staking module limits us to 7 simultaneous unbonding (per Converter), so we need to queue these up and execute them in batches.
-This is a standard limitation of liquid staking modules.  For more explanation, [see the stride docs](https://docs.stride.zone/docs/unstaking):
-
-> The Stride blockchain initiates the unbonding process by grouping the records of all of the unbondings on the chain.
-> Unbondings are grouped because Cosmos chains do not allow more than 7 unbondings at a time within a 21 day period.
-> This is a security measure put in place across the Cosmos ecosystem. This does not impact the average user, but it 
-> is the reason Stride processes requests every 4 days.
-
-For V1, we modify the staking module to treat virtual stake specially and can just directly update the stake, without adding to the unbonding queue.
-This will allow us to perform more than 7 unbonding simulataneously.
-
