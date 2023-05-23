@@ -1,7 +1,10 @@
-use cosmwasm_std::{ensure_eq, from_slice, Addr, Binary, Decimal, Response, SubMsg, WasmMsg};
+use cosmwasm_std::{
+    ensure_eq, entry_point, from_slice, to_binary, Addr, Binary, Decimal, DepsMut, Env, Reply,
+    Response, SubMsg, SubMsgResponse, WasmMsg,
+};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
-use cw_utils::must_pay;
+use cw_utils::{must_pay, parse_instantiate_response_data};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -9,7 +12,7 @@ use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
 use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCallback};
 
 use crate::error::ContractError;
-use crate::msg::{ConfigResponse, OwnerByProxyResponse, ProxyByOwnerResponse, StakeMsg};
+use crate::msg::{ConfigResponse, OwnerByProxyResponse, OwnerMsg, ProxyByOwnerResponse, StakeMsg};
 use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -58,7 +61,23 @@ impl NativeStakingContract<'_> {
 
     #[msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
-        Ok(self.config.load(ctx.deps.storage)?)
+        self.config.load(ctx.deps.storage).map_err(Into::into)
+    }
+
+    fn reply_init_callback(
+        &self,
+        deps: DepsMut,
+        reply: SubMsgResponse,
+    ) -> Result<Response, ContractError> {
+        let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
+
+        // Associate staking proxy with owner address
+        let proxy_addr = Addr::unchecked(init_data.contract_address);
+        let owner_data: OwnerMsg = from_slice(&init_data.data.unwrap())?; // TODO?: Check for None
+        let owner_addr = Addr::unchecked(owner_data.owner);
+        self.proxies.save(deps.storage, &owner_addr, &proxy_addr)?;
+
+        Ok(Response::new())
     }
 
     #[msg(query)]
@@ -79,6 +98,16 @@ impl NativeStakingContract<'_> {
     ) -> Result<OwnerByProxyResponse, ContractError> {
         let _ = proxy;
         todo!()
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, ContractError> {
+    match reply.id {
+        REPLY_ID_INSTANTIATE => {
+            NativeStakingContract::new().reply_init_callback(deps, reply.result.unwrap())
+        }
+        _ => Err(ContractError::InvalidReplyId(reply.id)),
     }
 }
 
@@ -111,7 +140,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 
         // Look up if there is a proxy to match. Instantiate or call stake on existing
-        let sub_msg = match self.proxies.may_load(ctx.deps.storage, &owner_addr)? {
+        match self.proxies.may_load(ctx.deps.storage, &owner_addr)? {
             None => {
                 // Instantiate proxy contract and send stake message, with reply handling on success
                 let msg = WasmMsg::Instantiate {
@@ -121,7 +150,9 @@ impl LocalStakingApi for NativeStakingContract<'_> {
                     funds: ctx.info.funds,
                     label: format!("LSP for {owner}"), // FIXME: Check / cap label length
                 };
-                SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE)
+                let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
+                let owner_data = to_binary(&OwnerMsg { owner })?;
+                Ok(Response::new().add_submessage(sub_msg).set_data(owner_data))
             }
             Some(proxy_addr) => {
                 // Send stake message to the proxy contract
@@ -130,10 +161,10 @@ impl LocalStakingApi for NativeStakingContract<'_> {
                     msg,
                     funds: ctx.info.funds,
                 };
-                SubMsg::new(msg)
+                let sub_msg = SubMsg::new(msg);
+                Ok(Response::new().add_submessage(sub_msg))
             }
-        };
-        Ok(Response::new().add_submessage(sub_msg))
+        }
     }
 
     /// Returns the maximum percentage that can be slashed
