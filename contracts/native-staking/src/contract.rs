@@ -73,8 +73,9 @@ impl NativeStakingContract<'_> {
 
         // Associate staking proxy with owner address
         let proxy_addr = Addr::unchecked(init_data.contract_address);
-        let owner_data: OwnerMsg = from_slice(&init_data.data.unwrap())?; // TODO?: Check for None
-        let owner_addr = Addr::unchecked(owner_data.owner);
+        let owner_data: OwnerMsg =
+            from_slice(&init_data.data.ok_or(ContractError::NoInstantiateData {})?)?;
+        let owner_addr = deps.api.addr_validate(&owner_data.owner)?;
         self.proxies.save(deps.storage, &owner_addr, &proxy_addr)?;
 
         Ok(Response::new())
