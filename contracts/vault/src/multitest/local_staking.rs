@@ -1,12 +1,8 @@
 use cosmwasm_std::{to_binary, Binary, Coin, Decimal, Response, StdError, StdResult, WasmMsg};
-use mesh_apis::{
-    local_staking_api::{self, LocalStakingApi, MaxSlashResponse},
-    vault_api,
-};
-use sylvia::{
-    contract,
-    types::{ExecCtx, InstantiateCtx, QueryCtx},
-};
+use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
+use mesh_apis::vault_api;
+use sylvia::contract;
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 /// This is a stub implementation of local staking contract, for test purposes only
 /// When proper local staking contract is available, this should be replaced
@@ -16,7 +12,6 @@ pub struct LocalStaking;
 #[contract]
 #[messages(local_staking_api as LocalStakingApi)]
 impl LocalStaking {
-    #[allow(dead_code)]
     const fn new() -> Self {
         Self
     }

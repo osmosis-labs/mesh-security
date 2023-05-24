@@ -1,8 +1,10 @@
+mod cross_staking;
 mod local_staking;
+
 use crate::error::ContractError;
 use crate::msg::{LienInfo, StakingInitInfo};
 use crate::{contract, msg::AccountResponse};
-use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Empty, StdError, Uint128};
+use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Empty, Uint128};
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
 

@@ -194,6 +194,7 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, VaultEr
 }
 
 #[contract]
+#[messages(vault_api as VaultApi)]
 impl VaultApi for MockVaultContract<'_> {
     type Error = VaultError;
 

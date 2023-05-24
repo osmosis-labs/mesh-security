@@ -125,102 +125,113 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, Contrac
     }
 }
 
-#[contract]
-impl LocalStakingApi for NativeStakingContract<'_> {
-    type Error = ContractError;
+mod local {
+    use super::*;
 
-    /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
-    /// specified in msg with it.
-    /// Msg is custom to each implementation of the staking contract and opaque to the vault
-    #[msg(exec)]
-    fn receive_stake(
-        &self,
-        ctx: ExecCtx,
-        owner: String,
-        msg: Binary,
-    ) -> Result<Response, Self::Error> {
-        // Can only be called by the vault
-        let cfg = self.config.load(ctx.deps.storage)?;
-        ensure_eq!(cfg.vault, ctx.info.sender, ContractError::Unauthorized {});
+    #[contract]
+    #[messages(local_staking_api as LocalStakingApi)]
+    impl LocalStakingApi for NativeStakingContract<'_> {
+        type Error = ContractError;
 
-        // Assert funds are passed in
-        let _paid = must_pay(&ctx.info, &cfg.denom)?;
+        /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
+        /// specified in msg with it.
+        /// Msg is custom to each implementation of the staking contract and opaque to the vault
+        #[msg(exec)]
+        fn receive_stake(
+            &self,
+            ctx: ExecCtx,
+            owner: String,
+            msg: Binary,
+        ) -> Result<Response, Self::Error> {
+            // Can only be called by the vault
+            let cfg = self.config.load(ctx.deps.storage)?;
+            ensure_eq!(cfg.vault, ctx.info.sender, ContractError::Unauthorized {});
 
-        // Parse message to find validator to stake on
-        let StakeMsg { validator } = from_slice(&msg)?;
+            // Assert funds are passed in
+            let _paid = must_pay(&ctx.info, &cfg.denom)?;
 
-        let owner_addr = ctx.deps.api.addr_validate(&owner)?;
+            // Parse message to find validator to stake on
+            let StakeMsg { validator } = from_slice(&msg)?;
 
-        // Look up if there is a proxy to match. Instantiate or call stake on existing
-        match self
-            .proxy_by_owner
-            .may_load(ctx.deps.storage, &owner_addr)?
-        {
-            None => {
-                // Instantiate proxy contract and send funds to stake, with reply handling on success
-                let msg = to_binary(&mesh_native_staking_proxy::contract::InstantiateMsg {
-                    denom: cfg.denom,
-                    owner: owner.clone(),
-                    validator,
-                })?;
-                let wasm_msg = WasmMsg::Instantiate {
-                    admin: Some(ctx.env.contract.address.into()),
-                    code_id: cfg.proxy_code_id,
-                    msg,
-                    funds: ctx.info.funds,
-                    label: format!("LSP for {owner}"),
-                };
-                let sub_msg = SubMsg::reply_on_success(wasm_msg, REPLY_ID_INSTANTIATE);
-                Ok(Response::new().add_submessage(sub_msg))
-            }
-            Some(proxy_addr) => {
-                // Send stake message with funds to the proxy contract
-                let msg =
-                    to_binary(&mesh_native_staking_proxy::contract::ExecMsg::Stake { validator })?;
-                let wasm_msg = WasmMsg::Execute {
-                    contract_addr: proxy_addr.into(),
-                    msg,
-                    funds: ctx.info.funds,
-                };
-                Ok(Response::new().add_message(wasm_msg))
+            let owner_addr = ctx.deps.api.addr_validate(&owner)?;
+
+            // Look up if there is a proxy to match. Instantiate or call stake on existing
+            match self
+                .proxy_by_owner
+                .may_load(ctx.deps.storage, &owner_addr)?
+            {
+                None => {
+                    // Instantiate proxy contract and send funds to stake, with reply handling on success
+                    let msg = to_binary(&mesh_native_staking_proxy::contract::InstantiateMsg {
+                        denom: cfg.denom,
+                        owner: owner.clone(),
+                        validator,
+                    })?;
+                    let wasm_msg = WasmMsg::Instantiate {
+                        admin: Some(ctx.env.contract.address.into()),
+                        code_id: cfg.proxy_code_id,
+                        msg,
+                        funds: ctx.info.funds,
+                        label: format!("LSP for {owner}"),
+                    };
+                    let sub_msg = SubMsg::reply_on_success(wasm_msg, REPLY_ID_INSTANTIATE);
+                    Ok(Response::new().add_submessage(sub_msg))
+                }
+                Some(proxy_addr) => {
+                    // Send stake message with funds to the proxy contract
+                    let msg = to_binary(&mesh_native_staking_proxy::contract::ExecMsg::Stake {
+                        validator,
+                    })?;
+                    let wasm_msg = WasmMsg::Execute {
+                        contract_addr: proxy_addr.into(),
+                        msg,
+                        funds: ctx.info.funds,
+                    };
+                    Ok(Response::new().add_message(wasm_msg))
+                }
             }
         }
-    }
 
-    /// Returns the maximum percentage that can be slashed
-    /// TODO: Any way to query this from the chain? Or we just pass in InstantiateMsg?
-    #[msg(query)]
-    fn max_slash(&self, _ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
-        Ok(MaxSlashResponse {
-            max_slash: Decimal::percent(MAX_SLASH_PERCENTAGE),
-        })
+        /// Returns the maximum percentage that can be slashed
+        /// TODO: Any way to query this from the chain? Or we just pass in InstantiateMsg?
+        #[msg(query)]
+        fn max_slash(&self, _ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
+            Ok(MaxSlashResponse {
+                max_slash: Decimal::percent(MAX_SLASH_PERCENTAGE),
+            })
+        }
     }
 }
 
-#[contract]
-impl NativeStakingCallback for NativeStakingContract<'_> {
-    type Error = ContractError;
+mod native {
+    use super::*;
 
-    /// This sends tokens back from the proxy to native-staking. (See info.funds)
-    /// The native-staking contract can determine which user it belongs to via an internal Map.
-    /// The native-staking contract will then send those tokens back to vault and release the claim.
-    #[msg(exec)]
-    fn release_proxy_stake(&self, ctx: ExecCtx) -> Result<Response, Self::Error> {
-        let cfg = self.config.load(ctx.deps.storage)?;
+    #[contract]
+    #[messages(native_staking_callback as NativeStakingCallback)]
+    impl NativeStakingCallback for NativeStakingContract<'_> {
+        type Error = ContractError;
 
-        // Assert funds are passed in
-        let _paid = must_pay(&ctx.info, &cfg.denom)?;
+        /// This sends tokens back from the proxy to native-staking. (See info.funds)
+        /// The native-staking contract can determine which user it belongs to via an internal Map.
+        /// The native-staking contract will then send those tokens back to vault and release the claim.
+        #[msg(exec)]
+        fn release_proxy_stake(&self, ctx: ExecCtx) -> Result<Response, Self::Error> {
+            let cfg = self.config.load(ctx.deps.storage)?;
 
-        // Look up account owner by proxy address (info.sender). This asserts the caller is a valid
-        // proxy
-        let owner_addr = self
-            .owner_by_proxy
-            .load(ctx.deps.storage, &ctx.info.sender)?;
+            // Assert funds are passed in
+            let _paid = must_pay(&ctx.info, &cfg.denom)?;
 
-        // Send the tokens to the vault contract
-        let msg = VaultApiHelper(cfg.vault)
-            .release_local_stake(owner_addr.to_string(), ctx.info.funds)?;
+            // Look up account owner by proxy address (info.sender). This asserts the caller is a valid
+            // proxy
+            let owner_addr = self
+                .owner_by_proxy
+                .load(ctx.deps.storage, &ctx.info.sender)?;
 
-        Ok(Response::new().add_message(msg))
+            // Send the tokens to the vault contract
+            let msg = VaultApiHelper(cfg.vault)
+                .release_local_stake(owner_addr.to_string(), ctx.info.funds)?;
+
+            Ok(Response::new().add_message(msg))
+        }
     }
 }
