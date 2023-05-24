@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, coins, ensure, entry_point, Addr, Binary, Coin, Decimal, DepsMut, Env, Order, Reply,
-    Response, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coin, coins, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Order, Reply, Response,
+    SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -11,7 +11,7 @@ use mesh_apis::local_staking_api::{
     LocalStakingApiHelper, LocalStakingApiQueryMsg, MaxSlashResponse,
 };
 use mesh_apis::vault_api::{self, VaultApi};
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
@@ -101,7 +101,8 @@ impl VaultContract<'_> {
     fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
-        let amount = amount.amount;
+        let coin = amount;
+        let amount = coin.amount;
 
         let mut user = self
             .users
@@ -117,7 +118,13 @@ impl VaultContract<'_> {
         user.collateral -= amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
+        let msg = BankMsg::Send {
+            to_address: ctx.info.sender.to_string(),
+            amount: vec![coin],
+        };
+
         let resp = Response::new()
+            .add_message(msg)
             .add_attribute("action", "unbond")
             .add_attribute("sender", ctx.info.sender)
             .add_attribute("amount", amount.to_string());
@@ -223,7 +230,10 @@ impl VaultContract<'_> {
             })
             .collect::<Result<_, _>>()?;
 
-        let user = self.users.load(ctx.deps.storage, &account)?;
+        let user = self
+            .users
+            .may_load(ctx.deps.storage, &account)?
+            .unwrap_or_default();
 
         let resp = AccountResponse {
             denom,
@@ -246,6 +256,14 @@ impl VaultContract<'_> {
         };
 
         Ok(resp)
+    }
+
+    #[msg(reply)]
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+        match reply.id {
+            REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
+            _ => Err(ContractError::InvalidReplyId(reply.id)),
+        }
     }
 
     fn reply_init_callback(
@@ -345,16 +363,6 @@ impl VaultContract<'_> {
         self.users.save(ctx.deps.storage, &owner, &user)?;
 
         Ok(())
-    }
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, ContractError> {
-    match reply.id {
-        REPLY_ID_INSTANTIATE => {
-            VaultContract::new().reply_init_callback(deps, reply.result.unwrap())
-        }
-        _ => Err(ContractError::InvalidReplyId(reply.id)),
     }
 }
 
