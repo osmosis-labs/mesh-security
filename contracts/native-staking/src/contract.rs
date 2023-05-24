@@ -24,7 +24,6 @@ pub const REPLY_ID_INSTANTIATE: u64 = 2;
 pub const MAX_SLASH_PERCENTAGE: u64 = 10;
 
 pub struct NativeStakingContract<'a> {
-    // TODO
     config: Item<'a, Config>,
     /// Map of proxy contract address by owner address
     proxy_by_owner: Map<'a, &'a Addr, Addr>,
@@ -91,21 +90,27 @@ impl NativeStakingContract<'_> {
     #[msg(query)]
     fn proxy_by_owner(
         &self,
-        _ctx: QueryCtx,
+        ctx: QueryCtx,
         owner: String,
     ) -> Result<ProxyByOwnerResponse, ContractError> {
-        let _ = owner;
-        todo!()
+        let owner_addr = ctx.deps.api.addr_validate(&owner)?;
+        let proxy_addr = self.proxy_by_owner.load(ctx.deps.storage, &owner_addr)?;
+        Ok(ProxyByOwnerResponse {
+            proxy: proxy_addr.to_string(),
+        })
     }
 
     #[msg(query)]
     fn owner_by_proxy(
         &self,
-        _ctx: QueryCtx,
+        ctx: QueryCtx,
         proxy: String,
     ) -> Result<OwnerByProxyResponse, ContractError> {
-        let _ = proxy;
-        todo!()
+        let proxy_addr = ctx.deps.api.addr_validate(&proxy)?;
+        let owner_addr = self.owner_by_proxy.load(ctx.deps.storage, &proxy_addr)?;
+        Ok(OwnerByProxyResponse {
+            owner: owner_addr.to_string(),
+        })
     }
 }
 
