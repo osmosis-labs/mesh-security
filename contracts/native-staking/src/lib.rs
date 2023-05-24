@@ -1,6 +1,7 @@
 pub mod contract;
 pub mod error;
-mod types;
+mod msg;
+mod state;
 
 #[cfg(not(any(feature = "library", tarpaulin_include)))]
 mod entry_points {

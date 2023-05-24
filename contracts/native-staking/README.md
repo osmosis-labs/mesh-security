@@ -25,7 +25,7 @@ on the Vault contract while sending the actual staking tokens back to the Vault 
 ## Interaction with SDK Staking
 
 A critical part of the design of Mesh Security involves ensuring the user can still interact with the local staking just as well as if they
-staked directly. That means they should be able to select multiple validators, restake between them, withdraw rewards as they wish,
+staked directly. That means they should be able to select multiple validators, re-stake between them, withdraw rewards as they wish,
 and vote in on-chain governance. We limit them to not pull out liquid staking tokens or unbond to anyone but the native staking
 contract, as the actual collateral must be held here. Otherwise, they should have full autonomy over the use of that stake.
 
@@ -39,5 +39,5 @@ If so, it will simply pass the funds to that contract along with the message of 
 a new `native-staking-proxy` for that user and pass it the funds along with validator information. 
 
 The user then interacts directly with the proxy up to the point of a complete unbonding, when they can send the now-liquid tokens
-to `native-staking`, which will immediately release those on the vault. This makes `native-staking` more a pass-through node and
-"air traffic controller", while logic to interact with staking and governance is placed inside the `native-staking-proxy`.
+to `native-staking`, which will immediately release those on the vault. This makes `native-staking` more of a pass-through node and
+"air traffic controller", while logic to interact with staking and governance is placed inside the `native-staking-proxy` contract.
