@@ -157,7 +157,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
             .may_load(ctx.deps.storage, &owner_addr)?
         {
             None => {
-                // Instantiate proxy contract and send stake message, with reply handling on success
+                // Instantiate proxy contract and send funds to stake, with reply handling on success
                 let msg = to_binary(&mesh_native_staking_proxy::contract::InstantiateMsg {
                     denom: cfg.denom,
                     owner: owner.clone(),
@@ -171,11 +171,10 @@ impl LocalStakingApi for NativeStakingContract<'_> {
                     label: format!("LSP for {owner}"),
                 };
                 let sub_msg = SubMsg::reply_on_success(wasm_msg, REPLY_ID_INSTANTIATE);
-                let owner_data = to_binary(&OwnerMsg { owner })?;
-                Ok(Response::new().add_submessage(sub_msg).set_data(owner_data))
+                Ok(Response::new().add_submessage(sub_msg))
             }
             Some(proxy_addr) => {
-                // Send stake message to the proxy contract
+                // Send stake message with funds to the proxy contract
                 let msg =
                     to_binary(&mesh_native_staking_proxy::contract::ExecMsg::Stake { validator })?;
                 let wasm_msg = WasmMsg::Execute {
