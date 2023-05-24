@@ -212,7 +212,8 @@ impl NativeStakingCallback for NativeStakingContract<'_> {
         // Assert funds are passed in
         let _paid = must_pay(&ctx.info, &cfg.denom)?;
 
-        // Look up account owner by proxy address (info.sender)
+        // Look up account owner by proxy address (info.sender). This asserts the caller is a valid
+        // proxy
         let owner_addr = self
             .owner_by_proxy
             .load(ctx.deps.storage, &ctx.info.sender)?;
