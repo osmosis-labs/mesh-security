@@ -2,6 +2,7 @@ use cosmwasm_std::{ensure_eq, entry_point, Coin, DepsMut, Env, Response, Uint128
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::nonpayable;
+use mesh_bindings::{TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -18,7 +19,8 @@ pub struct VirtualStakingContract<'a> {
     // Amount of tokens that have been requested to bond to a validator
     // (Sum of bond minus unbond requests). This will only update actual bond on epoch changes.
     bond_requests: Map<'a, &'a str, Uint128>,
-    // TODO: current bond
+    // This is how much was bonded last time (validator, amount) pairs
+    bonded: Item<'a, Vec<(String, Uint128)>>,
 }
 
 #[contract]
@@ -29,6 +31,7 @@ impl VirtualStakingContract<'_> {
         Self {
             config: Item::new("config"),
             bond_requests: Map::new("bond_requests"),
+            bonded: Item::new("bonded"),
         }
     }
 
@@ -54,8 +57,35 @@ impl VirtualStakingContract<'_> {
         Ok(self.config.load(ctx.deps.storage)?.into())
     }
 
-    fn handle_epoch(&self, _deps: DepsMut, _env: Env) -> Result<Response, ContractError> {
-        todo!();
+    fn handle_epoch(
+        &self,
+        deps: DepsMut<VirtualStakeCustomQuery>,
+        env: Env,
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
+        let bond =
+            TokenQuerier::new(&deps.querier).bond_status(env.contract.address.to_string())?;
+        // TODO: return error if it is 0 (or maybe just return early?)
+
+        // withdraw rewards - or make that a separate message?
+        let _bonded = self.bonded.load(deps.storage)?;
+        // TODO: also make this configurable compile time for easier system tests
+
+        // calculate what the delegations should be when we are done
+        let requests: Vec<(String, Uint128)> = self
+            .bond_requests
+            .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
+            .collect::<Result<_, _>>()?;
+        let total_request: Uint128 = requests.iter().map(|(_, v)| v).sum();
+        if total_request > bond.cap.amount {
+            // TODO: normalize the list of requests to match the cap
+            todo!();
+        }
+
+        // TODO: Look at existing list and calculate differences for bond/unbond calls
+
+        // Save the new values
+        self.bonded.save(deps.storage, &requests)?;
+        Ok(Response::new())
     }
 }
 
@@ -118,7 +148,11 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+pub fn sudo(
+    deps: DepsMut<VirtualStakeCustomQuery>,
+    env: Env,
+    msg: SudoMsg,
+) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
     match msg {
         SudoMsg::Rebalance {} => VirtualStakingContract::new().handle_epoch(deps, env),
     }
