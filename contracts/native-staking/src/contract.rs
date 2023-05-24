@@ -135,7 +135,6 @@ impl LocalStakingApi for NativeStakingContract<'_> {
 
         // Parse message to find validator to stake on
         let StakeMsg { validator } = from_slice(&msg)?;
-        let _ = validator;
 
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 
@@ -143,14 +142,19 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         match self.proxies.may_load(ctx.deps.storage, &owner_addr)? {
             None => {
                 // Instantiate proxy contract and send stake message, with reply handling on success
-                let msg = WasmMsg::Instantiate {
+                let msg = to_binary(&mesh_native_staking_proxy::contract::InstantiateMsg {
+                    denom: cfg.denom,
+                    owner: owner.clone(),
+                    validator,
+                })?;
+                let wasm_msg = WasmMsg::Instantiate {
                     admin: Some(ctx.env.contract.address.into()),
                     code_id: cfg.proxy_code_id,
                     msg,
                     funds: ctx.info.funds,
                     label: format!("LSP for {owner}"),
                 };
-                let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
+                let sub_msg = SubMsg::reply_on_success(wasm_msg, REPLY_ID_INSTANTIATE);
                 let owner_data = to_binary(&OwnerMsg { owner })?;
                 Ok(Response::new().add_submessage(sub_msg).set_data(owner_data))
             }
