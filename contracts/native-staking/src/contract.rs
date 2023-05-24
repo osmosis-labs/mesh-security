@@ -26,7 +26,10 @@ pub const MAX_SLASH_PERCENTAGE: u64 = 10;
 pub struct NativeStakingContract<'a> {
     // TODO
     config: Item<'a, Config>,
-    proxies: Map<'a, &'a Addr, Addr>,
+    /// Map of proxy contract address by owner address
+    proxy_by_owner: Map<'a, &'a Addr, Addr>,
+    /// Reverse map of owner address by proxy contract address
+    owner_by_proxy: Map<'a, &'a Addr, Addr>,
 }
 
 #[contract]
@@ -37,7 +40,8 @@ impl NativeStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
-            proxies: Map::new("proxies"),
+            proxy_by_owner: Map::new("proxies"),
+            owner_by_proxy: Map::new("owners"),
         }
     }
 
@@ -76,7 +80,10 @@ impl NativeStakingContract<'_> {
         let owner_data: OwnerMsg =
             from_slice(&init_data.data.ok_or(ContractError::NoInstantiateData {})?)?;
         let owner_addr = deps.api.addr_validate(&owner_data.owner)?;
-        self.proxies.save(deps.storage, &owner_addr, &proxy_addr)?;
+        self.proxy_by_owner
+            .save(deps.storage, &owner_addr, &proxy_addr)?;
+        self.owner_by_proxy
+            .save(deps.storage, &proxy_addr, &owner_addr)?;
 
         Ok(Response::new())
     }
@@ -139,7 +146,10 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 
         // Look up if there is a proxy to match. Instantiate or call stake on existing
-        match self.proxies.may_load(ctx.deps.storage, &owner_addr)? {
+        match self
+            .proxy_by_owner
+            .may_load(ctx.deps.storage, &owner_addr)?
+        {
             None => {
                 // Instantiate proxy contract and send stake message, with reply handling on success
                 let msg = to_binary(&mesh_native_staking_proxy::contract::InstantiateMsg {
