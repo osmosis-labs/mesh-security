@@ -135,7 +135,6 @@ impl LocalStakingApi for NativeStakingContract<'_> {
 
         // Parse message to find validator to stake on
         let StakeMsg { validator } = from_slice(&msg)?;
-        // TODO?: Validate validator address
         let _ = validator;
 
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
@@ -149,7 +148,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
                     code_id: cfg.proxy_code_id,
                     msg,
                     funds: ctx.info.funds,
-                    label: format!("LSP for {owner}"), // FIXME: Check / cap label length
+                    label: format!("LSP for {owner}"),
                 };
                 let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
                 let owner_data = to_binary(&OwnerMsg { owner })?;
