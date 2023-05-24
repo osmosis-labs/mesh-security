@@ -1,5 +1,6 @@
 [workspace]
-members = ["packages/*", "contracts/*"]
+# TODO: move other contracts into provider subdirectory
+members = ["packages/*", "contracts/native-staking*", "contracts/vault", "contracts/consumer/*"]
 resolver = "2"
 
 [workspace.package]
@@ -16,6 +17,8 @@ mesh-mocks        = { path = "./packages/mocks" }
 mesh-vault    = { path = "./contracts/vault" }
 mesh-native-staking    = { path = "./contracts/native-staking" }
 mesh-native-staking-proxy    = { path = "./contracts/native-staking-proxy" }
+mesh-converter    = { path = "./contracts/consumer/converter" }
+mesh-virtual-staking    = { path = "./contracts/consumer/virtual-staking" }
 
 sylvia           = "0.4.2"
 cosmwasm-schema  = "1.2"

@@ -548,6 +548,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-converter"
+version = "0.1.0"
+
+[[package]]
 name = "mesh-mocks"
 version = "0.1.0"
 dependencies = [
@@ -624,6 +628,10 @@ dependencies = [
  "test-case",
  "thiserror",
 ]
+
+[[package]]
+name = "mesh-virtual-staking"
+version = "0.1.0"
 
 [[package]]
 name = "once_cell"
