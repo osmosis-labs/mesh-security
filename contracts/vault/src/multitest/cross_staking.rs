@@ -1,10 +1,12 @@
-use cosmwasm_std::{to_binary, Binary, Coin, Decimal, Response, StdError, StdResult, WasmMsg};
+use cosmwasm_std::{to_binary, Binary, Coin, Decimal, Response, WasmMsg};
 use cw_storage_plus::Item;
 use mesh_apis::cross_staking_api::{self, CrossStakingApi};
 use mesh_apis::local_staking_api::MaxSlashResponse;
 use mesh_apis::vault_api;
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+
+use crate::error::ContractError;
 
 /// This is a stub implementation of cross staking contract, for test purposes only
 /// When proper cross staking contract is available, this should be replaced
@@ -14,6 +16,7 @@ pub struct CrossStaking<'a> {
 }
 
 #[contract]
+#[error(ContractError)]
 #[messages(cross_staking_api as CrossStakingApi)]
 impl CrossStaking<'_> {
     const fn new() -> Self {
@@ -23,7 +26,11 @@ impl CrossStaking<'_> {
     }
 
     #[msg(instantiate)]
-    pub fn instantiate(&self, ctx: InstantiateCtx, max_slash: Decimal) -> StdResult<Response> {
+    pub fn instantiate(
+        &self,
+        ctx: InstantiateCtx,
+        max_slash: Decimal,
+    ) -> Result<Response, ContractError> {
         self.max_slash.save(ctx.deps.storage, &max_slash)?;
         Ok(Response::new())
     }
@@ -35,7 +42,7 @@ impl CrossStaking<'_> {
         vault: String,
         owner: String,
         amount: Coin,
-    ) -> StdResult<Response> {
+    ) -> Result<Response, ContractError> {
         let msg = vault_api::ExecMsg::release_cross_stake(owner, amount);
         let msg = WasmMsg::Execute {
             contract_addr: vault,
@@ -51,7 +58,7 @@ impl CrossStaking<'_> {
 #[contract]
 #[messages(cross_staking_api as CrossStakingApi)]
 impl CrossStakingApi for CrossStaking<'_> {
-    type Error = StdError;
+    type Error = ContractError;
 
     #[msg(exec)]
     fn receive_virtual_stake(
@@ -60,12 +67,12 @@ impl CrossStakingApi for CrossStaking<'_> {
         _owner: String,
         _amount: Coin,
         _msg: Binary,
-    ) -> StdResult<Response> {
+    ) -> Result<Response, ContractError> {
         Ok(Response::new())
     }
 
     #[msg(query)]
-    fn max_slash(&self, ctx: QueryCtx) -> StdResult<MaxSlashResponse> {
+    fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
         let resp = MaxSlashResponse {
             max_slash: self.max_slash.load(ctx.deps.storage)?,
         };
