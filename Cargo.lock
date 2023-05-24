@@ -632,6 +632,24 @@ dependencies = [
 [[package]]
 name = "mesh-virtual-staking"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "derivative",
+ "mesh-apis",
+ "mesh-bindings",
+ "schemars",
+ "serde",
+ "sylvia",
+ "test-case",
+ "thiserror",
+]
 
 [[package]]
 name = "once_cell"
