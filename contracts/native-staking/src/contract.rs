@@ -160,9 +160,11 @@ impl LocalStakingApi for NativeStakingContract<'_> {
             }
             Some(proxy_addr) => {
                 // Send stake message to the proxy contract
+                let msg =
+                    to_binary(&mesh_native_staking_proxy::contract::ExecMsg::Stake { validator })?;
                 let wasm_msg = WasmMsg::Execute {
                     contract_addr: proxy_addr.into(),
-                    msg, // StakeMsg
+                    msg,
                     funds: ctx.info.funds,
                 };
                 Ok(Response::new().add_message(wasm_msg))
