@@ -9,6 +9,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
+use mesh_apis::vault_api::VaultApiHelper;
 use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCallback};
 
 use crate::error::ContractError;
@@ -205,10 +206,21 @@ impl NativeStakingCallback for NativeStakingContract<'_> {
     /// The native-staking contract can determine which user it belongs to via an internal Map.
     /// The native-staking contract will then send those tokens back to vault and release the claim.
     #[msg(exec)]
-    fn release_proxy_stake(&self, _ctx: ExecCtx) -> Result<Response, Self::Error> {
-        // ensure proper denom in info.funds
-        // look up proxy address (info.sender) to account owner
-        // send these tokens to vault contract, using release_local_stake method
-        todo!()
+    fn release_proxy_stake(&self, ctx: ExecCtx) -> Result<Response, Self::Error> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+
+        // Assert funds are passed in
+        let _paid = must_pay(&ctx.info, &cfg.denom)?;
+
+        // Look up account owner by proxy address (info.sender)
+        let owner_addr = self
+            .owner_by_proxy
+            .load(ctx.deps.storage, &ctx.info.sender)?;
+
+        // Send the tokens to the vault contract
+        let msg = VaultApiHelper(cfg.vault)
+            .release_local_stake(owner_addr.to_string(), ctx.info.funds)?;
+
+        Ok(Response::new().add_message(msg))
     }
 }
