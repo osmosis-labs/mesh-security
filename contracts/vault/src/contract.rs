@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, coins, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Order, Reply, Response,
-    SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Order, Reply, Response, SubMsg,
+    SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -146,6 +146,8 @@ impl VaultContract<'_> {
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
+        let config = self.config.load(ctx.deps.storage)?;
+
         let contract = ctx.deps.api.addr_validate(&contract)?;
         let contract = CrossStakingApiHelper(contract);
         let slashable = contract.max_slash(ctx.deps.as_ref())?;
@@ -153,13 +155,17 @@ impl VaultContract<'_> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
 
-        let amount = amount.amount;
-
-        self.stake(&mut ctx, &contract.0, slashable.max_slash, amount)?;
+        self.stake(
+            &mut ctx,
+            &config,
+            &contract.0,
+            slashable.max_slash,
+            amount.clone(),
+        )?;
 
         let stake_msg = contract.receive_virtual_stake(
             ctx.info.sender.to_string(),
-            coin(amount.u128(), denom),
+            amount.clone(),
             msg,
             vec![],
         )?;
@@ -168,7 +174,7 @@ impl VaultContract<'_> {
             .add_message(stake_msg)
             .add_attribute("action", "stake_remote")
             .add_attribute("sender", ctx.info.sender)
-            .add_attribute("amount", amount.to_string());
+            .add_attribute("amount", amount.amount.to_string());
 
         Ok(resp)
     }
@@ -183,31 +189,35 @@ impl VaultContract<'_> {
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, ContractError> {
-        let denom = self.config.load(ctx.deps.storage)?.denom;
-        ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
+        nonpayable(&ctx.info)?;
 
-        let amount = amount.amount;
+        let config = self.config.load(ctx.deps.storage)?;
+        ensure!(
+            config.denom == amount.denom,
+            ContractError::UnexpectedDenom(config.denom)
+        );
 
         let local_staking = self.local_staking.load(ctx.deps.storage)?;
 
         self.stake(
             &mut ctx,
+            &config,
             &local_staking.contract.0,
             local_staking.max_slash,
-            amount,
+            amount.clone(),
         )?;
 
         let stake_msg = local_staking.contract.receive_stake(
             ctx.info.sender.to_string(),
             msg,
-            coins(amount.u128(), denom),
+            vec![amount.clone()],
         )?;
 
         let resp = Response::new()
             .add_message(stake_msg)
             .add_attribute("action", "stake_local")
             .add_attribute("sender", ctx.info.sender)
-            .add_attribute("amount", amount.to_string());
+            .add_attribute("amount", amount.amount.to_string());
 
         Ok(resp)
     }
@@ -294,13 +304,23 @@ impl VaultContract<'_> {
     ///
     /// Stake (both local and remote) is always called by the tokens owner, so the `sender` is
     /// ued as an owner address.
+    ///
+    /// Config is taken in argument as it sometimes is used outside of this function, so
+    /// we want to avoid double-fetching it
     fn stake(
         &self,
         ctx: &mut ExecCtx,
+        config: &Config,
         lienholder: &Addr,
         slashable: Decimal,
-        amount: Uint128,
+        amount: Coin,
     ) -> Result<(), ContractError> {
+        ensure!(
+            amount.denom == config.denom,
+            ContractError::UnexpectedDenom(config.denom.clone())
+        );
+
+        let amount = amount.amount;
         let mut lien = self
             .liens
             .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
