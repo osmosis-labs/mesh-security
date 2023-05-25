@@ -1,14 +1,42 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+pub mod contract;
+pub mod error;
+pub mod msg;
+pub mod state;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[cfg(not(any(feature = "library", tarpaulin_include)))]
+mod entry_points {
+    use cosmwasm_std::{entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response};
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    use crate::contract::{ContractExecMsg, ContractQueryMsg, ConverterContract, InstantiateMsg};
+    use crate::error::ContractError;
+
+    const CONTRACT: ConverterContract = ConverterContract::new();
+
+    #[entry_point]
+    pub fn instantiate(
+        deps: DepsMut,
+        env: Env,
+        info: MessageInfo,
+        msg: InstantiateMsg,
+    ) -> Result<Response, ContractError> {
+        msg.dispatch(&CONTRACT, (deps, env, info))
+    }
+
+    #[entry_point]
+    pub fn execute(
+        deps: DepsMut,
+        env: Env,
+        info: MessageInfo,
+        msg: ContractExecMsg,
+    ) -> Result<Response, ContractError> {
+        msg.dispatch(&CONTRACT, (deps, env, info))
+    }
+
+    #[entry_point]
+    pub fn query(deps: Deps, env: Env, msg: ContractQueryMsg) -> Result<Binary, ContractError> {
+        msg.dispatch(&CONTRACT, (deps, env))
     }
 }
+
+#[cfg(not(any(feature = "library", tarpaulin_include)))]
+pub use crate::entry_points::*;
