@@ -626,6 +626,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-simple-price-feed"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "derivative",
+ "mesh-apis",
+ "schemars",
+ "serde",
+ "sylvia",
+ "test-case",
+ "thiserror",
+]
+
+[[package]]
 name = "mesh-vault"
 version = "0.1.0"
 dependencies = [
