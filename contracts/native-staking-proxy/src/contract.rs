@@ -159,8 +159,8 @@ impl NativeStakingProxyContract<'_> {
     }
 
     #[msg(query)]
-    fn config(&self, _ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
-        todo!()
+    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+        Ok(self.config.load(ctx.deps.storage)?)
     }
 
     /// Returns all pending unbonding
