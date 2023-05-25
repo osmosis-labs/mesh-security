@@ -20,6 +20,24 @@ pub struct AccountResponse {
     pub denom: String,
     pub bonded: Uint128,
     pub free: Uint128,
+}
+
+#[cw_serde]
+pub struct AllAccountsResponse {
+    pub accounts: Vec<AllAccountsResponseItem>,
+}
+
+#[cw_serde]
+pub struct AllAccountsResponseItem {
+    pub account: String,
+    // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
+    pub denom: String,
+    pub bonded: Uint128,
+    pub free: Uint128,
+}
+
+#[cw_serde]
+pub struct AccountClaimsResponse {
     pub claims: Vec<LienInfo>,
 }
 

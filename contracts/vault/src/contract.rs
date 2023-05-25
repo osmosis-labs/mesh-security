@@ -3,7 +3,7 @@ use cosmwasm_std::{
     SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
-use cw_storage_plus::{Item, Map};
+use cw_storage_plus::{Bounder, Item, Map};
 use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
 
 use mesh_apis::cross_staking_api::CrossStakingApiHelper;
@@ -15,13 +15,29 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::msg::{AccountResponse, ConfigResp, LienInfo, StakingInitInfo};
+use crate::msg::{
+    AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
+    ConfigResp, LienInfo, StakingInitInfo,
+};
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const REPLY_ID_INSTANTIATE: u64 = 1;
+
+pub const DEFAULT_PAGE_LIMIT: u32 = 10;
+pub const MAX_PAGE_LIMIT: u32 = 30;
+
+/// Aligns pagination limit
+fn clamp_page_limit(limit: Option<u32>) -> usize {
+    limit.unwrap_or(DEFAULT_PAGE_LIMIT).max(MAX_PAGE_LIMIT) as usize
+}
+
+/// Default falseness for serde
+fn def_false() -> bool {
+    false
+}
 
 pub struct VaultContract<'a> {
     /// General contract configuration
@@ -228,18 +244,6 @@ impl VaultContract<'_> {
 
         let account = Addr::unchecked(account);
 
-        let claims = self
-            .liens
-            .prefix(&account)
-            .range(ctx.deps.storage, None, None, Order::Ascending)
-            .map(|lien| {
-                lien.map(|(lienholder, lien)| LienInfo {
-                    lienholder: lienholder.into(),
-                    amount: lien.amount,
-                })
-            })
-            .collect::<Result<_, _>>()?;
-
         let user = self
             .users
             .may_load(ctx.deps.storage, &account)?
@@ -249,7 +253,6 @@ impl VaultContract<'_> {
             denom,
             bonded: user.collateral,
             free: user.free_collateral(),
-            claims,
         };
 
         Ok(resp)
@@ -264,6 +267,86 @@ impl VaultContract<'_> {
             denom: config.denom,
             local_staking: local_staking.contract.0.into(),
         };
+
+        Ok(resp)
+    }
+
+    /// Returns paginated claims list for an user
+    ///
+    /// `start_after` is a last lienholder of the previous page, and it will not be included
+    #[msg(query)]
+    fn account_claims(
+        &self,
+        ctx: QueryCtx,
+        account: String,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<AccountClaimsResponse, ContractError> {
+        let limit = clamp_page_limit(limit);
+        let start_after = start_after.map(Addr::unchecked);
+        let bound = start_after.as_ref().and_then(Bounder::exclusive_bound);
+
+        let account = Addr::unchecked(account);
+        let claims = self
+            .liens
+            .prefix(&account)
+            .range(ctx.deps.storage, bound, None, Order::Ascending)
+            .map(|lien| {
+                lien.map(|(lienholder, lien)| LienInfo {
+                    lienholder: lienholder.into(),
+                    amount: lien.amount,
+                })
+            })
+            .take(limit)
+            .collect::<Result<_, _>>()?;
+
+        let resp = AccountClaimsResponse { claims };
+
+        Ok(resp)
+    }
+
+    /// Queries for all users ever performing action in the system, paginating over
+    /// them.
+    ///
+    /// `start_after` is the last accoutn inlcuded in previous page
+    ///
+    /// `with_collateral` flag filters out users with no collateral, defualted to false
+    #[msg(query)]
+    fn all_accounts(
+        &self,
+        ctx: QueryCtx,
+        #[serde(default = "def_false")] with_collateral: bool,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<AllAccountsResponse, ContractError> {
+        let limit = clamp_page_limit(limit);
+        let start_after = start_after.map(Addr::unchecked);
+        let bound = start_after.as_ref().and_then(Bounder::exclusive_bound);
+
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+
+        let accounts = self
+            .users
+            .range(ctx.deps.storage, bound, None, Order::Ascending)
+            .filter(|account| {
+                !(with_collateral
+                    && account
+                        .as_ref()
+                        .map(|(_, account)| account.collateral.is_zero())
+                        .unwrap_or(false))
+            })
+            .map(|account| {
+                account.map(|(addr, account)| AllAccountsResponseItem {
+                    account: addr.into(),
+                    denom: denom.clone(),
+                    bonded: account.collateral,
+                    free: account.free_collateral(),
+                })
+            })
+            .take(limit)
+            .collect::<Result<_, _>>()?;
+
+        let resp = AllAccountsResponse { accounts };
 
         Ok(resp)
     }

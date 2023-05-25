@@ -2,7 +2,7 @@ mod cross_staking;
 mod local_staking;
 
 use crate::error::ContractError;
-use crate::msg::{LienInfo, StakingInitInfo};
+use crate::msg::{AllAccountsResponseItem, LienInfo, StakingInitInfo};
 use crate::{contract, msg::AccountResponse};
 use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
@@ -33,8 +33,10 @@ fn instantiation() {
         .unwrap();
 
     let config = vault.config().unwrap();
-
     assert_eq!(config.denom, OSMO);
+
+    let users = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(users.accounts, []);
 }
 
 #[test]
@@ -68,16 +70,16 @@ fn binding() {
         .call(owner)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::zero(),
             free: Uint128::zero(),
-            claims: vec![],
         }
     );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(claims.claims, []);
 
     // Bond some tokens
 
@@ -87,16 +89,16 @@ fn binding() {
         .call(user)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(100),
             free: Uint128::new(100),
-            claims: vec![],
         }
     );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(claims.claims, []);
     assert_eq!(
         app.app().wrap().query_balance(user, OSMO).unwrap(),
         coin(200, OSMO)
@@ -115,16 +117,16 @@ fn binding() {
         .call(user)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(250),
             free: Uint128::new(250),
-            claims: vec![],
         }
     );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(claims.claims, []);
     assert_eq!(
         app.app().wrap().query_balance(user, OSMO).unwrap(),
         coin(50, OSMO)
@@ -140,17 +142,16 @@ fn binding() {
     // Unbond some tokens
 
     vault.unbond(coin(200, OSMO)).call(user).unwrap();
-
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(50),
             free: Uint128::new(50),
-            claims: vec![],
         }
     );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(claims.claims, []);
     assert_eq!(
         app.app().wrap().query_balance(user, OSMO).unwrap(),
         coin(250, OSMO)
@@ -164,17 +165,16 @@ fn binding() {
     );
 
     vault.unbond(coin(20, OSMO)).call(user).unwrap();
-
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(30),
             free: Uint128::new(30),
-            claims: vec![],
         }
     );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(claims.claims, []);
     assert_eq!(
         app.app().wrap().query_balance(user, OSMO).unwrap(),
         coin(270, OSMO)
@@ -235,16 +235,16 @@ fn stake_local() {
         .call(user)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
-            claims: vec![],
         }
     );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(claims.claims, []);
     assert_eq!(
         app.app()
             .wrap()
@@ -267,18 +267,21 @@ fn stake_local() {
         .call(user)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
-            claims: vec![LienInfo {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: Uint128::new(100)
-            }],
         }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: local_staking.contract_addr.to_string(),
+            amount: Uint128::new(100)
+        }]
     );
     assert_eq!(
         app.app()
@@ -300,18 +303,21 @@ fn stake_local() {
         .call(user)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(50),
-            claims: vec![LienInfo {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: Uint128::new(250)
-            }],
         }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: local_staking.contract_addr.to_string(),
+            amount: Uint128::new(250)
+        }]
     );
     assert_eq!(
         app.app()
@@ -353,18 +359,21 @@ fn stake_local() {
         .call(owner)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(100),
-            claims: vec![LienInfo {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: Uint128::new(200)
-            }],
         }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: local_staking.contract_addr.to_string(),
+            amount: Uint128::new(200)
+        }]
     );
     assert_eq!(
         app.app()
@@ -389,19 +398,21 @@ fn stake_local() {
         )
         .call(owner)
         .unwrap();
-
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
-            claims: vec![LienInfo {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: Uint128::new(100)
-            }],
         }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: local_staking.contract_addr.to_string(),
+            amount: Uint128::new(100)
+        }]
     );
     assert_eq!(
         app.app()
@@ -476,16 +487,16 @@ fn stake_cross() {
         .call(user)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
-            claims: vec![],
         }
     );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(claims.claims, []);
     assert_eq!(
         app.app()
             .wrap()
@@ -519,11 +530,15 @@ fn stake_cross() {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
-            claims: vec![LienInfo {
-                lienholder: cross_staking.contract_addr.to_string(),
-                amount: Uint128::new(100)
-            }],
         }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: cross_staking.contract_addr.to_string(),
+            amount: Uint128::new(100)
+        }]
     );
     assert_eq!(
         app.app()
@@ -556,11 +571,15 @@ fn stake_cross() {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(50),
-            claims: vec![LienInfo {
-                lienholder: cross_staking.contract_addr.to_string(),
-                amount: Uint128::new(250)
-            }],
         }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: cross_staking.contract_addr.to_string(),
+            amount: Uint128::new(250)
+        }]
     );
     assert_eq!(
         app.app()
@@ -613,11 +632,15 @@ fn stake_cross() {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(100),
-            claims: vec![LienInfo {
-                lienholder: cross_staking.contract_addr.to_string(),
-                amount: Uint128::new(200)
-            }],
         }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: cross_staking.contract_addr.to_string(),
+            amount: Uint128::new(200)
+        }]
     );
     assert_eq!(
         app.app()
@@ -650,12 +673,17 @@ fn stake_cross() {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
-            claims: vec![LienInfo {
-                lienholder: cross_staking.contract_addr.to_string(),
-                amount: Uint128::new(100)
-            }],
         }
     );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: cross_staking.contract_addr.to_string(),
+            amount: Uint128::new(100)
+        }]
+    );
+
     assert_eq!(
         app.app()
             .wrap()
@@ -766,28 +794,31 @@ fn multiple_stakes() {
         .call(user)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(1000),
             free: Uint128::new(700),
-            claims: vec![
-                LienInfo {
-                    lienholder: cross_staking1.contract_addr.to_string(),
-                    amount: Uint128::new(200)
-                },
-                LienInfo {
-                    lienholder: cross_staking2.contract_addr.to_string(),
-                    amount: Uint128::new(100)
-                },
-                LienInfo {
-                    lienholder: local_staking.contract_addr.to_string(),
-                    amount: Uint128::new(300)
-                },
-            ],
         }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [
+            LienInfo {
+                lienholder: cross_staking1.contract_addr.to_string(),
+                amount: Uint128::new(200)
+            },
+            LienInfo {
+                lienholder: cross_staking2.contract_addr.to_string(),
+                amount: Uint128::new(100)
+            },
+            LienInfo {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: Uint128::new(300)
+            },
+        ]
     );
 
     // Still staking properly, but lein on `cross_staking1` goes up to 400 OSMO, with `max_slash`
@@ -814,28 +845,31 @@ fn multiple_stakes() {
         .call(user)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
-        acc,
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(1000),
             free: Uint128::new(430),
-            claims: vec![
-                LienInfo {
-                    lienholder: cross_staking1.contract_addr.to_string(),
-                    amount: Uint128::new(400)
-                },
-                LienInfo {
-                    lienholder: cross_staking2.contract_addr.to_string(),
-                    amount: Uint128::new(500)
-                },
-                LienInfo {
-                    lienholder: local_staking.contract_addr.to_string(),
-                    amount: Uint128::new(300)
-                },
-            ],
         }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [
+            LienInfo {
+                lienholder: cross_staking1.contract_addr.to_string(),
+                amount: Uint128::new(400)
+            },
+            LienInfo {
+                lienholder: cross_staking2.contract_addr.to_string(),
+                amount: Uint128::new(500)
+            },
+            LienInfo {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: Uint128::new(300)
+            },
+        ]
     );
 
     // Now trying to add more staking to `cross_staking1` and `cross_staking2`, leaving them on 900 OSMO lein,
@@ -861,4 +895,200 @@ fn multiple_stakes() {
         .unwrap_err();
 
     assert_eq!(err, ContractError::InsufficentBalance);
+}
+
+#[test]
+fn all_users_fetching() {
+    let owner = "owner";
+    let users = ["user1", "user2"];
+
+    let app = MtApp::new(|router, _api, storage| {
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(users[0]), coins(300, OSMO))
+            .unwrap();
+
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(users[1]), coins(300, OSMO))
+            .unwrap();
+    });
+    let app = App::new(app);
+
+    // Contracts setup
+
+    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
+    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
+
+    let staking_init_info = StakingInitInfo {
+        admin: None,
+        code_id: local_staking_code.code_id(),
+        msg: to_binary(&Empty {}).unwrap(),
+        label: None,
+    };
+
+    let vault = vault_code
+        .instantiate(OSMO.to_owned(), staking_init_info)
+        .with_label("Vault")
+        .call(owner)
+        .unwrap();
+
+    // No users should show up no matter of collateral flag
+
+    let accounts = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(accounts.accounts, []);
+
+    let accounts = vault.all_accounts(true, None, None).unwrap();
+    assert_eq!(accounts.accounts, []);
+
+    // When user bond some collateral, he should be visible
+
+    vault
+        .bond()
+        .with_funds(&coins(100, OSMO))
+        .call(users[0])
+        .unwrap();
+
+    let accounts = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [AllAccountsResponseItem {
+            account: users[0].to_owned(),
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(100),
+            free: Uint128::new(100),
+        }]
+    );
+
+    let accounts = vault.all_accounts(true, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [AllAccountsResponseItem {
+            account: users[0].to_owned(),
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(100),
+            free: Uint128::new(100),
+        }]
+    );
+
+    // Second user bonds - we want to see him
+
+    vault
+        .bond()
+        .with_funds(&coins(200, OSMO))
+        .call(users[1])
+        .unwrap();
+
+    let accounts = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [
+            AllAccountsResponseItem {
+                account: users[0].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(100),
+                free: Uint128::new(100),
+            },
+            AllAccountsResponseItem {
+                account: users[1].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(200),
+                free: Uint128::new(200),
+            }
+        ]
+    );
+
+    let accounts = vault.all_accounts(true, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [
+            AllAccountsResponseItem {
+                account: users[0].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(100),
+                free: Uint128::new(100),
+            },
+            AllAccountsResponseItem {
+                account: users[1].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(200),
+                free: Uint128::new(200),
+            }
+        ]
+    );
+
+    // After unbounding some, but not all collateral, user shall still be visible
+
+    vault.unbond(coin(50, OSMO)).call(users[0]).unwrap();
+
+    let accounts = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [
+            AllAccountsResponseItem {
+                account: users[0].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(50),
+                free: Uint128::new(50),
+            },
+            AllAccountsResponseItem {
+                account: users[1].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(200),
+                free: Uint128::new(200),
+            }
+        ]
+    );
+
+    let accounts = vault.all_accounts(true, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [
+            AllAccountsResponseItem {
+                account: users[0].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(50),
+                free: Uint128::new(50),
+            },
+            AllAccountsResponseItem {
+                account: users[1].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(200),
+                free: Uint128::new(200),
+            }
+        ]
+    );
+
+    // Unbondning all the collateral hids the user when the collateral flag is set
+    vault.unbond(coin(200, OSMO)).call(users[1]).unwrap();
+
+    let accounts = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [
+            AllAccountsResponseItem {
+                account: users[0].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(50),
+                free: Uint128::new(50),
+            },
+            AllAccountsResponseItem {
+                account: users[1].to_owned(),
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(0),
+                free: Uint128::new(0),
+            }
+        ]
+    );
+
+    let accounts = vault.all_accounts(true, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [AllAccountsResponseItem {
+            account: users[0].to_owned(),
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(50),
+            free: Uint128::new(50),
+        },]
+    );
 }
