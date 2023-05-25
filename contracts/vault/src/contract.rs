@@ -41,15 +41,15 @@ fn def_false() -> bool {
 
 pub struct VaultContract<'a> {
     /// General contract configuration
-    config: Item<'a, Config>,
+    pub config: Item<'a, Config>,
     /// Local staking info
-    local_staking: Item<'a, LocalStaking>,
+    pub local_staking: Item<'a, LocalStaking>,
     /// All liens in the protocol
     ///
     /// Liens are indexed with (user, creditor), as this pair has to be unique
-    liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
+    pub liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
     /// Per-user information
-    users: Map<'a, &'a Addr, UserInfo>,
+    pub users: Map<'a, &'a Addr, UserInfo>,
 }
 
 #[cfg_attr(not(feautre = "library"), sylvia::entry_points)]
