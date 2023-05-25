@@ -1,4 +1,10 @@
-use cosmwasm_std::{ensure_eq, entry_point, Coin, DepsMut, Env, Response, Uint128};
+use std::cmp::Ordering;
+use std::collections::HashMap;
+
+use cosmwasm_std::{
+    coin, ensure_eq, entry_point, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Response,
+    StakingMsg, SubMsg, Uint128,
+};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::nonpayable;
@@ -64,36 +70,113 @@ impl VirtualStakingContract<'_> {
         Ok(self.config.load(ctx.deps.storage)?.into())
     }
 
+    /**
+     * This is called once per epoch to withdraw all rewards and rebalance the bonded tokens.
+     * Note: the current implementation may (repeatedly) fail if any validator was slashed or fell out
+     * of the active set.
+     *
+     * The basic logic for calculating rebalance is:
+     * 1. Get all bond requests
+     * 2. Sum the total amount
+     * 3. If the sum <= max_cap then use collected requests as is
+     * 4. If the sum > max_cap,
+     *   a. calculate multiplier Decimal(max_cap / sum)
+     *   b. multiply every element of the collected requests in place.
+     * 5. Find diff between collected (normalized) requests and last bonding amounts (which go up, which down).
+     * 6. Transform diff into unbond and bond requests, sorting so all unbond happen first
+     */
     fn handle_epoch(
         &self,
         deps: DepsMut<VirtualStakeCustomQuery>,
         env: Env,
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
+        // withdraw rewards
+        let bonded = self.bonded.load(deps.storage)?;
+        let withdraw = withdraw_reward_msgs(&bonded);
+        let resp = Response::new().add_submessages(withdraw);
+
         let bond =
             TokenQuerier::new(&deps.querier).bond_status(env.contract.address.to_string())?;
-        // TODO: return error if it is 0 (or maybe just return early?)
-
-        // withdraw rewards - or make that a separate message?
-        let _bonded = self.bonded.load(deps.storage)?;
-        // TODO: also make this configurable compile time for easier system tests
+        let max_cap = bond.cap.amount;
+        // If 0 max cap, then we assume all tokens were force unbonded already, and just return the withdraw rewards
+        // call and set bonded to empty
+        // TODO: verify this behavior with SDK module (otherwise we send unbond message)
+        if max_cap.is_zero() {
+            self.bonded.save(deps.storage, &Vec::new())?;
+            return Ok(resp);
+        }
 
         // calculate what the delegations should be when we are done
-        let requests: Vec<(String, Uint128)> = self
+        let mut requests: Vec<(String, Uint128)> = self
             .bond_requests
             .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
             .collect::<Result<_, _>>()?;
-        let total_request: Uint128 = requests.iter().map(|(_, v)| v).sum();
-        if total_request > bond.cap.amount {
-            // TODO: normalize the list of requests to match the cap
-            todo!();
+        let total_requested: Uint128 = requests.iter().map(|(_, v)| v).sum();
+        if total_requested > max_cap {
+            requests.iter_mut().for_each(|(_, v)| {
+                *v = (*v * max_cap) / total_requested;
+            });
         }
 
-        // TODO: Look at existing list and calculate differences for bond/unbond calls
-
-        // Save the new values
+        // Load current bonded and save the future values
+        let current = self.bonded.load(deps.storage)?;
         self.bonded.save(deps.storage, &requests)?;
-        Ok(Response::new())
+
+        // Compare these two to make bond/unbond calls as needed
+        let config = self.config.load(deps.storage)?;
+        let rebalance = calculate_rebalance(current, requests, &config.denom);
+        let resp = resp.add_messages(rebalance);
+
+        Ok(resp)
     }
+}
+
+fn calculate_rebalance(
+    current: Vec<(String, Uint128)>,
+    desired: Vec<(String, Uint128)>,
+    denom: &str,
+) -> Vec<CosmosMsg<VirtualStakeCustomMsg>> {
+    let mut desired: HashMap<_, _> = desired.into_iter().collect();
+
+    // this will handle adjustments to all current validators
+    let mut msgs = vec![];
+    for (validator, prev) in current {
+        let next = desired.remove(&validator).unwrap_or_else(Uint128::zero);
+        match next.cmp(&prev) {
+            Ordering::Less => {
+                let unbond = prev - next;
+                let amount = coin(unbond.u128(), denom);
+                msgs.push(StakingMsg::Undelegate { validator, amount }.into())
+            }
+            Ordering::Greater => {
+                let bond = next - prev;
+                let amount = coin(bond.u128(), denom);
+                msgs.push(StakingMsg::Delegate { validator, amount }.into())
+            }
+            Ordering::Equal => {}
+        }
+    }
+
+    // any new validators in the desired list need to be bonded
+    for (validator, bond) in desired {
+        let amount = coin(bond.u128(), denom);
+        msgs.push(StakingMsg::Delegate { validator, amount }.into())
+    }
+
+    msgs
+}
+
+// TODO: each submsg should have a callback to this contract to trigger sending the rewards to converter
+// This will be done in a future PR
+fn withdraw_reward_msgs(bonded: &[(String, Uint128)]) -> Vec<SubMsg<VirtualStakeCustomMsg>> {
+    bonded
+        .iter()
+        .map(|(validator, _)| {
+            SubMsg::new(DistributionMsg::WithdrawDelegatorReward {
+                validator: validator.clone(),
+            })
+        })
+        .collect()
 }
 
 #[contract]
