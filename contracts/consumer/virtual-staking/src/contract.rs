@@ -9,18 +9,25 @@ use sylvia::{contract, schemars};
 use mesh_apis::virtual_staking_api::{self, SudoMsg, VirtualStakingApi};
 
 use crate::error::ContractError;
-use crate::types::{Config, ConfigResponse};
+use crate::msg::ConfigResponse;
+use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct VirtualStakingContract<'a> {
-    config: Item<'a, Config>,
-    // Amount of tokens that have been requested to bond to a validator
-    // (Sum of bond minus unbond requests). This will only update actual bond on epoch changes.
-    bond_requests: Map<'a, &'a str, Uint128>,
-    // This is how much was bonded last time (validator, amount) pairs
-    bonded: Item<'a, Vec<(String, Uint128)>>,
+    pub config: Item<'a, Config>,
+    /// Amount of tokens that have been requested to bond to a validator
+    /// (Sum of bond minus unbond requests). This will only update actual bond on epoch changes.
+    /// Note: Validator addresses are stored as strings, as they are different format than Addr
+    //
+    // Optimization: I keep bond_requests as a Map, as most interactions are bond/unbond requests
+    // (from IBC) which touch one. And then we only range over it once per epoch (in handle_epoch).
+    pub bond_requests: Map<'a, &'a str, Uint128>,
+    /// This is how much was bonded last time (validator, amount) pairs
+    // `bonded` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
+    // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
+    pub bonded: Item<'a, Vec<(String, Uint128)>>,
 }
 
 #[contract]
@@ -41,7 +48,7 @@ impl VirtualStakingContract<'_> {
         &self,
         ctx: InstantiateCtx,
         denom: String,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
         let config = Config {
             denom,
@@ -90,6 +97,7 @@ impl VirtualStakingContract<'_> {
 }
 
 #[contract]
+#[messages(virtual_staking_api as VirtualStakingApi)]
 impl VirtualStakingApi for VirtualStakingContract<'_> {
     type Error = ContractError;
 

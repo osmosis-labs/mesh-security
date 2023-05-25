@@ -1,6 +1,7 @@
 pub mod contract;
 pub mod error;
-mod types;
+pub mod msg;
+pub mod state;
 
 #[cfg(not(any(feature = "library", tarpaulin_include)))]
 mod entry_points {
@@ -19,7 +20,7 @@ mod entry_points {
         env: Env,
         info: MessageInfo,
         msg: InstantiateMsg,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<Response<mesh_bindings::VirtualStakeCustomMsg>, ContractError> {
         msg.dispatch(&CONTRACT, (deps, env, info))
     }
 
