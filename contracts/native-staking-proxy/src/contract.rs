@@ -43,18 +43,18 @@ impl NativeStakingProxyContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-        // stake info.funds on validator
+        // Stake info.funds on validator
         let res = self.stake(ctx, validator)?;
 
-        // set owner as recipient of future withdrawls
-        let set_withdrawl = DistributionMsg::SetWithdrawAddress {
+        // Set owner as recipient of future withdrawals
+        let set_withdrawal = DistributionMsg::SetWithdrawAddress {
             address: config.owner.into_string(),
         };
-        Ok(res.add_message(set_withdrawl))
+        Ok(res.add_message(set_withdrawal))
     }
 
-    /// stakes the tokens from `info.funds` to the given validator.
-    /// can only be called by the parent contract.
+    /// Stakes the tokens from `info.funds` to the given validator.
+    /// Can only be called by the parent contract
     #[msg(exec)]
     fn stake(&self, ctx: ExecCtx, validator: String) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
@@ -64,8 +64,8 @@ impl NativeStakingProxyContract<'_> {
         todo!()
     }
 
-    /// restakes the given amount from the one validator to another on behalf of the calling user.
-    /// returns an error if the user doesn't have such stake.
+    /// Re-stakes the given amount from the one validator to another on behalf of the calling user.
+    /// Returns an error if the user doesn't have such stake
     #[msg(exec)]
     fn restake(
         &self,
