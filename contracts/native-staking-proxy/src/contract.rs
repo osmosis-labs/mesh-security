@@ -1,7 +1,11 @@
-use cosmwasm_std::{ensure_eq, Coin, DistributionMsg, Response, VoteOption, WeightedVoteOption};
+use cosmwasm_std::{
+    coin, ensure_eq, Coin, DistributionMsg, GovMsg, Response, StakingMsg, VoteOption,
+    WeightedVoteOption,
+};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
+use cw_utils::must_pay;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -60,8 +64,11 @@ impl NativeStakingProxyContract<'_> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
 
-        let _ = validator;
-        todo!()
+        let amount = must_pay(&ctx.info, &cfg.denom)?;
+        let amount = coin(amount.u128(), cfg.denom);
+        let msg = StakingMsg::Delegate { validator, amount };
+
+        Ok(Response::new().add_message(msg))
     }
 
     /// Re-stakes the given amount from the one validator to another on behalf of the calling user.
@@ -70,15 +77,24 @@ impl NativeStakingProxyContract<'_> {
     fn restake(
         &self,
         ctx: ExecCtx,
-        from_validator: String,
-        to_validator: String,
+        src_validator: String,
+        dst_validator: String,
         amount: Coin,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::InvalidDenom(amount.denom)
+        );
 
-        let _ = (from_validator, to_validator, amount);
-        todo!()
+        let msg = StakingMsg::Redelegate {
+            src_validator,
+            dst_validator,
+            amount,
+        };
+        Ok(Response::new().add_message(msg))
     }
 
     /// Vote with the users stake (over all delegations)
@@ -86,14 +102,14 @@ impl NativeStakingProxyContract<'_> {
     fn vote(
         &self,
         ctx: ExecCtx,
-        proposal_id: String,
+        proposal_id: u64,
         vote: VoteOption,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
-        let _ = (proposal_id, vote);
-        todo!()
+        let msg = GovMsg::Vote { proposal_id, vote };
+        Ok(Response::new().add_message(msg))
     }
 
     /// Vote with the users stake (over all delegations)
@@ -101,12 +117,13 @@ impl NativeStakingProxyContract<'_> {
     fn vote_weighted(
         &self,
         ctx: ExecCtx,
-        proposal_id: String,
+        proposal_id: u64,
         vote: Vec<WeightedVoteOption>,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
+        // TODO: see above, feel free to adjust params if needed
         let _ = (proposal_id, vote);
         todo!()
     }
@@ -122,7 +139,7 @@ impl NativeStakingProxyContract<'_> {
         // TODO: track all validators
         let validators = vec!["todo".to_string()];
 
-        // withdraw all delegations to the owner (set as withdrawl address in instantiate)
+        // withdraw all delegations to the owner (already set as withdrawl address in instantiate)
         let msgs = validators
             .into_iter()
             .map(|validator| DistributionMsg::WithdrawDelegatorReward { validator });
@@ -142,9 +159,14 @@ impl NativeStakingProxyContract<'_> {
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::InvalidDenom(amount.denom)
+        );
 
-        let _ = (validator, amount);
-        todo!()
+        let msg = StakingMsg::Undelegate { validator, amount };
+        Ok(Response::new().add_message(msg))
     }
 
     /// releases any tokens that have fully unbonded from a previous unstake.
