@@ -12,4 +12,7 @@ pub enum ContractError {
 
     #[error("Unauthorized")]
     Unauthorized {},
+
+    #[error("Try to send wrong denom: {0}")]
+    InvalidDenom(String),
 }
