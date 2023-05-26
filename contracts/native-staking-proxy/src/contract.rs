@@ -97,7 +97,7 @@ impl NativeStakingProxyContract<'_> {
         Ok(Response::new().add_message(msg))
     }
 
-    /// Vote with the users stake (over all delegations)
+    /// Vote with the user's stake (over all delegations)
     #[msg(exec)]
     fn vote(
         &self,
@@ -112,7 +112,7 @@ impl NativeStakingProxyContract<'_> {
         Ok(Response::new().add_message(msg))
     }
 
-    /// Vote with the users stake (over all delegations)
+    /// Vote with the user's stake (over all delegations)
     #[msg(exec)]
     fn vote_weighted(
         &self,
@@ -123,9 +123,11 @@ impl NativeStakingProxyContract<'_> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
-        // TODO: see above, feel free to adjust params if needed
-        let _ = (proposal_id, vote);
-        todo!()
+        let msg = GovMsg::VoteWeighted {
+            proposal_id,
+            options: vote,
+        };
+        Ok(Response::new().add_message(msg))
     }
 
     /// If the caller has any delegations, withdraw all rewards from those delegations and
@@ -139,7 +141,7 @@ impl NativeStakingProxyContract<'_> {
         // TODO: track all validators
         let validators = vec!["todo".to_string()];
 
-        // withdraw all delegations to the owner (already set as withdrawl address in instantiate)
+        // Withdraw all delegations to the owner (already set as withdrawal address in instantiate)
         let msgs = validators
             .into_iter()
             .map(|validator| DistributionMsg::WithdrawDelegatorReward { validator });
@@ -147,9 +149,9 @@ impl NativeStakingProxyContract<'_> {
         Ok(res)
     }
 
-    /// unstakes the given amount from the given validator on behalf of the calling user.
-    /// returns an error if the user doesn't have such stake.
-    /// after unbonding period, it will allow the user to claim the tokens (returning to vault)
+    /// Unstakes the given amount from the given validator on behalf of the calling user.
+    /// Returns an error if the user doesn't have such stake.
+    /// After the unbonding period, it will allow the user to claim the tokens (returning to vault)
     #[msg(exec)]
     fn unstake(
         &self,
@@ -169,9 +171,9 @@ impl NativeStakingProxyContract<'_> {
         Ok(Response::new().add_message(msg))
     }
 
-    /// releases any tokens that have fully unbonded from a previous unstake.
-    /// this will go back to the parent via `release_proxy_stake`
-    /// error if the proxy doesn't have any liquid tokens
+    /// Releases any tokens that have fully unbonded from a previous unstake.
+    /// This will go back to the parent via `release_proxy_stake`.
+    /// Errors if the proxy doesn't have any liquid tokens
     #[msg(exec)]
     fn release_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
