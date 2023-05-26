@@ -4,6 +4,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
+use std::cmp::Ordering;
 
 use cw_utils::must_pay;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
@@ -124,19 +125,25 @@ impl NativeStakingProxyContract<'_> {
         storage: &mut dyn Storage,
         validator: &str,
         amount: Uint128,
-    ) -> Result<Uint128, ContractError> {
-        // FIXME?: Remove zero amount delegations
-        self.delegations.update(storage, validator, |old| {
-            let old_amount = old.unwrap_or_default();
-            if old_amount >= amount {
-                Ok(old_amount - amount)
-            } else {
-                Err(ContractError::InsufficientDelegation(
-                    validator.to_string(),
-                    old_amount,
-                ))
+    ) -> Result<(), ContractError> {
+        let old_amount = self
+            .delegations
+            .may_load(storage, validator)?
+            .unwrap_or_default();
+        match old_amount.cmp(&amount) {
+            Ordering::Greater => self
+                .delegations
+                .save(storage, validator, &(old_amount - amount))
+                .map_err(Into::into),
+            Ordering::Equal => {
+                self.delegations.remove(storage, validator);
+                Ok(())
             }
-        })
+            Ordering::Less => Err(ContractError::InsufficientDelegation(
+                validator.to_string(),
+                old_amount,
+            )),
+        }
     }
 
     /// Vote with the user's stake (over all delegations)
@@ -180,21 +187,11 @@ impl NativeStakingProxyContract<'_> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
-        let validators = self
-            .delegations
-            .range(ctx.deps.storage, None, None, Order::Ascending)
-            .filter(|item| {
-                if let Ok((_, amount)) = item {
-                    !amount.is_zero()
-                } else {
-                    true
-                }
-            })
-            .map(|item| item.map(|(validator, _)| validator))
-            .collect::<StdResult<Vec<_>>>()?;
-
         // Withdraw all delegations to the owner (already set as withdrawal address in instantiate)
-        let msgs = validators
+        let msgs = self
+            .delegations
+            .keys(ctx.deps.storage, None, None, Order::Ascending)
+            .collect::<StdResult<Vec<_>>>()?
             .into_iter()
             .map(|validator| DistributionMsg::WithdrawDelegatorReward { validator });
         let res = Response::new().add_messages(msgs);
