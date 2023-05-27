@@ -1,11 +1,10 @@
 use cosmwasm_std::WasmMsg::Execute;
 use cosmwasm_std::{
-    coin, ensure_eq, to_binary, Coin, DistributionMsg, GovMsg, Order, Response, StakingMsg,
-    StdResult, Storage, Uint128, VoteOption, WeightedVoteOption,
+    coin, ensure_eq, to_binary, Coin, DistributionMsg, GovMsg, Response, StakingMsg, VoteOption,
+    WeightedVoteOption,
 };
 use cw2::set_contract_version;
-use cw_storage_plus::{Item, Map};
-use std::cmp::Ordering;
+use cw_storage_plus::Item;
 
 use cw_utils::must_pay;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
@@ -20,8 +19,6 @@ pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct NativeStakingProxyContract<'a> {
     config: Item<'a, Config>,
-    /// Map of delegated amounts per validator
-    delegations: Map<'a, &'a str, Uint128>,
 }
 
 #[contract]
@@ -30,7 +27,6 @@ impl NativeStakingProxyContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
-            delegations: Map::new("delegations"),
         }
     }
 
@@ -71,9 +67,6 @@ impl NativeStakingProxyContract<'_> {
 
         let amount = must_pay(&ctx.info, &cfg.denom)?;
 
-        // Update validator delegation
-        self.increase_validator_delegation(ctx.deps.storage, &validator, amount)?;
-
         let amount = coin(amount.u128(), cfg.denom);
         let msg = StakingMsg::Delegate { validator, amount };
 
@@ -98,54 +91,12 @@ impl NativeStakingProxyContract<'_> {
             ContractError::InvalidDenom(amount.denom)
         );
 
-        // Update src and dst validator delegations
-        self.decrease_validator_delegation(ctx.deps.storage, &src_validator, amount.amount)?;
-        self.increase_validator_delegation(ctx.deps.storage, &dst_validator, amount.amount)?;
-
         let msg = StakingMsg::Redelegate {
             src_validator,
             dst_validator,
             amount,
         };
         Ok(Response::new().add_message(msg))
-    }
-
-    fn increase_validator_delegation(
-        &self,
-        storage: &mut dyn Storage,
-        validator: &str,
-        amount: Uint128,
-    ) -> Result<Uint128, ContractError> {
-        self.delegations
-            .update::<_, ContractError>(storage, validator, |old| {
-                Ok(old.unwrap_or_default() + amount)
-            })
-    }
-
-    fn decrease_validator_delegation(
-        &self,
-        storage: &mut dyn Storage,
-        validator: &str,
-        amount: Uint128,
-    ) -> Result<(), ContractError> {
-        let old_amount = self
-            .delegations
-            .may_load(storage, validator)?
-            .unwrap_or_default();
-        match old_amount.cmp(&amount) {
-            Ordering::Greater => self
-                .delegations
-                .save(storage, validator, &(old_amount - amount))
-                .map_err(Into::into),
-            Ordering::Equal => {
-                self.delegations.remove(storage, validator);
-                Ok(())
-            }
-            Ordering::Less => Err(ContractError::InsufficientDelegation(
-                validator.to_string(),
-                old_amount,
-            )),
-        }
     }
 
     /// Vote with the user's stake (over all delegations)
@@ -190,12 +141,14 @@ impl NativeStakingProxyContract<'_> {
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
         // Withdraw all delegations to the owner (already set as withdrawal address in instantiate)
-        let msgs = self
-            .delegations
-            .keys(ctx.deps.storage, None, None, Order::Ascending)
-            .collect::<StdResult<Vec<_>>>()?
+        let msgs = ctx
+            .deps
+            .querier
+            .query_all_delegations(ctx.env.contract.address)?
             .into_iter()
-            .map(|validator| DistributionMsg::WithdrawDelegatorReward { validator });
+            .map(|delegation| DistributionMsg::WithdrawDelegatorReward {
+                validator: delegation.validator,
+            });
         let res = Response::new().add_messages(msgs);
         Ok(res)
     }
@@ -217,9 +170,6 @@ impl NativeStakingProxyContract<'_> {
             cfg.denom,
             ContractError::InvalidDenom(amount.denom)
         );
-
-        // Reduce validator delegation
-        self.decrease_validator_delegation(ctx.deps.storage, &validator, amount.amount)?;
 
         // TODO?: Register unbonding as pending (needs unbonding period)
 
