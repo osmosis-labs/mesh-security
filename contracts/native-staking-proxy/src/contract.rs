@@ -1,6 +1,7 @@
+use cosmwasm_std::WasmMsg::Execute;
 use cosmwasm_std::{
-    coin, ensure_eq, Coin, DistributionMsg, GovMsg, Order, Response, StakingMsg, StdResult,
-    Storage, Uint128, VoteOption, WeightedVoteOption,
+    coin, ensure_eq, to_binary, Coin, DistributionMsg, GovMsg, Order, Response, StakingMsg,
+    StdResult, Storage, Uint128, VoteOption, WeightedVoteOption,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -11,6 +12,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
+use crate::native_staking_callback;
 use crate::types::{ClaimsResponse, Config, ConfigResponse};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -219,6 +221,8 @@ impl NativeStakingProxyContract<'_> {
         // Reduce validator delegation
         self.decrease_validator_delegation(ctx.deps.storage, &validator, amount.amount)?;
 
+        // TODO?: Register unbonding as pending (needs unbonding period)
+
         let msg = StakingMsg::Undelegate { validator, amount };
         Ok(Response::new().add_message(msg))
     }
@@ -231,7 +235,22 @@ impl NativeStakingProxyContract<'_> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
-        todo!()
+        // Simply assume all of our liquid assets are from unbondings
+        // TODO?: Get the list of all the completed unbondings
+        let balance = ctx
+            .deps
+            .querier
+            .query_balance(ctx.env.contract.address, cfg.denom)?;
+
+        // Send them to the parent contract via `release_proxy_stake`
+        let msg = to_binary(&native_staking_callback::ExecMsg::ReleaseProxyStake {})?;
+
+        let wasm_msg = Execute {
+            contract_addr: cfg.parent.to_string(),
+            msg,
+            funds: vec![balance],
+        };
+        Ok(Response::new().add_message(wasm_msg))
     }
 
     #[msg(query)]
@@ -239,9 +258,9 @@ impl NativeStakingProxyContract<'_> {
         Ok(self.config.load(ctx.deps.storage)?)
     }
 
-    /// Returns all pending unbonding
+    /// Returns all pending unbonding.
     /// TODO: can we do that with contract API?
-    /// Or better they use cosmjs native delegation queries with this proxy address
+    /// Or better they use CosmJS native delegation queries with this proxy address
     #[msg(query)]
     fn unbonding(&self, _ctx: QueryCtx) -> Result<ClaimsResponse, ContractError> {
         todo!()
