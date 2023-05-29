@@ -17,7 +17,7 @@ use sylvia::{contract, schemars};
 use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
-    ConfigResp, LienInfo, StakingInitInfo,
+    ConfigResponse, LienInfo, StakingInitInfo,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 
@@ -117,8 +117,9 @@ impl VaultContract<'_> {
     fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
-        let coin = amount;
-        let amount = coin.amount;
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+
+        ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
 
         let mut user = self
             .users
@@ -127,16 +128,16 @@ impl VaultContract<'_> {
 
         let free_collateral = user.free_collateral();
         ensure!(
-            user.free_collateral() >= amount,
+            user.free_collateral() >= amount.amount,
             ContractError::ClaimsLocked(free_collateral)
         );
 
-        user.collateral -= amount;
+        user.collateral -= amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
         let msg = BankMsg::Send {
             to_address: ctx.info.sender.to_string(),
-            amount: vec![coin],
+            amount: vec![amount.clone()],
         };
 
         let resp = Response::new()
@@ -163,13 +164,9 @@ impl VaultContract<'_> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
-
         let contract = ctx.deps.api.addr_validate(&contract)?;
         let contract = CrossStakingApiHelper(contract);
         let slashable = contract.max_slash(ctx.deps.as_ref())?;
-
-        let denom = self.config.load(ctx.deps.storage)?.denom;
-        ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
 
         self.stake(
             &mut ctx,
@@ -208,11 +205,6 @@ impl VaultContract<'_> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
-        ensure!(
-            config.denom == amount.denom,
-            ContractError::UnexpectedDenom(config.denom)
-        );
-
         let local_staking = self.local_staking.load(ctx.deps.storage)?;
 
         self.stake(
@@ -259,11 +251,11 @@ impl VaultContract<'_> {
     }
 
     #[msg(query)]
-    fn config(&self, ctx: QueryCtx) -> Result<ConfigResp, ContractError> {
+    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
         let local_staking = self.local_staking.load(ctx.deps.storage)?;
 
-        let resp = ConfigResp {
+        let resp = ConfigResponse {
             denom: config.denom,
             local_staking: local_staking.contract.0.into(),
         };
@@ -433,7 +425,7 @@ impl VaultContract<'_> {
     /// Updates the local stake for unstaking from any contract
     ///
     /// The unstake (both local and remote) is always called by the staking contract
-    /// (aka leinholder), so the `sender` address is used for that.
+    /// (aka lienholder), so the `sender` address is used for that.
     fn unstake(&self, ctx: &mut ExecCtx, owner: String, amount: Coin) -> Result<(), ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         ensure!(amount.denom == denom, ContractError::UnexpectedDenom(denom));
@@ -452,8 +444,8 @@ impl VaultContract<'_> {
 
         let mut user = self.users.load(ctx.deps.storage, &owner)?;
 
-        // Max lien has to be recalculatd from scratch; the just released lien
-        // is already decreased in cache
+        // Max lien has to be recalculated from scratch; the just released lien
+        // is already written to storage
         user.max_lien = self
             .liens
             .prefix(&owner)

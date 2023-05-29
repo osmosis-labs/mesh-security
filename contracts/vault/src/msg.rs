@@ -48,7 +48,7 @@ pub struct LienInfo {
 }
 
 #[cw_serde]
-pub struct ConfigResp {
+pub struct ConfigResponse {
     pub denom: String,
     pub local_staking: String,
 }
