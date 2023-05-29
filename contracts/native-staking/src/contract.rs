@@ -29,6 +29,7 @@ pub struct NativeStakingContract<'a> {
     pub owner_by_proxy: Map<'a, &'a Addr, Addr>,
 }
 
+#[cfg_attr(not(feautre = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
 #[messages(local_staking_api as LocalStakingApi)]
