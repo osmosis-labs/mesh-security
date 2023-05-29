@@ -88,6 +88,7 @@ impl MockCrossStakingContract<'_> {
 }
 
 #[contract]
+#[messages(cross_staking_api as CrossStakingApi)]
 impl CrossStakingApi for MockCrossStakingContract<'_> {
     type Error = StakingError;
 

@@ -88,6 +88,7 @@ impl MockLocalStakingContract<'_> {
 }
 
 #[contract]
+#[messages(local_staking_api as LocalStakingApi)]
 impl LocalStakingApi for MockLocalStakingContract<'_> {
     type Error = StakingError;
 

@@ -2,7 +2,7 @@ use cosmwasm_std::{StdError, Uint128};
 use cw_utils::{ParseReplyError, PaymentError};
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
@@ -15,6 +15,9 @@ pub enum ContractError {
 
     #[error("Unauthorized")]
     Unauthorized {},
+
+    #[error("All denoms are expected to be {0}")]
+    UnexpectedDenom(String),
 
     #[error("Claim is locked, only {0} can be unbonded")]
     ClaimsLocked(Uint128),

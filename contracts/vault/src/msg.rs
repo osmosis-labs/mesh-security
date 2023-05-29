@@ -1,31 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Binary, Uint128};
-
-/*** state ***/
-
-#[cw_serde]
-pub struct Config {
-    /// The denom we accept for staking (only native tokens)
-    pub denom: String,
-
-    /// The address of the local staking contract (where actual tokens go)
-    pub local_staking: Addr,
-}
-
-/// All values are in Config.denom
-#[cw_serde]
-pub struct Balance {
-    pub bonded: Uint128,
-    pub claims: Vec<LienAddr>,
-}
-
-#[cw_serde]
-pub struct LienAddr {
-    pub lienholder: Addr,
-    pub amount: Uint128,
-}
-
-/**** api ****/
+use cosmwasm_std::{Binary, Uint128};
 
 /// This is the info used to construct the native staking contract
 #[cw_serde]
@@ -41,24 +15,40 @@ pub struct StakingInitInfo {
 }
 
 #[cw_serde]
-pub struct ConfigResponse {
-    pub denom: String,
-
-    /// The address of the local staking contract (where actual tokens go)
-    pub local_staking: String,
-}
-
-#[cw_serde]
 pub struct AccountResponse {
     // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
     pub denom: String,
     pub bonded: Uint128,
     pub free: Uint128,
-    pub claims: Vec<Lien>,
 }
 
 #[cw_serde]
-pub struct Lien {
+pub struct AllAccountsResponse {
+    pub accounts: Vec<AllAccountsResponseItem>,
+}
+
+#[cw_serde]
+pub struct AllAccountsResponseItem {
+    pub account: String,
+    // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
+    pub denom: String,
+    pub bonded: Uint128,
+    pub free: Uint128,
+}
+
+#[cw_serde]
+pub struct AccountClaimsResponse {
+    pub claims: Vec<LienInfo>,
+}
+
+#[cw_serde]
+pub struct LienInfo {
     pub lienholder: String,
     pub amount: Uint128,
+}
+
+#[cw_serde]
+pub struct ConfigResponse {
+    pub denom: String,
+    pub local_staking: String,
 }
