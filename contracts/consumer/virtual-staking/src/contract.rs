@@ -54,7 +54,7 @@ impl VirtualStakingContract<'_> {
         &self,
         ctx: InstantiateCtx,
         denom: String,
-    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
         let config = Config {
             denom,

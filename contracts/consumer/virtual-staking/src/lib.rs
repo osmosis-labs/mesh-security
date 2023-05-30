@@ -20,7 +20,7 @@ mod entry_points {
         env: Env,
         info: MessageInfo,
         msg: InstantiateMsg,
-    ) -> Result<Response<mesh_bindings::VirtualStakeCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         msg.dispatch(&CONTRACT, (deps, env, info))
     }
 

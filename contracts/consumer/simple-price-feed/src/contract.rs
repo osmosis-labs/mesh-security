@@ -75,7 +75,7 @@ impl SimplePriceFeedContract<'_> {
 }
 
 #[contract]
-#[messages(converter_api as PriceFeedApi)]
+#[messages(price_feed_api as PriceFeedApi)]
 impl PriceFeedApi for SimplePriceFeedContract<'_> {
     type Error = ContractError;
 
