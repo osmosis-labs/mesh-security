@@ -1,8 +1,12 @@
+use cosmwasm_std::Decimal;
+use sylvia::multitest::App;
+
+use local_staking_api::test_utils::LocalStakingApi;
+
 mod local_staking_proxy;
 
 use crate::contract;
-
-use sylvia::multitest::App;
+use crate::local_staking_api;
 
 const OSMO: &str = "OSMO";
 
@@ -23,4 +27,7 @@ fn instantiation() {
 
     let config = staking.config().unwrap();
     assert_eq!(config.denom, OSMO);
+
+    let res = staking.local_staking_api_proxy().max_slash().unwrap();
+    assert_eq!(res.max_slash, Decimal::percent(10));
 }
