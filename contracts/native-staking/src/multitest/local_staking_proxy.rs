@@ -1,6 +1,6 @@
 use cosmwasm_std::{to_binary, Coin, Response, StdResult, VoteOption, WeightedVoteOption};
 
-use crate::msg::OwnerMsg;
+use mesh_native_staking_proxy::msg::OwnerMsg;
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
