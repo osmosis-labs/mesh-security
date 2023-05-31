@@ -38,8 +38,9 @@ fn instantiation() {
 
 #[test]
 fn receiving_stake() {
-    let owner = "owner"; // Owner of the staking contract (the vault contract)
-    let user = "user1"; // User who wants to stake
+    let owner = "vault"; // Owner of the staking contract (i. e. the vault contract)
+    let user1 = "user1"; // One who wants to local stake
+    let user2 = "user2"; // Another one who wants to local stake
     let validator = "validator1"; // Validator to stake on
 
     // Fund the vault
@@ -62,20 +63,20 @@ fn receiving_stake() {
         .call(owner)
         .unwrap();
 
-    // Receive some stake on behalf of user for validator
+    // Receive some stake on behalf of user1 for validator
     let stake_msg = to_binary(&msg::StakeMsg {
         validator: validator.to_owned(),
     })
     .unwrap();
     staking
         .local_staking_api_proxy()
-        .receive_stake(user.to_owned(), stake_msg)
+        .receive_stake(user1.to_owned(), stake_msg)
         .with_funds(&coins(100, OSMO))
         .call(owner) // called from vault
         .unwrap();
 
     assert_eq!(
-        staking.proxy_by_owner(user.to_owned()).unwrap(),
+        staking.proxy_by_owner(user1.to_owned()).unwrap(),
         ProxyByOwnerResponse {
             proxy: "contract1".to_string(),
         }
@@ -84,7 +85,7 @@ fn receiving_stake() {
     assert_eq!(
         staking.owner_by_proxy("contract1".to_string()).unwrap(),
         OwnerByProxyResponse {
-            owner: user.to_owned(),
+            owner: user1.to_owned(),
         }
     );
 
@@ -97,14 +98,14 @@ fn receiving_stake() {
     .unwrap();
     staking
         .local_staking_api_proxy()
-        .receive_stake(user.to_owned(), stake_msg)
+        .receive_stake(user1.to_owned(), stake_msg)
         .with_funds(&coins(50, OSMO))
         .call(owner) // called from vault
         .unwrap();
 
     // Check that same proxy is used
     assert_eq!(
-        staking.proxy_by_owner(user.to_owned()).unwrap(),
+        staking.proxy_by_owner(user1.to_owned()).unwrap(),
         ProxyByOwnerResponse {
             proxy: "contract1".to_string(),
         }
@@ -113,9 +114,35 @@ fn receiving_stake() {
     assert_eq!(
         staking.owner_by_proxy("contract1".to_string()).unwrap(),
         OwnerByProxyResponse {
-            owner: user.to_owned(),
+            owner: user1.to_owned(),
         }
     );
 
     // TODO: Check funds are updated in the proxy contract
+
+    // Receive some stake on behalf of user2 for validator
+    let stake_msg = to_binary(&msg::StakeMsg {
+        validator: validator.to_owned(),
+    })
+    .unwrap();
+    staking
+        .local_staking_api_proxy()
+        .receive_stake(user2.to_owned(), stake_msg)
+        .with_funds(&coins(10, OSMO))
+        .call(owner) // called from vault
+        .unwrap();
+
+    assert_eq!(
+        staking.proxy_by_owner(user2.to_owned()).unwrap(),
+        ProxyByOwnerResponse {
+            proxy: "contract2".to_string(),
+        }
+    );
+
+    assert_eq!(
+        staking.owner_by_proxy("contract2".to_string()).unwrap(),
+        OwnerByProxyResponse {
+            owner: user2.to_owned(),
+        }
+    );
 }
