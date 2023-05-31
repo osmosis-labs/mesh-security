@@ -11,7 +11,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::msg::{ClaimsResponse, ConfigResponse};
+use crate::msg::{ClaimsResponse, ConfigResponse, OwnerMsg};
 use crate::native_staking_callback;
 use crate::state::Config;
 
@@ -57,7 +57,10 @@ impl NativeStakingProxyContract<'_> {
         let set_withdrawal = DistributionMsg::SetWithdrawAddress {
             address: config.owner.into_string(),
         };
-        Ok(res.add_message(set_withdrawal))
+
+        // Pass owner to caller's reply handler
+        let owner_msg = to_binary(&OwnerMsg { owner })?;
+        Ok(res.add_message(set_withdrawal).set_data(owner_msg))
     }
 
     /// Stakes the tokens from `info.funds` to the given validator.
