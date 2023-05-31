@@ -4,6 +4,7 @@ use sylvia::contract;
 use sylvia::types::ExecCtx;
 
 use mesh_apis::vault_api::VaultApiHelper;
+#[allow(unused_imports)]
 use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCallback};
 
 use crate::contract::NativeStakingContract;

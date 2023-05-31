@@ -1,21 +1,28 @@
-use cosmwasm_std::{ensure_eq, Coin, DistributionMsg, Response, VoteOption, WeightedVoteOption};
+use cosmwasm_std::WasmMsg::Execute;
+use cosmwasm_std::{
+    coin, ensure_eq, to_binary, Coin, DistributionMsg, GovMsg, Response, StakingMsg, VoteOption,
+    WeightedVoteOption,
+};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
+use cw_utils::must_pay;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::types::{ClaimsResponse, Config, ConfigResponse};
+use crate::msg::{ClaimsResponse, ConfigResponse, OwnerMsg};
+use crate::native_staking_callback;
+use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct NativeStakingProxyContract<'a> {
-    // TODO
     config: Item<'a, Config>,
 }
 
+#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
 impl NativeStakingProxyContract<'_> {
@@ -43,72 +50,91 @@ impl NativeStakingProxyContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-        // stake info.funds on validator
+        // Stake info.funds on validator
         let res = self.stake(ctx, validator)?;
 
-        // set owner as recipient of future withdrawls
-        let set_withdrawl = DistributionMsg::SetWithdrawAddress {
+        // Set owner as recipient of future withdrawals
+        let set_withdrawal = DistributionMsg::SetWithdrawAddress {
             address: config.owner.into_string(),
         };
-        Ok(res.add_message(set_withdrawl))
+
+        // Pass owner to caller's reply handler
+        let owner_msg = to_binary(&OwnerMsg { owner })?;
+        Ok(res.add_message(set_withdrawal).set_data(owner_msg))
     }
 
-    /// stakes the tokens from `info.funds` to the given validator.
-    /// can only be called by the parent contract.
+    /// Stakes the tokens from `info.funds` to the given validator.
+    /// Can only be called by the parent contract
     #[msg(exec)]
     fn stake(&self, ctx: ExecCtx, validator: String) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
 
-        let _ = validator;
-        todo!()
+        let amount = must_pay(&ctx.info, &cfg.denom)?;
+
+        let amount = coin(amount.u128(), cfg.denom);
+        let msg = StakingMsg::Delegate { validator, amount };
+
+        Ok(Response::new().add_message(msg))
     }
 
-    /// restakes the given amount from the one validator to another on behalf of the calling user.
-    /// returns an error if the user doesn't have such stake.
+    /// Re-stakes the given amount from the one validator to another on behalf of the calling user.
+    /// Returns an error if the user doesn't have such stake
     #[msg(exec)]
     fn restake(
         &self,
         ctx: ExecCtx,
-        from_validator: String,
-        to_validator: String,
+        src_validator: String,
+        dst_validator: String,
         amount: Coin,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::InvalidDenom(amount.denom)
+        );
 
-        let _ = (from_validator, to_validator, amount);
-        todo!()
+        let msg = StakingMsg::Redelegate {
+            src_validator,
+            dst_validator,
+            amount,
+        };
+        Ok(Response::new().add_message(msg))
     }
 
-    /// Vote with the users stake (over all delegations)
+    /// Vote with the user's stake (over all delegations)
     #[msg(exec)]
     fn vote(
         &self,
         ctx: ExecCtx,
-        proposal_id: String,
+        proposal_id: u64,
         vote: VoteOption,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
-        let _ = (proposal_id, vote);
-        todo!()
+        let msg = GovMsg::Vote { proposal_id, vote };
+        Ok(Response::new().add_message(msg))
     }
 
-    /// Vote with the users stake (over all delegations)
+    /// Vote with the user's stake (over all delegations)
     #[msg(exec)]
     fn vote_weighted(
         &self,
         ctx: ExecCtx,
-        proposal_id: String,
+        proposal_id: u64,
         vote: Vec<WeightedVoteOption>,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
-        let _ = (proposal_id, vote);
-        todo!()
+        let msg = GovMsg::VoteWeighted {
+            proposal_id,
+            options: vote,
+        };
+        Ok(Response::new().add_message(msg))
     }
 
     /// If the caller has any delegations, withdraw all rewards from those delegations and
@@ -119,20 +145,22 @@ impl NativeStakingProxyContract<'_> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
-        // TODO: track all validators
-        let validators = vec!["todo".to_string()];
-
-        // withdraw all delegations to the owner (set as withdrawl address in instantiate)
-        let msgs = validators
+        // Withdraw all delegations to the owner (already set as withdrawal address in instantiate)
+        let msgs = ctx
+            .deps
+            .querier
+            .query_all_delegations(ctx.env.contract.address)?
             .into_iter()
-            .map(|validator| DistributionMsg::WithdrawDelegatorReward { validator });
+            .map(|delegation| DistributionMsg::WithdrawDelegatorReward {
+                validator: delegation.validator,
+            });
         let res = Response::new().add_messages(msgs);
         Ok(res)
     }
 
-    /// unstakes the given amount from the given validator on behalf of the calling user.
-    /// returns an error if the user doesn't have such stake.
-    /// after unbonding period, it will allow the user to claim the tokens (returning to vault)
+    /// Unstakes the given amount from the given validator on behalf of the calling user.
+    /// Returns an error if the user doesn't have such stake.
+    /// After the unbonding period, it will allow the user to claim the tokens (returning to vault)
     #[msg(exec)]
     fn unstake(
         &self,
@@ -142,30 +170,52 @@ impl NativeStakingProxyContract<'_> {
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::InvalidDenom(amount.denom)
+        );
 
-        let _ = (validator, amount);
-        todo!()
+        // TODO?: Register unbonding as pending (needs unbonding period)
+
+        let msg = StakingMsg::Undelegate { validator, amount };
+        Ok(Response::new().add_message(msg))
     }
 
-    /// releases any tokens that have fully unbonded from a previous unstake.
-    /// this will go back to the parent via `release_proxy_stake`
-    /// error if the proxy doesn't have any liquid tokens
+    /// Releases any tokens that have fully unbonded from a previous unstake.
+    /// This will go back to the parent via `release_proxy_stake`.
+    /// Errors if the proxy doesn't have any liquid tokens
     #[msg(exec)]
     fn release_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
-        todo!()
+        // Simply assume all of our liquid assets are from unbondings
+        // TODO?: Get the list of all the completed unbondings
+        let balance = ctx
+            .deps
+            .querier
+            .query_balance(ctx.env.contract.address, cfg.denom)?;
+
+        // Send them to the parent contract via `release_proxy_stake`
+        let msg = to_binary(&native_staking_callback::ExecMsg::ReleaseProxyStake {})?;
+
+        let wasm_msg = Execute {
+            contract_addr: cfg.parent.to_string(),
+            msg,
+            funds: vec![balance],
+        };
+        Ok(Response::new().add_message(wasm_msg))
     }
 
     #[msg(query)]
-    fn config(&self, _ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
-        todo!()
+    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+        Ok(self.config.load(ctx.deps.storage)?)
     }
 
-    /// Returns all pending unbonding
+    /// Returns all pending unbonding.
     /// TODO: can we do that with contract API?
-    /// Or better they use cosmjs native delegation queries with this proxy address
+    /// Or better they use CosmJS native delegation queries with this proxy address
     #[msg(query)]
     fn unbonding(&self, _ctx: QueryCtx) -> Result<ClaimsResponse, ContractError> {
         todo!()
