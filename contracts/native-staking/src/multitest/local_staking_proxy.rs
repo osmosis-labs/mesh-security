@@ -28,7 +28,8 @@ impl LocalStakingProxy {
     }
 
     #[msg(exec)]
-    fn stake(&self, _ctx: ExecCtx, _validator: String) -> StdResult<Response> {
+    fn stake(&self, _ctx: ExecCtx, validator: String) -> StdResult<Response> {
+        let _ = validator;
         Ok(Response::new())
     }
 
