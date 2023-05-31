@@ -4,5 +4,5 @@ mod local_staking_api;
 mod msg;
 #[cfg(test)]
 mod multitest;
-mod native_slashing_callback;
+mod native_staking_callback;
 mod state;
