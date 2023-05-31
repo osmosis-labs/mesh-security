@@ -165,9 +165,9 @@ fn receiving_stake() {
 fn releasing_proxy_stake() {
     let owner = "vault_admin"; // Owner of the staking contract (i. e. the vault contract)
 
-    let _vault_addr = "contract0"; // First created contract
+    let vault_addr = "contract0"; // First created contract
     let staking_addr = "contract1"; // Second contract (instantiated by vault)
-    let proxy_addr = "contract2"; // Staking proxy contract for user1 (instantiated by staking on stake)
+    let proxy_addr = "contract2"; // Staking proxy contract for user1 (instantiated by staking contract on stake)
 
     let user = "user1"; // One who wants to release stake
     let validator = "validator1";
@@ -205,6 +205,12 @@ fn releasing_proxy_stake() {
         .call(owner)
         .unwrap();
 
+    // Vault is empty
+    assert_eq!(
+        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        coin(0, OSMO)
+    );
+
     // Access staking instance
     let staking = contract::multitest_utils::NativeStakingContractProxy::new(
         Addr::unchecked(staking_addr),
@@ -218,7 +224,13 @@ fn releasing_proxy_stake() {
         .call(user)
         .unwrap();
 
-    // Stakes them locally, to validator
+    // Vault has the funds
+    assert_eq!(
+        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        coin(200, OSMO)
+    );
+
+    // Stakes some of it locally, to validator
     vault
         .stake_local(
             coin(100, OSMO),
@@ -230,7 +242,19 @@ fn releasing_proxy_stake() {
         .call(user)
         .unwrap();
 
-    // Now release some funds (as if called from the staking proxy)
+    // Vault has half the funds
+    assert_eq!(
+        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        coin(100, OSMO)
+    );
+
+    // The other half is in the user's proxy contract
+    assert_eq!(
+        app.app().wrap().query_balance(proxy_addr, OSMO).unwrap(),
+        coin(100, OSMO)
+    );
+
+    // Now release the funds (as if called from the user's staking proxy)
     staking
         .native_staking_callback_proxy()
         .release_proxy_stake()
@@ -238,5 +262,9 @@ fn releasing_proxy_stake() {
         .call(proxy_addr)
         .unwrap();
 
-    // TODO: Check the vault now has the funds again
+    // Check that the vault has the funds again
+    assert_eq!(
+        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        coin(200, OSMO)
+    );
 }
