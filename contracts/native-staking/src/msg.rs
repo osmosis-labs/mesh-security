@@ -18,9 +18,3 @@ pub struct OwnerByProxyResponse {
 pub struct StakeMsg {
     pub validator: String,
 }
-
-/// The message that is binary encoded in a proxy contract's `Instantiate` message's data
-#[cw_serde]
-pub struct OwnerMsg {
-    pub owner: String,
-}

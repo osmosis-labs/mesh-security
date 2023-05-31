@@ -6,10 +6,11 @@ use sylvia::types::{InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
+use mesh_native_staking_proxy::msg::OwnerMsg;
 use mesh_native_staking_proxy::native_staking_callback;
 
 use crate::error::ContractError;
-use crate::msg::{ConfigResponse, OwnerByProxyResponse, OwnerMsg, ProxyByOwnerResponse};
+use crate::msg::{ConfigResponse, OwnerByProxyResponse, ProxyByOwnerResponse};
 use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
