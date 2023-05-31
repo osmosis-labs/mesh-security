@@ -11,8 +11,9 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
+use crate::msg::{ClaimsResponse, ConfigResponse};
 use crate::native_staking_callback;
-use crate::types::{ClaimsResponse, Config, ConfigResponse};
+use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");

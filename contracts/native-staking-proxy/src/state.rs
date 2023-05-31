@@ -1,8 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Addr;
 
-/*** state ***/
-
 #[cw_serde]
 pub struct Config {
     /// The denom we accept for staking
@@ -13,13 +11,4 @@ pub struct Config {
 
     /// The address of the parent contract (where we get and return stake)
     pub parent: Addr,
-}
-
-/**** api ****/
-
-pub type ConfigResponse = Config;
-
-#[cw_serde]
-pub struct ClaimsResponse {
-    // TODO
 }
