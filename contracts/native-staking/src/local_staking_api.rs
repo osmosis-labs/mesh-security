@@ -3,6 +3,7 @@ use cw_utils::must_pay;
 use sylvia::types::QueryCtx;
 use sylvia::{contract, types::ExecCtx};
 
+#[allow(unused_imports)]
 use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
 
 use crate::contract::{NativeStakingContract, MAX_SLASH_PERCENTAGE, REPLY_ID_INSTANTIATE};
