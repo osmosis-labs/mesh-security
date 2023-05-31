@@ -40,7 +40,7 @@ fn instantiation() {
 }
 
 #[test]
-fn binding() {
+fn bonding() {
     let owner = "owner";
     let user = "user1";
 
