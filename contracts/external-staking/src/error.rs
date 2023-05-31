@@ -17,4 +17,10 @@ pub enum ContractError {
 
     #[error("Not enough tokens released, up to {0} can be claimed")]
     NotEnoughRelease(Uint128),
+
+    #[error("Internal invariants are not meet, but in the contract happened")]
+    InvariantsNotMet,
+
+    #[error("Validator for user missmatch, {0} expected")]
+    InvalidValidator(String),
 }

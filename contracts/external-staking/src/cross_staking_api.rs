@@ -1,4 +1,4 @@
-use cosmwasm_std::{ensure_eq, Binary, Coin, Decimal, Response};
+use cosmwasm_std::{ensure_eq, from_binary, Binary, Coin, Decimal, Order, Response};
 #[allow(unused_imports)]
 use mesh_apis::cross_staking_api::{self, CrossStakingApi};
 use mesh_apis::local_staking_api::MaxSlashResponse;
@@ -7,6 +7,7 @@ use sylvia::types::{ExecCtx, QueryCtx};
 
 use crate::contract::ExternalStakingContract;
 use crate::error::ContractError;
+use crate::msg::ReceiveVirtualStake;
 
 #[contract]
 #[messages(cross_staking_api as CrossStakingApi)]
@@ -19,7 +20,7 @@ impl CrossStakingApi for ExternalStakingContract<'_> {
         ctx: ExecCtx,
         owner: String,
         amount: Coin,
-        _msg: Binary,
+        msg: Binary,
     ) -> Result<Response, Self::Error> {
         let config = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, config.vault.0, ContractError::Unauthorized);
@@ -32,14 +33,35 @@ impl CrossStakingApi for ExternalStakingContract<'_> {
 
         let owner = ctx.deps.api.addr_validate(&owner)?;
 
-        let mut user = self
-            .users
-            .may_load(ctx.deps.storage, &owner)?
-            .unwrap_or_default();
+        let msg: ReceiveVirtualStake = from_binary(&msg)?;
 
-        user.stake += amount.amount;
+        // For now we assume there is only single validator per user, however we want to maintain
+        // proper structure keeping `(user, validator)` as bound index
 
-        self.users.save(ctx.deps.storage, &owner, &user)?;
+        let stakes: Vec<_> = self
+            .stakes
+            .prefix(&owner)
+            .range(ctx.deps.storage, None, None, Order::Ascending)
+            .collect();
+
+        ensure_eq!(stakes.len(), 1, ContractError::InvariantsNotMet);
+
+        let (validator, mut stake) = stakes.into_iter().next().transpose()?.unwrap_or_else(|| {
+            let validator = msg.validator.clone();
+            let stake = Default::default();
+            (validator, stake)
+        });
+
+        ensure_eq!(
+            validator,
+            msg.validator,
+            ContractError::InvalidValidator(msg.validator)
+        );
+
+        stake.stake += amount.amount;
+
+        self.stakes
+            .save(ctx.deps.storage, (&owner, &validator), &stake)?;
 
         // TODO: Send proper IBC message to remote staking contract
 

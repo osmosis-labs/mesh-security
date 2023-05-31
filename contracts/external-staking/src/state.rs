@@ -13,18 +13,20 @@ pub struct Config {
     pub unbonding_period: u64,
 }
 
-/// All user/account related information
+/// All single stake related information - entry per `(user, validator)` pair
 #[cw_serde]
 #[derive(Default)]
-pub struct User {
+pub struct Stake {
     /// How much tokens user staken and not in unbonding period
     /// via this contract
     pub stake: Uint128,
-    /// List of token batches scheduled for unboding
-    ///
-    /// Items should only be added to the end of this list, with `release_at` being
-    /// `unbonding_period` after current time - this way this is guaranteed to be
-    /// always sorted (as time is guaranteed to be monotonic).
+}
+
+/// All per-user information
+#[cw_serde]
+#[derive(Default)]
+pub struct User {
+    /// List of token batches scheduled for unbouding
     pub pending_unbonds: Vec<PendingUnbond>,
 }
 

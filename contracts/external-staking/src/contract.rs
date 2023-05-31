@@ -7,8 +7,8 @@ use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use crate::error::ContractError;
-use crate::msg::{ConfigResponse, UserInfo, UsersResponse};
-use crate::state::{Config, PendingUnbond, User};
+use crate::msg::{ConfigResponse, StakeInfo, StakesResponse, UserInfo, UsersResponse};
+use crate::state::{Config, PendingUnbond, Stake, User};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -23,6 +23,7 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
 
 pub struct ExternalStakingContract<'a> {
     pub config: Item<'a, Config>,
+    pub stakes: Map<'a, (&'a Addr, &'a str), Stake>,
     pub users: Map<'a, &'a Addr, User>,
 }
 
@@ -34,6 +35,7 @@ impl ExternalStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
+            stakes: Map::new("stakes"),
             users: Map::new("users"),
         }
     }
@@ -65,7 +67,12 @@ impl ExternalStakingContract<'_> {
     /// Schedules tokens for release, adding them to the pending unbonds. After `unbonding_period`
     /// passes, funds are ready to be released with `withdraw_unbonded` call by the user
     #[msg(exec)]
-    pub fn unstake(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
+    pub fn unstake(
+        &self,
+        ctx: ExecCtx,
+        validator: String,
+        amount: Coin,
+    ) -> Result<Response, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
 
         ensure_eq!(
@@ -74,17 +81,25 @@ impl ExternalStakingContract<'_> {
             ContractError::InvalidDenom(config.denom)
         );
 
+        let mut stake = self
+            .stakes
+            .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
+            .unwrap_or_default();
+
+        ensure!(
+            stake.stake >= amount.amount,
+            ContractError::NotEnoughStake(stake.stake)
+        );
+
+        stake.stake -= amount.amount;
+
+        self.stakes
+            .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?;
+
         let mut user = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
-
-        ensure!(
-            user.stake >= amount.amount,
-            ContractError::NotEnoughStake(user.stake)
-        );
-
-        user.stake -= amount.amount;
 
         let release_at = ctx.env.block.time.plus_seconds(config.unbonding_period);
         let unbond = PendingUnbond {
@@ -145,20 +160,27 @@ impl ExternalStakingContract<'_> {
         Ok(resp)
     }
 
-    /// Queries for user-related info
+    /// Queries for stake info
     ///
-    /// If user not existin in the system is queried, the default "nothing staken" user
-    /// is returned
+    /// If stake is not existing in the system is queried, the default "nothing staken" is returned
     #[msg(query)]
-    pub fn user(&self, ctx: QueryCtx, user: String) -> Result<User, ContractError> {
+    pub fn user(
+        &self,
+        ctx: QueryCtx,
+        user: String,
+        validator: String,
+    ) -> Result<Stake, ContractError> {
         let user = ctx.deps.api.addr_validate(&user)?;
-        let user = self
-            .users
-            .may_load(ctx.deps.storage, &user)?
+        let stake = self
+            .stakes
+            .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
-        Ok(user)
+        Ok(stake)
     }
 
+    /// Paginate list of users
+    ///
+    /// `start_after` is the last user address of previous page
     #[msg(query)]
     pub fn users(
         &self,
@@ -177,14 +199,48 @@ impl ExternalStakingContract<'_> {
             .map(|item| {
                 item.map(|(addr, user)| UserInfo {
                     addr: addr.into(),
-                    stake: user.stake,
                     pending_unbonds: user.pending_unbonds,
                 })
             })
             .take(limit)
             .collect::<Result<_, _>>()?;
 
-        let resp = UsersResponse { users };
+        let users = UsersResponse { users };
+
+        Ok(users)
+    }
+
+    /// Paginated list of user stakes.
+    ///
+    /// `start_after` is the last validator of previous page
+    #[msg(query)]
+    pub fn stakes(
+        &self,
+        ctx: QueryCtx,
+        user: String,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<StakesResponse, ContractError> {
+        let limit = clamp_page_limit(limit);
+        let user = Addr::unchecked(user);
+
+        let bound = start_after.as_deref().and_then(Bounder::exclusive_bound);
+
+        let stakes = self
+            .stakes
+            .prefix(&user)
+            .range(ctx.deps.storage, bound, None, Order::Ascending)
+            .map(|item| {
+                item.map(|(validator, stake)| StakeInfo {
+                    owner: user.to_string(),
+                    validator,
+                    stake: stake.stake,
+                })
+            })
+            .take(limit)
+            .collect::<Result<_, _>>()?;
+
+        let resp = StakesResponse { stakes };
 
         Ok(resp)
     }

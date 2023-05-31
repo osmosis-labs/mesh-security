@@ -1,6 +1,6 @@
 [workspace]
 # TODO: move other contracts into provider subdirectory
-members = ["packages/*", "contracts/native-staking*", "contracts/vault", "contracts/consumer/*"]
+members = ["packages/*", "contracts/external-staking", "contracts/native-staking*", "contracts/vault", "contracts/consumer/*"]
 resolver = "2"
 
 [workspace.package]
