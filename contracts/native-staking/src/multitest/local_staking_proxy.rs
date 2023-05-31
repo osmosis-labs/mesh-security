@@ -1,5 +1,6 @@
-use cosmwasm_std::{Coin, Response, StdResult, VoteOption, WeightedVoteOption};
+use cosmwasm_std::{to_binary, Coin, Response, StdResult, VoteOption, WeightedVoteOption};
 
+use crate::msg::OwnerMsg;
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
@@ -17,11 +18,13 @@ impl LocalStakingProxy {
     pub fn instantiate(
         &self,
         _ctx: InstantiateCtx,
-        _denom: String,
-        _owner: String,
-        _validator: String,
+        denom: String,
+        owner: String,
+        validator: String,
     ) -> StdResult<Response> {
-        Ok(Response::new())
+        let (_, _) = (denom, validator);
+        let owner_msg = to_binary(&OwnerMsg { owner })?;
+        Ok(Response::new().set_data(owner_msg))
     }
 
     #[msg(exec)]
