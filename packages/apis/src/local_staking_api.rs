@@ -45,10 +45,11 @@ impl LocalStakingApiHelper {
 
     pub fn receive_stake(
         &self,
-        // address of the user who originally called stake_remote
+        // address of the user who originally called stake_local
         owner: String,
-        // amount to unstake on that contract
+        // custom to each implementation and opaque to the vault
         msg: Binary,
+        // amount to stake on that contract
         funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {
         let msg = LocalStakingApiExecMsg::ReceiveStake { owner, msg };
