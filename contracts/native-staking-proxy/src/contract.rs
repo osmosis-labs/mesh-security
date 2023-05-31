@@ -22,6 +22,7 @@ pub struct NativeStakingProxyContract<'a> {
     config: Item<'a, Config>,
 }
 
+#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
 impl NativeStakingProxyContract<'_> {
