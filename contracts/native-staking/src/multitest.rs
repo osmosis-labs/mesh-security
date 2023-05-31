@@ -1,4 +1,4 @@
-use cosmwasm_std::{coins, to_binary, Addr, Decimal};
+use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal};
 
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
@@ -89,7 +89,11 @@ fn receiving_stake() {
         }
     );
 
-    // TODO: Check funds are in the proxy contract
+    // Check that funds are in the proxy contract
+    assert_eq!(
+        app.app().wrap().query_balance("contract1", OSMO).unwrap(),
+        coin(100, OSMO)
+    );
 
     // Stake some more
     let stake_msg = to_binary(&msg::StakeMsg {
@@ -118,7 +122,11 @@ fn receiving_stake() {
         }
     );
 
-    // TODO: Check funds are updated in the proxy contract
+    // Check that funds are updated in the proxy contract
+    assert_eq!(
+        app.app().wrap().query_balance("contract1", OSMO).unwrap(),
+        coin(150, OSMO)
+    );
 
     // Receive some stake on behalf of user2 for validator
     let stake_msg = to_binary(&msg::StakeMsg {
@@ -144,5 +152,11 @@ fn receiving_stake() {
         OwnerByProxyResponse {
             owner: user2.to_owned(),
         }
+    );
+
+    // Check that funds are in the corresponding proxy contract
+    assert_eq!(
+        app.app().wrap().query_balance("contract2", OSMO).unwrap(),
+        coin(10, OSMO)
     );
 }
