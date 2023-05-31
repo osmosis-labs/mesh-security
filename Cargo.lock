@@ -385,6 +385,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "external-staking"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "mesh-apis",
+ "schemars",
+ "serde",
+ "sylvia",
+ "thiserror",
+]
+
+[[package]]
 name = "ff"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
