@@ -3,12 +3,12 @@ use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal};
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
 
-use local_staking_api::test_utils::LocalStakingApi;
+use crate::local_staking_api::test_utils::LocalStakingApi;
+use crate::native_staking_callback::test_utils::NativeStakingCallback;
 
 mod local_staking_proxy;
 
 use crate::contract;
-use crate::local_staking_api;
 use crate::msg;
 use crate::msg::{OwnerByProxyResponse, ProxyByOwnerResponse};
 
@@ -159,4 +159,84 @@ fn receiving_stake() {
         app.app().wrap().query_balance("contract2", OSMO).unwrap(),
         coin(10, OSMO)
     );
+}
+
+#[test]
+fn releasing_proxy_stake() {
+    let owner = "vault_admin"; // Owner of the staking contract (i. e. the vault contract)
+
+    let _vault_addr = "contract0"; // First created contract
+    let staking_addr = "contract1"; // Second contract (instantiated by vault)
+    let proxy_addr = "contract2"; // Staking proxy contract for user1 (instantiated by staking on stake)
+
+    let user = "user1"; // One who wants to release stake
+    let validator = "validator1";
+
+    // Fund the user
+    let app = MtApp::new(|router, _api, storage| {
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(user), coins(300, OSMO))
+            .unwrap();
+    });
+    let app = App::new(app);
+
+    // Contracts setup
+    let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(&app);
+    let staking_code = contract::multitest_utils::CodeId::store_code(&app);
+    let staking_proxy_code = local_staking_proxy::multitest_utils::CodeId::store_code(&app);
+
+    // Instantiate vault msg
+    let staking_init_info = mesh_vault::msg::StakingInitInfo {
+        admin: None,
+        code_id: staking_code.code_id(),
+        msg: to_binary(&crate::contract::InstantiateMsg {
+            denom: OSMO.to_owned(),
+            proxy_code_id: staking_proxy_code.code_id(),
+        })
+        .unwrap(),
+        label: None,
+    };
+
+    // Instantiates vault, staking and staking proxy contracts
+    let vault = vault_code
+        .instantiate(OSMO.to_owned(), staking_init_info)
+        .with_label("Vault")
+        .call(owner)
+        .unwrap();
+
+    // Access staking instance
+    let staking = contract::multitest_utils::NativeStakingContractProxy::new(
+        Addr::unchecked(staking_addr),
+        &app,
+    );
+
+    // User bonds some funds to the vault
+    vault
+        .bond()
+        .with_funds(&coins(200, OSMO))
+        .call(user)
+        .unwrap();
+
+    // Stakes them locally, to validator
+    vault
+        .stake_local(
+            coin(100, OSMO),
+            to_binary(&msg::StakeMsg {
+                validator: validator.to_owned(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
+    // Now release some funds (as if called from the staking proxy)
+    staking
+        .native_staking_callback_proxy()
+        .release_proxy_stake()
+        .with_funds(&coins(100, OSMO))
+        .call(proxy_addr)
+        .unwrap();
+
+    // TODO: Check the vault now has the funds again
 }
