@@ -19,6 +19,7 @@ pub struct ConverterContract<'a> {
     pub virtual_stake: Item<'a, Addr>,
 }
 
+#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
 #[messages(converter_api as ConverterApi)]

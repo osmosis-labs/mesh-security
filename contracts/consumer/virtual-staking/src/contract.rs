@@ -36,6 +36,7 @@ pub struct VirtualStakingContract<'a> {
     pub bonded: Item<'a, Vec<(String, Uint128)>>,
 }
 
+#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
 #[messages(virtual_staking_api as VirtualStakingApi)]
@@ -113,9 +114,9 @@ impl VirtualStakingContract<'_> {
             .collect::<Result<_, _>>()?;
         let total_requested: Uint128 = requests.iter().map(|(_, v)| v).sum();
         if total_requested > max_cap {
-            requests.iter_mut().for_each(|(_, v)| {
+            for (_, v) in requests.iter_mut() {
                 *v = (*v * max_cap) / total_requested;
-            });
+            }
         }
 
         // Load current bonded and save the future values

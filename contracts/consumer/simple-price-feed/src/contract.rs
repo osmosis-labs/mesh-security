@@ -18,6 +18,7 @@ pub struct SimplePriceFeedContract<'a> {
     pub config: Item<'a, Config>,
 }
 
+#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
 #[messages(price_feed_api as PriceFeedApi)]
