@@ -35,10 +35,13 @@ serde            = { workspace = true }
 thiserror        = { workspace = true }
 
 [dev-dependencies]
+sylvia        = { workspace = true, features = ["mt"] }
 cw-multi-test = { workspace = true }
 test-case     = { workspace = true }
 derivative    = { workspace = true }
 anyhow        = { workspace = true }
+
+mesh-vault    = { workspace = true, features = ["mt"] }
 
 [[bin]]
 name = "schema"

@@ -40,7 +40,7 @@ fn instantiation() {
 }
 
 #[test]
-fn binding() {
+fn bonding() {
     let owner = "owner";
     let user = "user1";
 
@@ -82,7 +82,6 @@ fn binding() {
     assert_eq!(claims.claims, []);
 
     // Bond some tokens
-
     vault
         .bond()
         .with_funds(&coins(100, OSMO))
@@ -260,7 +259,7 @@ fn stake_local() {
         coin(0, OSMO)
     );
 
-    // Staking localy
+    // Staking locally
 
     vault
         .stake_local(coin(100, OSMO), Binary::default())

@@ -616,6 +616,7 @@ dependencies = [
  "derivative",
  "mesh-apis",
  "mesh-native-staking-proxy",
+ "mesh-vault",
  "schemars",
  "serde",
  "sylvia",

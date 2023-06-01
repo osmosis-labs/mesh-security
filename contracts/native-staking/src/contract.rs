@@ -1,8 +1,8 @@
-use cosmwasm_std::{entry_point, from_slice, Addr, DepsMut, Env, Reply, Response, SubMsgResponse};
+use cosmwasm_std::{from_slice, Addr, DepsMut, Reply, Response, SubMsgResponse};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
-use sylvia::types::{InstantiateCtx, QueryCtx};
+use sylvia::types::{InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
@@ -29,6 +29,7 @@ pub struct NativeStakingContract<'a> {
     pub owner_by_proxy: Map<'a, &'a Addr, Addr>,
 }
 
+#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
 #[messages(local_staking_api as LocalStakingApi)]
@@ -63,6 +64,14 @@ impl NativeStakingContract<'_> {
     #[msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         self.config.load(ctx.deps.storage).map_err(Into::into)
+    }
+
+    #[msg(reply)]
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+        match reply.id {
+            REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
+            _ => Err(ContractError::InvalidReplyId(reply.id)),
+        }
     }
 
     fn reply_init_callback(
@@ -109,15 +118,5 @@ impl NativeStakingContract<'_> {
         Ok(OwnerByProxyResponse {
             owner: owner_addr.to_string(),
         })
-    }
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, ContractError> {
-    match reply.id {
-        REPLY_ID_INSTANTIATE => {
-            NativeStakingContract::new().reply_init_callback(deps, reply.result.unwrap())
-        }
-        _ => Err(ContractError::InvalidReplyId(reply.id)),
     }
 }
