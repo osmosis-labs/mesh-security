@@ -229,7 +229,7 @@ impl ExternalStakingContract<'_> {
     }
 }
 
-mod cross_staking {
+pub mod cross_staking {
     use super::*;
 
     #[contract]

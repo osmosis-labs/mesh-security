@@ -263,6 +263,22 @@ impl VaultContract<'_> {
         Ok(resp)
     }
 
+    /// Returns a singl claim between the user and lienholder
+    #[msg(query)]
+    fn claim(
+        &self,
+        ctx: QueryCtx,
+        account: String,
+        lienholder: String,
+    ) -> Result<Lien, ContractError> {
+        let account = ctx.deps.api.addr_validate(&account)?;
+        let lienholder = ctx.deps.api.addr_validate(&lienholder)?;
+
+        self.liens
+            .load(ctx.deps.storage, (&account, &lienholder))
+            .map_err(Into::into)
+    }
+
     /// Returns paginated claims list for an user
     ///
     /// `start_after` is a last lienholder of the previous page, and it will not be included
@@ -439,6 +455,7 @@ impl VaultContract<'_> {
 
         ensure!(lien.amount >= amount, ContractError::InsufficientLien);
         lien.amount -= amount;
+
         self.liens
             .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien)?;
 
