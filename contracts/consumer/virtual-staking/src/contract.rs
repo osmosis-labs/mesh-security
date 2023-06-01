@@ -2,8 +2,8 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use cosmwasm_std::{
-    coin, ensure_eq, entry_point, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Response,
-    StakingMsg, SubMsg, Uint128,
+    coin, ensure_eq, entry_point, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Response, SubMsg,
+    Uint128,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
