@@ -29,6 +29,7 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
 
 pub struct ExternalStakingContract<'a> {
     pub config: Item<'a, Config>,
+    // Stakes indexed by `(owner, validator)` pair
     pub stakes: Map<'a, (&'a Addr, &'a str), Stake>,
 }
 
@@ -243,7 +244,7 @@ impl ExternalStakingContract<'_> {
         limit: Option<u32>,
     ) -> Result<StakesResponse, ContractError> {
         let limit = clamp_page_limit(limit);
-        let user = Addr::unchecked(user);
+        let user = ctx.deps.api.addr_validate(&user)?;
 
         let bound = start_after.as_deref().and_then(Bounder::exclusive_bound);
 
@@ -304,8 +305,6 @@ mod cross_staking {
                 .prefix(&owner)
                 .range(ctx.deps.storage, None, None, Order::Ascending)
                 .collect();
-
-            ensure_eq!(stakes.len(), 1, ContractError::InvariantsNotMet);
 
             let (validator, mut stake) =
                 stakes.into_iter().next().transpose()?.unwrap_or_else(|| {

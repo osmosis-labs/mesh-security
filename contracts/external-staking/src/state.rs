@@ -21,6 +21,10 @@ pub struct Stake {
     /// via this contract
     pub stake: Uint128,
     /// List of token batches scheduled for unbouding
+    ///
+    /// Items should only be added to the end of this list, with `release_at` being
+    /// `unbonding_period` after current time - this way this is guaranteed to be
+    /// always sorted (as time is guaranteed to be monotonic).
     pub pending_unbonds: Vec<PendingUnbond>,
 }
 
