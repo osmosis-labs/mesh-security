@@ -165,7 +165,7 @@ fn calculate_rebalance(
     // any new validators in the desired list need to be bonded
     for (validator, bond) in desired {
         let amount = coin(bond.u128(), denom);
-        msgs.push(StakingMsg::Delegate { validator, amount }.into())
+        msgs.push(VirtualStakeMsg::Bond { validator, amount }.into())
     }
 
     msgs
