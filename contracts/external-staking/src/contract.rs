@@ -164,7 +164,7 @@ impl ExternalStakingContract<'_> {
     ///
     /// If stake is not existing in the system is queried, the default "nothing staken" is returned
     #[msg(query)]
-    pub fn user(
+    pub fn stake(
         &self,
         ctx: QueryCtx,
         user: String,
