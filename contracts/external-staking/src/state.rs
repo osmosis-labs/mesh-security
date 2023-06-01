@@ -20,12 +20,6 @@ pub struct Stake {
     /// How much tokens user staken and not in unbonding period
     /// via this contract
     pub stake: Uint128,
-}
-
-/// All per-user information
-#[cw_serde]
-#[derive(Default)]
-pub struct User {
     /// List of token batches scheduled for unbouding
     pub pending_unbonds: Vec<PendingUnbond>,
 }
@@ -39,7 +33,7 @@ pub struct PendingUnbond {
     pub release_at: Timestamp,
 }
 
-impl User {
+impl Stake {
     /// Removes expired entries from `pending_unbonds`, returning amount of tokens released.
     pub fn release_pending(&mut self, info: &BlockInfo) -> Uint128 {
         // The fact that `pending unbonds are always added to the end, so they are always ordered

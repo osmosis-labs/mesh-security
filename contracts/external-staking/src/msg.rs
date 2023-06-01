@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Uint128;
 
-use crate::state::{Config, PendingUnbond};
+use crate::state::Config;
 
 /// Config information returned with query
 #[cw_serde]
@@ -46,7 +46,6 @@ pub struct ReceiveVirtualStake {
 #[cw_serde]
 pub struct UserInfo {
     pub addr: String,
-    pub pending_unbonds: Vec<PendingUnbond>,
 }
 
 /// Aggregated multiple users response

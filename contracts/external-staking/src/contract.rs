@@ -1,6 +1,6 @@
-use cosmwasm_std::{coin, ensure, ensure_eq, Addr, Coin, Order, Response};
+use cosmwasm_std::{coin, ensure, ensure_eq, Addr, Coin, Order, Response, Uint128};
 use cw2::set_contract_version;
-use cw_storage_plus::{Bounder, Item, Map};
+use cw_storage_plus::{Bounder, Item, Map, PrefixBound};
 use mesh_apis::cross_staking_api;
 use mesh_apis::vault_api::VaultApiHelper;
 use sylvia::contract;
@@ -8,7 +8,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use crate::error::ContractError;
 use crate::msg::{ConfigResponse, StakeInfo, StakesResponse, UserInfo, UsersResponse};
-use crate::state::{Config, PendingUnbond, Stake, User};
+use crate::state::{Config, PendingUnbond, Stake};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -24,7 +24,6 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
 pub struct ExternalStakingContract<'a> {
     pub config: Item<'a, Config>,
     pub stakes: Map<'a, (&'a Addr, &'a str), Stake>,
-    pub users: Map<'a, &'a Addr, User>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -36,7 +35,6 @@ impl ExternalStakingContract<'_> {
         Self {
             config: Item::new("config"),
             stakes: Map::new("stakes"),
-            users: Map::new("users"),
         }
     }
 
@@ -93,22 +91,15 @@ impl ExternalStakingContract<'_> {
 
         stake.stake -= amount.amount;
 
-        self.stakes
-            .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?;
-
-        let mut user = self
-            .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
-            .unwrap_or_default();
-
         let release_at = ctx.env.block.time.plus_seconds(config.unbonding_period);
         let unbond = PendingUnbond {
             amount: amount.amount,
             release_at,
         };
-        user.pending_unbonds.push(unbond);
+        stake.pending_unbonds.push(unbond);
 
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.stakes
+            .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?;
 
         // TODO:
         //
@@ -130,13 +121,24 @@ impl ExternalStakingContract<'_> {
     pub fn withdraw_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
 
-        let mut user = self
-            .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
-            .unwrap_or_default();
+        let stakes: Vec<_> = self
+            .stakes
+            .prefix(&ctx.info.sender)
+            .range(ctx.deps.storage, None, None, Order::Ascending)
+            .collect::<Result<_, _>>()?;
 
-        let released = user.release_pending(&ctx.env.block);
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        let released: Uint128 = stakes
+            .into_iter()
+            .map(|(validator, mut stake)| {
+                let released = stake.release_pending(&ctx.env.block);
+                self.stakes
+                    .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)
+                    .map(|_| released)
+            })
+            .fold(Ok(Uint128::zero()), |acc, released| {
+                let acc = acc?;
+                released.map(|released| released + acc)
+            })?;
 
         let release_msg = config.vault.release_cross_stake(
             ctx.info.sender.to_string(),
@@ -191,17 +193,30 @@ impl ExternalStakingContract<'_> {
         let limit = clamp_page_limit(limit);
 
         let start_after = start_after.map(Addr::unchecked);
-        let bound = start_after.as_ref().and_then(Bounder::exclusive_bound);
+        let bound = start_after.as_ref().map(PrefixBound::exclusive);
 
         let users = self
-            .users
-            .range(ctx.deps.storage, bound, None, Order::Ascending)
-            .map(|item| {
-                item.map(|(addr, user)| UserInfo {
-                    addr: addr.into(),
-                    pending_unbonds: user.pending_unbonds,
-                })
+            .stakes
+            .prefix_range(ctx.deps.storage, bound, None, Order::Ascending)
+            // Makes items into `Some(addr)` for first occurence of an address, or `None` for others
+            // States is the previous returned address
+            // Double-option wrapping, as top-level `None` breaks iteration in scan
+            .scan(None, |last, item| {
+                let item = item.map(|((addr, _), _)| match (last, addr) {
+                    (last @ None, addr) => {
+                        *last = Some(addr.clone());
+                        Some(addr)
+                    }
+                    (Some(l), addr) if *l != addr => {
+                        *l = addr.clone();
+                        Some(addr)
+                    }
+                    _ => None,
+                });
+                Some(item.transpose())
             })
+            .flatten()
+            .map(|addr| addr.map(|addr| UserInfo { addr: addr.into() }))
             .take(limit)
             .collect::<Result<_, _>>()?;
 
