@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use cosmwasm_std::{
     coin, ensure_eq, entry_point, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Response,
@@ -139,7 +139,7 @@ fn calculate_rebalance(
     desired: Vec<(String, Uint128)>,
     denom: &str,
 ) -> Vec<CosmosMsg<VirtualStakeCustomMsg>> {
-    let mut desired: HashMap<_, _> = desired.into_iter().collect();
+    let mut desired: BTreeMap<_, _> = desired.into_iter().collect();
 
     // this will handle adjustments to all current validators
     let mut msgs = vec![];
