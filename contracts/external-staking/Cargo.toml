@@ -1,0 +1,42 @@
+[package]
+name = "external-staking"
+description = "The external staking contract is the window to the other chains participating in Mesh Security protocol via IBC"
+version =    { workspace = true }
+edition =    { workspace = true }
+licence =    { workspace = true }
+repository = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# for more explicit tests, cargo test --features=backtraces
+backtraces = ["cosmwasm-std/backtraces"]
+# use library feature to disable all instantiate/execute/query exports
+library = []
+# enables generation of mt utilities
+mt = ["library", "sylvia/mt"]
+
+[dependencies]
+mesh-apis        = { workspace = true }
+
+sylvia           = { workspace = true }
+cosmwasm-schema  = { workspace = true }
+cosmwasm-std     = { workspace = true }
+cosmwasm-storage = { workspace = true }
+cw-storage-plus  = { workspace = true }
+cw2              = { workspace = true }
+cw-utils         = { workspace = true }
+
+schemars         = { workspace = true }
+serde            = { workspace = true }
+thiserror        = { workspace = true }
+
+[dev-dependencies]
+sylvia        = { workspace = true, features = ["mt"] }
+cw-multi-test = { workspace = true }
+anyhow        = { workspace = true }
+
+[[bin]]
+name = "schema"
+doc  = false
