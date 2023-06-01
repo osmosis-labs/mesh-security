@@ -1,4 +1,4 @@
-use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal};
+use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, StdError};
 
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
@@ -9,6 +9,7 @@ use crate::native_staking_callback::test_utils::NativeStakingCallback;
 mod local_staking_proxy;
 
 use crate::contract;
+use crate::error::ContractError;
 use crate::msg;
 use crate::msg::{OwnerByProxyResponse, ProxyByOwnerResponse};
 
@@ -63,6 +64,13 @@ fn receiving_stake() {
         .with_label("Staking")
         .call(owner)
         .unwrap();
+
+    // Check that no proxy exists for user1 yet
+    let err = staking.proxy_by_owner(user1.to_owned()).unwrap_err();
+    assert!(matches!(
+        err,
+        ContractError::Std(StdError::GenericErr { .. }) // Addr not found
+    ));
 
     // Receive some stake on behalf of user1 for validator
     let stake_msg = to_binary(&msg::StakeMsg {
