@@ -1,8 +1,9 @@
 use cosmwasm_std::{
-    coin, ensure, ensure_eq, from_binary, Addr, Binary, Coin, Decimal, Order, Response, Uint128,
+    coin, ensure, ensure_eq, from_binary, Addr, Binary, Coin, Decimal, Order, Response, StdResult,
+    Uint128,
 };
 use cw2::set_contract_version;
-use cw_storage_plus::{Bounder, Item, Map, PrefixBound};
+use cw_storage_plus::{Bounder, Item, Map};
 use mesh_apis::cross_staking_api::{self, CrossStakingApi};
 use mesh_apis::local_staking_api::MaxSlashResponse;
 use mesh_apis::vault_api::VaultApiHelper;
@@ -11,9 +12,7 @@ use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use crate::error::ContractError;
-use crate::msg::{
-    ConfigResponse, ReceiveVirtualStake, StakeInfo, StakesResponse, UserInfo, UsersResponse,
-};
+use crate::msg::{ConfigResponse, ReceiveVirtualStake, StakeInfo, StakesResponse};
 use crate::state::{Config, PendingUnbond, Stake};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -136,28 +135,35 @@ impl ExternalStakingContract<'_> {
 
         let released: Uint128 = stakes
             .into_iter()
-            .map(|(validator, mut stake)| {
+            .map(|(validator, mut stake)| -> StdResult<_> {
                 let released = stake.release_pending(&ctx.env.block);
-                self.stakes
-                    .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)
-                    .map(|_| released)
+
+                if !released.is_zero() {
+                    self.stakes
+                        .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?
+                }
+
+                Ok(released)
             })
             .fold(Ok(Uint128::zero()), |acc, released| {
                 let acc = acc?;
                 released.map(|released| released + acc)
             })?;
 
-        let release_msg = config.vault.release_cross_stake(
-            ctx.info.sender.to_string(),
-            coin(released.u128(), &config.denom),
-            vec![],
-        )?;
-
-        let resp = Response::new()
-            .add_message(release_msg)
+        let mut resp = Response::new()
             .add_attribute("action", "withdraw_unbonded")
-            .add_attribute("owner", ctx.info.sender.into_string())
+            .add_attribute("owner", ctx.info.sender.to_string())
             .add_attribute("amount", released.to_string());
+
+        if !released.is_zero() {
+            let release_msg = config.vault.release_cross_stake(
+                ctx.info.sender.into_string(),
+                coin(released.u128(), &config.denom),
+                vec![],
+            )?;
+
+            resp = resp.add_message(release_msg);
+        }
 
         Ok(resp)
     }
@@ -171,7 +177,7 @@ impl ExternalStakingContract<'_> {
 
     /// Queries for stake info
     ///
-    /// If stake is not existing in the system is queried, the default "nothing staken" is returned
+    /// If stake is not existing in the system is queried, the zero-stake is returned
     #[msg(query)]
     pub fn stake(
         &self,
@@ -185,51 +191,6 @@ impl ExternalStakingContract<'_> {
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
         Ok(stake)
-    }
-
-    /// Paginate list of users
-    ///
-    /// `start_after` is the last user address of previous page
-    #[msg(query)]
-    pub fn users(
-        &self,
-        ctx: QueryCtx,
-        start_after: Option<String>,
-        limit: Option<u32>,
-    ) -> Result<UsersResponse, ContractError> {
-        let limit = clamp_page_limit(limit);
-
-        let start_after = start_after.map(Addr::unchecked);
-        let bound = start_after.as_ref().map(PrefixBound::exclusive);
-
-        let users = self
-            .stakes
-            .prefix_range(ctx.deps.storage, bound, None, Order::Ascending)
-            // Makes items into `Some(addr)` for first occurence of an address, or `None` for others
-            // States is the previous returned address
-            // Double-option wrapping, as top-level `None` breaks iteration in scan
-            .scan(None, |last, item| {
-                let item = item.map(|((addr, _), _)| match (last, addr) {
-                    (last @ None, addr) => {
-                        *last = Some(addr.clone());
-                        Some(addr)
-                    }
-                    (Some(l), addr) if *l != addr => {
-                        *l = addr.clone();
-                        Some(addr)
-                    }
-                    _ => None,
-                });
-                Some(item.transpose())
-            })
-            .flatten()
-            .map(|addr| addr.map(|addr| UserInfo { addr: addr.into() }))
-            .take(limit)
-            .collect::<Result<_, _>>()?;
-
-        let users = UsersResponse { users };
-
-        Ok(users)
     }
 
     /// Paginated list of user stakes.
@@ -300,29 +261,13 @@ mod cross_staking {
             // For now we assume there is only single validator per user, however we want to maintain
             // proper structure keeping `(user, validator)` as bound index
 
-            let stakes: Vec<_> = self
+            let mut stake = self
                 .stakes
-                .prefix(&owner)
-                .range(ctx.deps.storage, None, None, Order::Ascending)
-                .collect();
-
-            let (validator, mut stake) =
-                stakes.into_iter().next().transpose()?.unwrap_or_else(|| {
-                    let validator = msg.validator.clone();
-                    let stake = Default::default();
-                    (validator, stake)
-                });
-
-            ensure_eq!(
-                validator,
-                msg.validator,
-                ContractError::InvalidValidator(msg.validator)
-            );
-
+                .may_load(ctx.deps.storage, (&owner, &msg.validator))?
+                .unwrap_or_default();
             stake.stake += amount.amount;
-
             self.stakes
-                .save(ctx.deps.storage, (&owner, &validator), &stake)?;
+                .save(ctx.deps.storage, (&owner, &msg.validator), &stake)?;
 
             // TODO: Send proper IBC message to remote staking contract
 

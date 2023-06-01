@@ -20,7 +20,7 @@ pub struct Stake {
     /// How much tokens user staken and not in unbonding period
     /// via this contract
     pub stake: Uint128,
-    /// List of token batches scheduled for unbouding
+    /// List of token batches scheduled for unbonding
     ///
     /// Items should only be added to the end of this list, with `release_at` being
     /// `unbonding_period` after current time - this way this is guaranteed to be
