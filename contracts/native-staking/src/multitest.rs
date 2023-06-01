@@ -1,4 +1,4 @@
-use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, StdError};
+use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, StdError, Uint128};
 
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
@@ -251,6 +251,16 @@ fn releasing_proxy_stake() {
         coin(100, OSMO)
     );
 
+    // And a lien on the other half
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [mesh_vault::msg::LienInfo {
+            lienholder: staking_addr.to_owned(),
+            amount: Uint128::new(100)
+        }]
+    );
+
     // The other half is in the user's proxy contract
     assert_eq!(
         app.app().wrap().query_balance(proxy_addr, OSMO).unwrap(),
@@ -269,5 +279,14 @@ fn releasing_proxy_stake() {
     assert_eq!(
         app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
         coin(200, OSMO)
+    );
+    // And there are no more liens
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [mesh_vault::msg::LienInfo {
+            lienholder: staking_addr.to_owned(),
+            amount: Uint128::zero() // TODO? Clean-up empty liens
+        }]
     );
 }
