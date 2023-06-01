@@ -62,6 +62,8 @@ impl VirtualStakingContract<'_> {
             converter: ctx.info.sender,
         };
         self.config.save(ctx.deps.storage, &config)?;
+        // initialize this to no one, so no issue when reading for the first time
+        self.bonded.save(ctx.deps.storage, &vec![])?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         Ok(Response::new())
     }
@@ -200,7 +202,10 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         );
 
         // Update the amount requested
-        let mut bonded = self.bond_requests.load(ctx.deps.storage, &validator)?;
+        let mut bonded = self
+            .bond_requests
+            .may_load(ctx.deps.storage, &validator)?
+            .unwrap_or_default();
         bonded += amount.amount;
         self.bond_requests
             .save(ctx.deps.storage, &validator, &bonded)?;
