@@ -1,14 +1,16 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use cosmwasm_std::{
-    coin, ensure_eq, entry_point, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Response,
-    StakingMsg, SubMsg, Uint128,
+    coin, ensure_eq, entry_point, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Response, SubMsg,
+    Uint128,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::nonpayable;
-use mesh_bindings::{TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery};
+use mesh_bindings::{
+    TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
+};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -62,6 +64,8 @@ impl VirtualStakingContract<'_> {
             converter: ctx.info.sender,
         };
         self.config.save(ctx.deps.storage, &config)?;
+        // initialize this to no one, so no issue when reading for the first time
+        self.bonded.save(ctx.deps.storage, &vec![])?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         Ok(Response::new())
     }
@@ -137,7 +141,7 @@ fn calculate_rebalance(
     desired: Vec<(String, Uint128)>,
     denom: &str,
 ) -> Vec<CosmosMsg<VirtualStakeCustomMsg>> {
-    let mut desired: HashMap<_, _> = desired.into_iter().collect();
+    let mut desired: BTreeMap<_, _> = desired.into_iter().collect();
 
     // this will handle adjustments to all current validators
     let mut msgs = vec![];
@@ -147,12 +151,12 @@ fn calculate_rebalance(
             Ordering::Less => {
                 let unbond = prev - next;
                 let amount = coin(unbond.u128(), denom);
-                msgs.push(StakingMsg::Undelegate { validator, amount }.into())
+                msgs.push(VirtualStakeMsg::Unbond { validator, amount }.into())
             }
             Ordering::Greater => {
                 let bond = next - prev;
                 let amount = coin(bond.u128(), denom);
-                msgs.push(StakingMsg::Delegate { validator, amount }.into())
+                msgs.push(VirtualStakeMsg::Bond { validator, amount }.into())
             }
             Ordering::Equal => {}
         }
@@ -161,7 +165,7 @@ fn calculate_rebalance(
     // any new validators in the desired list need to be bonded
     for (validator, bond) in desired {
         let amount = coin(bond.u128(), denom);
-        msgs.push(StakingMsg::Delegate { validator, amount }.into())
+        msgs.push(VirtualStakeMsg::Bond { validator, amount }.into())
     }
 
     msgs
@@ -200,7 +204,10 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         );
 
         // Update the amount requested
-        let mut bonded = self.bond_requests.load(ctx.deps.storage, &validator)?;
+        let mut bonded = self
+            .bond_requests
+            .may_load(ctx.deps.storage, &validator)?
+            .unwrap_or_default();
         bonded += amount.amount;
         self.bond_requests
             .save(ctx.deps.storage, &validator, &bonded)?;
