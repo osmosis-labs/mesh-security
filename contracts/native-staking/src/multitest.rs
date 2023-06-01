@@ -39,8 +39,10 @@ fn instantiation() {
 #[test]
 fn receiving_stake() {
     let owner = "vault"; // Owner of the staking contract (i. e. the vault contract)
+
     let user1 = "user1"; // One who wants to local stake
     let user2 = "user2"; // Another one who wants to local stake
+
     let validator = "validator1"; // Validator to stake on
 
     // Fund the vault
@@ -53,7 +55,6 @@ fn receiving_stake() {
     let app = App::new(app);
 
     // Contracts setup
-    // let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(&app);
     let staking_proxy_code = local_staking_proxy::multitest_utils::CodeId::store_code(&app);
     let staking_code = contract::multitest_utils::CodeId::store_code(&app);
 
@@ -75,15 +76,10 @@ fn receiving_stake() {
         .call(owner) // called from vault
         .unwrap();
 
+    let proxy1 = staking.proxy_by_owner(user1.to_owned()).unwrap().proxy;
+    // Reverse query
     assert_eq!(
-        staking.proxy_by_owner(user1.to_owned()).unwrap(),
-        ProxyByOwnerResponse {
-            proxy: "contract1".to_string(),
-        }
-    );
-
-    assert_eq!(
-        staking.owner_by_proxy("contract1".to_string()).unwrap(),
+        staking.owner_by_proxy(proxy1.clone()).unwrap(),
         OwnerByProxyResponse {
             owner: user1.to_owned(),
         }
@@ -91,7 +87,10 @@ fn receiving_stake() {
 
     // Check that funds are in the proxy contract
     assert_eq!(
-        app.app().wrap().query_balance("contract1", OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(proxy1.clone(), OSMO)
+            .unwrap(),
         coin(100, OSMO)
     );
 
@@ -111,12 +110,13 @@ fn receiving_stake() {
     assert_eq!(
         staking.proxy_by_owner(user1.to_owned()).unwrap(),
         ProxyByOwnerResponse {
-            proxy: "contract1".to_string(),
+            proxy: proxy1.clone(),
         }
     );
 
+    // Reverse check
     assert_eq!(
-        staking.owner_by_proxy("contract1".to_string()).unwrap(),
+        staking.owner_by_proxy(proxy1.clone()).unwrap(),
         OwnerByProxyResponse {
             owner: user1.to_owned(),
         }
@@ -124,7 +124,7 @@ fn receiving_stake() {
 
     // Check that funds are updated in the proxy contract
     assert_eq!(
-        app.app().wrap().query_balance("contract1", OSMO).unwrap(),
+        app.app().wrap().query_balance(proxy1, OSMO).unwrap(),
         coin(150, OSMO)
     );
 
@@ -140,15 +140,10 @@ fn receiving_stake() {
         .call(owner) // called from vault
         .unwrap();
 
+    let proxy2 = staking.proxy_by_owner(user2.to_owned()).unwrap().proxy;
+    // Reverse query
     assert_eq!(
-        staking.proxy_by_owner(user2.to_owned()).unwrap(),
-        ProxyByOwnerResponse {
-            proxy: "contract2".to_string(),
-        }
-    );
-
-    assert_eq!(
-        staking.owner_by_proxy("contract2".to_string()).unwrap(),
+        staking.owner_by_proxy(proxy2.to_string()).unwrap(),
         OwnerByProxyResponse {
             owner: user2.to_owned(),
         }
@@ -156,7 +151,7 @@ fn receiving_stake() {
 
     // Check that funds are in the corresponding proxy contract
     assert_eq!(
-        app.app().wrap().query_balance("contract2", OSMO).unwrap(),
+        app.app().wrap().query_balance(proxy2, OSMO).unwrap(),
         coin(10, OSMO)
     );
 }
