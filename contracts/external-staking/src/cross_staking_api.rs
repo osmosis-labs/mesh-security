@@ -53,11 +53,12 @@ impl CrossStakingApi for ExternalStakingContract<'_> {
 
     #[msg(query)]
     fn max_slash(&self, _ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
+        // TODO: Properly set this value
         // Arbitrary value - only to make some testing possible
         //
         // Probably should be queried from remote chain
         let resp = MaxSlashResponse {
-            max_slash: Decimal::percent(30),
+            max_slash: Decimal::percent(5),
         };
 
         Ok(resp)

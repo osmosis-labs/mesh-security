@@ -1,6 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{BlockInfo, Uint128};
-use cw_utils::{Duration, Expiration};
+use cosmwasm_std::{BlockInfo, Timestamp, Uint128};
 use mesh_apis::vault_api::VaultApiHelper;
 
 /// Contract configuration
@@ -10,57 +9,57 @@ pub struct Config {
     pub denom: String,
     /// Vault contract address
     pub vault: VaultApiHelper,
-    /// Ubbounding period for claims
-    pub unbounding_period: Duration,
+    /// Ubbounding period for claims in seconds
+    pub unbonding_period: u64,
 }
 
 /// All user/account related information
 #[cw_serde]
 #[derive(Default)]
 pub struct User {
-    /// How much tokens user staken and not in unbounding period
+    /// How much tokens user staken and not in unbonding period
     /// via this contract
     pub stake: Uint128,
-    /// List of token batches scheduled for unbouding
-    pub pending_unbounds: Vec<PendingUnbound>,
-    /// Tokens already released, but not yet claimed
-    pub released: Uint128,
+    /// List of token batches scheduled for unboding
+    ///
+    /// Items should only be added to the end of this list, with `release_at` being
+    /// `unbonding_period` after current time - this way this is guaranteed to be
+    /// always sorted (as time is guaranteed to be monotonic).
+    pub pending_unbonds: Vec<PendingUnbond>,
 }
 
-/// Description of tokens in unbounding period
+/// Description of tokens in unbonding period
 #[cw_serde]
-pub struct PendingUnbound {
-    /// Tokens scheduled for unbounding
+pub struct PendingUnbond {
+    /// Tokens scheduled for unbonding
     pub amount: Uint128,
     /// Time when tokens are released
-    pub release_at: Expiration,
+    pub release_at: Timestamp,
 }
 
 impl User {
-    /// Removes expired entries from `pending_unbounds`, moving released funds to `released`.
-    /// Funds from `released` are ready to be claimed.
-    pub fn release_pending(&mut self, info: BlockInfo) {
-        // The fact that `pending unbounds are always added to the end, so they are always ordered
+    /// Removes expired entries from `pending_unbonds`, returning amount of tokens released.
+    pub fn release_pending(&mut self, info: &BlockInfo) -> Uint128 {
+        // The fact that `pending unbonds are always added to the end, so they are always ordered
         // is assumed here.
 
-        // Nothing waits for unbound
-        if self.pending_unbounds.is_empty() {
-            return;
+        // Nothing waits for unbond
+        if self.pending_unbonds.is_empty() {
+            return Uint128::zero();
         };
 
         // First item is still not ready for release
-        if !self.pending_unbounds[0].release_at.is_expired(&info) {
-            return;
+        if self.pending_unbonds[0].release_at < info.time {
+            return Uint128::zero();
         }
 
         let non_expired_idx = self
-            .pending_unbounds
-            .partition_point(|pending| pending.release_at.is_expired(&info));
+            .pending_unbonds
+            .partition_point(|pending| pending.release_at >= info.time);
 
-        for pending in &self.pending_unbounds[..non_expired_idx] {
-            self.released += pending.amount;
-        }
-
-        self.pending_unbounds = self.pending_unbounds[non_expired_idx..].into();
+        self.pending_unbonds
+            .drain(..non_expired_idx)
+            .map(|pending| pending.amount)
+            .sum()
     }
 }

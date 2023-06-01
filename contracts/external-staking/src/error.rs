@@ -12,7 +12,7 @@ pub enum ContractError {
     #[error("Invalid denom, {0} expected")]
     InvalidDenom(String),
 
-    #[error("Not enough tokens staken, up to {0} can be unbound")]
+    #[error("Not enough tokens staked, up to {0} can be unbond")]
     NotEnoughStake(Uint128),
 
     #[error("Not enough tokens released, up to {0} can be claimed")]

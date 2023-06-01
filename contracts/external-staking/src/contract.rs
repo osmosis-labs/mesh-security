@@ -1,7 +1,6 @@
-use cosmwasm_std::{ensure, ensure_eq, Addr, Coin, Order, Response};
+use cosmwasm_std::{coin, ensure, ensure_eq, Addr, Coin, Order, Response};
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
-use cw_utils::Duration;
 use mesh_apis::cross_staking_api;
 use mesh_apis::vault_api::VaultApiHelper;
 use sylvia::contract;
@@ -9,7 +8,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use crate::error::ContractError;
 use crate::msg::{ConfigResponse, UserInfo, UsersResponse};
-use crate::state::{Config, PendingUnbound, User};
+use crate::state::{Config, PendingUnbond, User};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -45,7 +44,7 @@ impl ExternalStakingContract<'_> {
         ctx: InstantiateCtx,
         denom: String,
         vault: String,
-        unbounding_period: Duration,
+        unbonding_period: u64,
     ) -> Result<Response, ContractError> {
         let vault = ctx.deps.api.addr_validate(&vault)?;
         let vault = VaultApiHelper(vault);
@@ -53,7 +52,7 @@ impl ExternalStakingContract<'_> {
         let config = Config {
             denom,
             vault,
-            unbounding_period,
+            unbonding_period,
         };
 
         self.config.save(ctx.deps.storage, &config)?;
@@ -63,8 +62,8 @@ impl ExternalStakingContract<'_> {
         Ok(Response::new())
     }
 
-    /// Schedules tokens for release, adding them to the pending unbounds. After `unbounding_period`
-    /// passes, funds are ready to be released with `claim` call by the user
+    /// Schedules tokens for release, adding them to the pending unbonds. After `unbonding_period`
+    /// passes, funds are ready to be released with `withdraw_unbonded` call by the user
     #[msg(exec)]
     pub fn unstake(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
@@ -87,12 +86,12 @@ impl ExternalStakingContract<'_> {
 
         user.stake -= amount.amount;
 
-        let release_at = config.unbounding_period.after(&ctx.env.block);
-        let unbound = PendingUnbound {
+        let release_at = ctx.env.block.time.plus_seconds(config.unbonding_period);
+        let unbond = PendingUnbond {
             amount: amount.amount,
             release_at,
         };
-        user.pending_unbounds.push(unbound);
+        user.pending_unbonds.push(unbond);
 
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
@@ -101,64 +100,40 @@ impl ExternalStakingContract<'_> {
         // Probably some more communication with remote via IBC should happen here?
         // Or maybe this contract should be called via IBC here? To be specified
         let resp = Response::new()
-            .add_attribute("action", "unbound")
+            .add_attribute("action", "unstake")
             .add_attribute("owner", ctx.info.sender.into_string())
             .add_attribute("amount", amount.amount.to_string());
 
         Ok(resp)
     }
 
-    /// Claims released tokens to the owner.
+    /// Withdraws all released tokens to the sender.
     ///
-    /// By default claims tokens to the message sender, but owner can be specified to claim
-    /// tokens on behalf of another user.
-    ///
-    /// Tokens to be claimed has to be unboud before by calling the `unbound` message and
-    /// waiting the `unbound_period`
+    /// Tokens to be claimed has to be unbond before by calling the `unbond` message and
+    /// waiting the `unbond_period`
     #[msg(exec)]
-    pub fn claim(
-        &self,
-        ctx: ExecCtx,
-        owner: Option<String>,
-        amount: Coin,
-    ) -> Result<Response, ContractError> {
-        let owner = owner
-            .map(|owner| ctx.deps.api.addr_validate(&owner))
-            .transpose()?
-            .unwrap_or(ctx.info.sender);
-
+    pub fn withdraw_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
-
-        ensure_eq!(
-            amount.denom,
-            config.denom,
-            ContractError::InvalidDenom(config.denom)
-        );
 
         let mut user = self
             .users
-            .may_load(ctx.deps.storage, &owner)?
+            .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
 
-        ensure!(
-            user.released >= amount.amount,
-            ContractError::NotEnoughRelease(user.released)
-        );
+        let released = user.release_pending(&ctx.env.block);
+        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
-        user.released -= amount.amount;
-
-        self.users.save(ctx.deps.storage, &owner, &user)?;
-
-        let release_msg =
-            config
-                .vault
-                .release_cross_stake(owner.to_string(), amount.clone(), vec![])?;
+        let release_msg = config.vault.release_cross_stake(
+            ctx.info.sender.to_string(),
+            coin(released.u128(), &config.denom),
+            vec![],
+        )?;
 
         let resp = Response::new()
             .add_message(release_msg)
-            .add_attribute("action", "claim")
-            .add_attribute("owner", owner.into_string())
-            .add_attribute("amount", amount.amount.to_string());
+            .add_attribute("action", "withdraw_unbonded")
+            .add_attribute("owner", ctx.info.sender.into_string())
+            .add_attribute("amount", released.to_string());
 
         Ok(resp)
     }
@@ -173,10 +148,10 @@ impl ExternalStakingContract<'_> {
     /// Queries for user-related info
     ///
     /// If user not existin in the system is queried, the default "nothing staken" user
-    /// is returned - also if user is not a valid address.
+    /// is returned
     #[msg(query)]
     pub fn user(&self, ctx: QueryCtx, user: String) -> Result<User, ContractError> {
-        let user = Addr::unchecked(user);
+        let user = ctx.deps.api.addr_validate(&user)?;
         let user = self
             .users
             .may_load(ctx.deps.storage, &user)?
@@ -203,8 +178,7 @@ impl ExternalStakingContract<'_> {
                 item.map(|(addr, user)| UserInfo {
                     addr: addr.into(),
                     stake: user.stake,
-                    pending_unbounds: user.pending_unbounds,
-                    released: user.released,
+                    pending_unbonds: user.pending_unbonds,
                 })
             })
             .take(limit)
