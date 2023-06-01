@@ -8,7 +8,9 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::nonpayable;
-use mesh_bindings::{TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery};
+use mesh_bindings::{
+    TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
+};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -149,12 +151,12 @@ fn calculate_rebalance(
             Ordering::Less => {
                 let unbond = prev - next;
                 let amount = coin(unbond.u128(), denom);
-                msgs.push(StakingMsg::Undelegate { validator, amount }.into())
+                msgs.push(VirtualStakeMsg::Unbond { validator, amount }.into())
             }
             Ordering::Greater => {
                 let bond = next - prev;
                 let amount = coin(bond.u128(), denom);
-                msgs.push(StakingMsg::Delegate { validator, amount }.into())
+                msgs.push(VirtualStakeMsg::Bond { validator, amount }.into())
             }
             Ordering::Equal => {}
         }
