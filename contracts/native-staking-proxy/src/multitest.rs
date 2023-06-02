@@ -1,13 +1,14 @@
 use cosmwasm_std::testing::mock_env;
 use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Validator};
-use cw_multi_test::{App as MtApp, StakingSudo, SudoMsg};
+use cw_multi_test::{App as MtApp, StakingInfo, StakingSudo, SudoMsg};
 
 use sylvia::multitest::App;
 
 use crate::contract;
 use crate::msg::ConfigResponse;
 
-const DENOM: &str = "TOKEN"; // cw-multi-test v0.16.x does not support custom tokens yet
+const OSMO: &str = "uosmo";
+const UNBONDING_PERIOD: u64 = 17 * 24 * 60 * 60; // 7 days
 
 fn init_app(owner: &str, validators: &[&str]) -> App {
     // Fund the staking contract, and add validators to staking keeper
@@ -15,7 +16,18 @@ fn init_app(owner: &str, validators: &[&str]) -> App {
     let app = MtApp::new(|router, api, storage| {
         router
             .bank
-            .init_balance(storage, &Addr::unchecked(owner), coins(1000, DENOM))
+            .init_balance(storage, &Addr::unchecked(owner), coins(1000, OSMO))
+            .unwrap();
+        router
+            .staking
+            .setup(
+                storage,
+                StakingInfo {
+                    bonded_denom: OSMO.to_string(),
+                    unbonding_time: UNBONDING_PERIOD,
+                    apr: Decimal::percent(1),
+                },
+            )
             .unwrap();
 
         for &validator in validators {
@@ -45,9 +57,9 @@ fn instantiation() {
     // Contract setup, with funds transfer
     let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
     let staking_proxy = staking_proxy_code
-        .instantiate(DENOM.to_owned(), user.to_owned(), validator.to_owned())
+        .instantiate(OSMO.to_owned(), user.to_owned(), validator.to_owned())
         .with_label("Local Staking Proxy")
-        .with_funds(&coins(1000, DENOM))
+        .with_funds(&coins(1000, OSMO))
         .call(owner) // Instantiated by the staking contract
         .unwrap();
 
@@ -55,7 +67,7 @@ fn instantiation() {
     assert_eq!(
         config,
         ConfigResponse {
-            denom: DENOM.to_owned(),
+            denom: OSMO.to_owned(),
             parent: Addr::unchecked(owner), // parent is the staking contract
             owner: Addr::unchecked(user),   // owner is the user
         }
@@ -65,9 +77,9 @@ fn instantiation() {
     assert_eq!(
         app.app()
             .wrap()
-            .query_balance(staking_proxy.contract_addr.clone(), DENOM)
+            .query_balance(staking_proxy.contract_addr.clone(), OSMO)
             .unwrap(),
-        coin(0, DENOM)
+        coin(0, OSMO)
     );
     let delegation = app
         .app()
@@ -75,7 +87,7 @@ fn instantiation() {
         .query_delegation(staking_proxy.contract_addr, validator.to_owned())
         .unwrap()
         .unwrap();
-    assert_eq!(delegation.amount, coin(1000, DENOM));
+    assert_eq!(delegation.amount, coin(1000, OSMO));
 
     // TODO: Check side effects: data payload, etc.
 }
@@ -90,16 +102,16 @@ fn staking() {
 
     let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
     let staking_proxy = staking_proxy_code
-        .instantiate(DENOM.to_owned(), user.to_owned(), validator.to_owned())
+        .instantiate(OSMO.to_owned(), user.to_owned(), validator.to_owned())
         .with_label("Local Staking Proxy")
-        .with_funds(&coins(1, DENOM))
+        .with_funds(&coins(1, OSMO))
         .call(owner) // Instantiated by the staking contract
         .unwrap();
 
     // Stake some more on behalf of the user
     staking_proxy
         .stake(validator.to_owned())
-        .with_funds(&coins(2, DENOM))
+        .with_funds(&coins(2, OSMO))
         .call(owner) // Staking has the funds at the time
         .unwrap();
 
@@ -107,9 +119,9 @@ fn staking() {
     assert_eq!(
         app.app()
             .wrap()
-            .query_balance(staking_proxy.contract_addr.clone(), DENOM)
+            .query_balance(staking_proxy.contract_addr.clone(), OSMO)
             .unwrap(),
-        coin(0, DENOM)
+        coin(0, OSMO)
     );
     let delegation = app
         .app()
@@ -117,7 +129,7 @@ fn staking() {
         .query_delegation(staking_proxy.contract_addr, validator.to_owned())
         .unwrap()
         .unwrap();
-    assert_eq!(delegation.amount, coin(3, DENOM));
+    assert_eq!(delegation.amount, coin(3, OSMO));
 }
 
 #[test]
@@ -131,15 +143,15 @@ fn restaking() {
 
     let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
     let staking_proxy = staking_proxy_code
-        .instantiate(DENOM.to_owned(), user.to_owned(), validator.to_owned())
+        .instantiate(OSMO.to_owned(), user.to_owned(), validator.to_owned())
         .with_label("Local Staking Proxy")
-        .with_funds(&coins(10, DENOM))
+        .with_funds(&coins(10, OSMO))
         .call(owner) // Instantiated by the staking contract
         .unwrap();
 
     // Restake 30% to a different validator
     staking_proxy
-        .restake(validator.to_owned(), validator2.to_owned(), coin(3, DENOM))
+        .restake(validator.to_owned(), validator2.to_owned(), coin(3, OSMO))
         .call(user)
         .unwrap();
 
@@ -150,14 +162,14 @@ fn restaking() {
         .query_delegation(staking_proxy.contract_addr.clone(), validator.to_owned())
         .unwrap()
         .unwrap();
-    assert_eq!(delegation.amount, coin(7, DENOM));
+    assert_eq!(delegation.amount, coin(7, OSMO));
     let delegation2 = app
         .app()
         .wrap()
         .query_delegation(staking_proxy.contract_addr, validator2.to_owned())
         .unwrap()
         .unwrap();
-    assert_eq!(delegation2.amount, coin(3, DENOM));
+    assert_eq!(delegation2.amount, coin(3, OSMO));
 }
 
 #[test]
@@ -170,15 +182,15 @@ fn unstaking() {
 
     let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
     let staking_proxy = staking_proxy_code
-        .instantiate(DENOM.to_owned(), user.to_owned(), validator.to_owned())
+        .instantiate(OSMO.to_owned(), user.to_owned(), validator.to_owned())
         .with_label("Local Staking Proxy")
-        .with_funds(&coins(10, DENOM))
+        .with_funds(&coins(10, OSMO))
         .call(owner) // Instantiated by the staking contract
         .unwrap();
 
     // Unstake 50%
     staking_proxy
-        .unstake(validator.to_owned(), coin(5, DENOM))
+        .unstake(validator.to_owned(), coin(5, OSMO))
         .call(user)
         .unwrap();
 
@@ -189,7 +201,7 @@ fn unstaking() {
         .query_delegation(staking_proxy.contract_addr, validator.to_owned())
         .unwrap()
         .unwrap();
-    assert_eq!(delegation.amount, coin(5, DENOM));
+    assert_eq!(delegation.amount, coin(5, OSMO));
 
     // TODO: And that they are now held, until the unbonding period
 }
@@ -216,7 +228,7 @@ fn releasing_unbonded() {
         admin: None,
         code_id: staking_code.code_id(),
         msg: to_binary(&mesh_native_staking::contract::InstantiateMsg {
-            denom: DENOM.to_owned(),
+            denom: OSMO.to_owned(),
             proxy_code_id: staking_proxy_code.code_id(),
         })
         .unwrap(),
@@ -225,7 +237,7 @@ fn releasing_unbonded() {
 
     // Instantiates vault and staking
     let vault = vault_code
-        .instantiate(DENOM.to_owned(), staking_init_info)
+        .instantiate(OSMO.to_owned(), staking_init_info)
         .with_label("Vault")
         .call(owner)
         .unwrap();
@@ -233,14 +245,14 @@ fn releasing_unbonded() {
     // Bond some funds to the vault
     vault
         .bond()
-        .with_funds(&coins(200, DENOM))
+        .with_funds(&coins(200, OSMO))
         .call(user)
         .unwrap();
 
     // Stakes some of it locally. This instantiates the staking proxy contract for user
     vault
         .stake_local(
-            coin(100, DENOM),
+            coin(100, OSMO),
             to_binary(&mesh_native_staking::msg::StakeMsg {
                 validator: validator.to_owned(),
             })
@@ -257,7 +269,7 @@ fn releasing_unbonded() {
 
     // Unstake 100%
     staking_proxy
-        .unstake(validator.to_owned(), coin(100, DENOM))
+        .unstake(validator.to_owned(), coin(100, OSMO))
         .call(user)
         .unwrap();
 
@@ -269,9 +281,10 @@ fn releasing_unbonded() {
         .unwrap();
     assert!(delegation.is_none());
 
-    // Advance time until the unbonding period is over (21 days?)
+    // Advance time until the unbonding period is over
     app.update_block(|block| {
-        block.time = block.time.plus_seconds(21 * 24 * 60 * 60);
+        block.height += 1234;
+        block.time = block.time.plus_seconds(UNBONDING_PERIOD + 1);
     });
     // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
     app.app_mut()
@@ -283,7 +296,7 @@ fn releasing_unbonded() {
 
     // Check that the vault has the funds again
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr, DENOM).unwrap(),
-        coin(200, DENOM)
+        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        coin(200, OSMO)
     );
 }
