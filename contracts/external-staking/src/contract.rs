@@ -390,7 +390,9 @@ impl ExternalStakingContract<'_> {
             Ordering::Equal => points,
         };
 
-        Uint128::try_from(points / DISTRIBUTION_POINTS_SCALE).map_err(Into::into)
+        let total = Uint128::try_from(points / DISTRIBUTION_POINTS_SCALE)?;
+
+        Ok(total - stake.withdrawn_funds)
     }
 }
 

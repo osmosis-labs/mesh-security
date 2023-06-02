@@ -233,8 +233,7 @@ impl VaultContract<'_> {
     #[msg(query)]
     fn account(&self, ctx: QueryCtx, account: String) -> Result<AccountResponse, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
-
-        let account = Addr::unchecked(account);
+        let account = ctx.deps.api.addr_validate(&account)?;
 
         let user = self
             .users
