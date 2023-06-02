@@ -40,6 +40,9 @@ test-case     = { workspace = true }
 derivative    = { workspace = true }
 anyhow        = { workspace = true }
 
+mesh-vault          = { workspace = true, features = ["mt"] }
+mesh-native-staking = { workspace = true, features = ["mt"] }
+
 [[bin]]
 name = "schema"
 doc  = false

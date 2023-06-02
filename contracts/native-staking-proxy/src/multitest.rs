@@ -1,6 +1,6 @@
 use cosmwasm_std::testing::mock_env;
-use cosmwasm_std::{coin, coins, Addr, Decimal, Validator};
-use cw_multi_test::App as MtApp;
+use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Validator};
+use cw_multi_test::{App as MtApp, StakingSudo, SudoMsg};
 
 use sylvia::multitest::App;
 
@@ -192,4 +192,98 @@ fn unstaking() {
     assert_eq!(delegation.amount, coin(5, DENOM));
 
     // TODO: And that they are now held, until the unbonding period
+}
+
+#[test]
+fn releasing_unbonded() {
+    let owner = "vault_admin";
+
+    let vault_addr = "contract0"; // First created contract
+    let _staking_addr = "contract1"; // Second created contract. Created by vault contract on init
+    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
+
+    let user = "user1"; // One who wants to local stake (uses the proxy)
+    let validator = "validator1"; // Where to stake / unstake
+
+    let app = init_app(user, &[validator]); // Fund user, create validator
+
+    let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(&app);
+    let staking_code = mesh_native_staking::contract::multitest_utils::CodeId::store_code(&app);
+    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
+
+    // Instantiate vault msg
+    let staking_init_info = mesh_vault::msg::StakingInitInfo {
+        admin: None,
+        code_id: staking_code.code_id(),
+        msg: to_binary(&mesh_native_staking::contract::InstantiateMsg {
+            denom: DENOM.to_owned(),
+            proxy_code_id: staking_proxy_code.code_id(),
+        })
+        .unwrap(),
+        label: None,
+    };
+
+    // Instantiates vault and staking
+    let vault = vault_code
+        .instantiate(DENOM.to_owned(), staking_init_info)
+        .with_label("Vault")
+        .call(owner)
+        .unwrap();
+
+    // Bond some funds to the vault
+    vault
+        .bond()
+        .with_funds(&coins(200, DENOM))
+        .call(user)
+        .unwrap();
+
+    // Stakes some of it locally. This instantiates the staking proxy contract for user
+    vault
+        .stake_local(
+            coin(100, DENOM),
+            to_binary(&mesh_native_staking::msg::StakeMsg {
+                validator: validator.to_owned(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
+    // Access staking proxy instance
+    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
+        Addr::unchecked(proxy_addr),
+        &app,
+    );
+
+    // Unstake 100%
+    staking_proxy
+        .unstake(validator.to_owned(), coin(100, DENOM))
+        .call(user)
+        .unwrap();
+
+    // Check that funds have been fully unstaked
+    let delegation = app
+        .app()
+        .wrap()
+        .query_delegation(staking_proxy.contract_addr.clone(), validator.to_owned())
+        .unwrap();
+    assert!(delegation.is_none());
+
+    // Advance time until the unbonding period is over (21 days?)
+    app.update_block(|block| {
+        block.time = block.time.plus_seconds(21 * 24 * 60 * 60);
+    });
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
+
+    // Release the unbonded funds
+    staking_proxy.release_unbonded().call(user).unwrap();
+
+    // Check that the vault has the funds again
+    assert_eq!(
+        app.app().wrap().query_balance(vault_addr, DENOM).unwrap(),
+        coin(200, DENOM)
+    );
 }

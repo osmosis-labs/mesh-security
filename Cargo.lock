@@ -641,6 +641,8 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-native-staking",
+ "mesh-vault",
  "schemars",
  "serde",
  "sylvia",
