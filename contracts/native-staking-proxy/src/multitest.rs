@@ -159,3 +159,37 @@ fn restaking() {
         .unwrap();
     assert_eq!(delegation2.amount, coin(3, DENOM));
 }
+
+#[test]
+fn unstaking() {
+    let owner = "staking"; // The staking contract is the owner of the staking-proxy contracts
+    let user = "user1"; // One who wants to local stake (uses the proxy)
+    let validator = "validator1"; // Where to stake / unstake
+
+    let app = init_app(owner, &[validator]);
+
+    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
+    let staking_proxy = staking_proxy_code
+        .instantiate(DENOM.to_owned(), user.to_owned(), validator.to_owned())
+        .with_label("Local Staking Proxy")
+        .with_funds(&coins(10, DENOM))
+        .call(owner) // Instantiated by the staking contract
+        .unwrap();
+
+    // Unstake 50%
+    staking_proxy
+        .unstake(validator.to_owned(), coin(5, DENOM))
+        .call(user)
+        .unwrap();
+
+    // Check that funds have been unstaked
+    let delegation = app
+        .app()
+        .wrap()
+        .query_delegation(staking_proxy.contract_addr, validator.to_owned())
+        .unwrap()
+        .unwrap();
+    assert_eq!(delegation.amount, coin(5, DENOM));
+
+    // TODO: And that they are now held, until the unbonding period
+}
