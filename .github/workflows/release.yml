@@ -13,9 +13,6 @@ jobs:
   release:
     name: Build Release Artifacts
     runs-on: ubuntu-latest
-    defaults:
-      # hack to see if this works at all, we need to do all contracts
-      working-directory: ./contract/vault
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -37,11 +34,10 @@ jobs:
       #     args: --workspace
 
       - name: Build schemas
-        uses: actions-rs/cargo@v1
-        with:
-          toolchain: 1.65.0
-          command: schema
-          args: --workspace
+        # Need run, as uses doesn't work with 'working-directory'
+        run: cargo +1.65.0 schema
+        # hack to see if this works at all, we need to do all contracts
+        working-directory: contracts/vault
 
       # See https://trstringer.com/github-actions-create-release-upload-artifacts/
       - name: Create release
@@ -62,7 +58,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./schema/mesh-vault.json
+          asset_path: ./contracts/vault/schema/mesh-vault.json
           asset_name: mesh-vault.json
           asset_content_type: application/json
 
