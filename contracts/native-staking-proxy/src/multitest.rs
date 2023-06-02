@@ -1,8 +1,13 @@
+use anyhow::Result as AnyResult;
+
 use cosmwasm_std::testing::mock_env;
 use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Validator};
+
 use cw_multi_test::{App as MtApp, StakingInfo, StakingSudo, SudoMsg};
 
 use sylvia::multitest::App;
+
+use mesh_vault::contract::multitest_utils::VaultContractProxy;
 
 use crate::contract;
 use crate::msg::ConfigResponse;
@@ -44,6 +49,32 @@ fn init_app(owner: &str, validators: &[&str]) -> App {
         }
     });
     App::new(app)
+}
+
+fn setup<'app>(app: &'app App, owner: &str) -> AnyResult<VaultContractProxy<'app>> {
+    let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(app);
+    let staking_code = mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
+    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(app);
+
+    // Instantiate vault msg
+    let staking_init_info = mesh_vault::msg::StakingInitInfo {
+        admin: None,
+        code_id: staking_code.code_id(),
+        msg: to_binary(&mesh_native_staking::contract::InstantiateMsg {
+            denom: OSMO.to_owned(),
+            proxy_code_id: staking_proxy_code.code_id(),
+        })
+        .unwrap(),
+        label: None,
+    };
+
+    // Instantiates vault and staking
+    let vault = vault_code
+        .instantiate(OSMO.to_owned(), staking_init_info)
+        .with_label("Vault")
+        .call(owner)
+        .unwrap();
+    Ok(vault)
 }
 
 #[test]
@@ -218,29 +249,7 @@ fn releasing_unbonded() {
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-
-    let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(&app);
-    let staking_code = mesh_native_staking::contract::multitest_utils::CodeId::store_code(&app);
-    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
-
-    // Instantiate vault msg
-    let staking_init_info = mesh_vault::msg::StakingInitInfo {
-        admin: None,
-        code_id: staking_code.code_id(),
-        msg: to_binary(&mesh_native_staking::contract::InstantiateMsg {
-            denom: OSMO.to_owned(),
-            proxy_code_id: staking_proxy_code.code_id(),
-        })
-        .unwrap(),
-        label: None,
-    };
-
-    // Instantiates vault and staking
-    let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
-        .with_label("Vault")
-        .call(owner)
-        .unwrap();
+    let vault = setup(&app, owner).unwrap();
 
     // Bond some funds to the vault
     vault
