@@ -9,8 +9,8 @@ use crate::msg::ConfigResponse;
 
 const DENOM: &str = "TOKEN"; // cw-multi-test v0.16.x does not support custom tokens yet
 
-fn init_app(owner: &str, validator: &str) -> App {
-    // Fund the staking contract, and add validator to staking keeper
+fn init_app(owner: &str, validators: &[&str]) -> App {
+    // Fund the staking contract, and add validators to staking keeper
     let block = mock_env().block;
     let app = MtApp::new(|router, api, storage| {
         router
@@ -18,16 +18,18 @@ fn init_app(owner: &str, validator: &str) -> App {
             .init_balance(storage, &Addr::unchecked(owner), coins(1000, DENOM))
             .unwrap();
 
-        let valoper1 = Validator {
-            address: validator.to_owned(),
-            commission: Decimal::percent(10),
-            max_commission: Decimal::percent(20),
-            max_change_rate: Decimal::percent(1),
-        };
-        router
-            .staking
-            .add_validator(api, storage, &block, valoper1)
-            .unwrap();
+        for &validator in validators {
+            let valoper1 = Validator {
+                address: validator.to_owned(),
+                commission: Decimal::percent(10),
+                max_commission: Decimal::percent(20),
+                max_change_rate: Decimal::percent(1),
+            };
+            router
+                .staking
+                .add_validator(api, storage, &block, valoper1)
+                .unwrap();
+        }
     });
     App::new(app)
 }
@@ -38,7 +40,7 @@ fn instantiation() {
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake
 
-    let app = init_app(owner, validator);
+    let app = init_app(owner, &[validator]);
 
     // Contract setup, with funds transfer
     let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
@@ -84,7 +86,7 @@ fn staking() {
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake
 
-    let app = init_app(owner, validator);
+    let app = init_app(owner, &[validator]);
 
     let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
     let staking_proxy = staking_proxy_code
@@ -98,7 +100,7 @@ fn staking() {
     staking_proxy
         .stake(validator.to_owned())
         .with_funds(&coins(2, DENOM))
-        .call(owner) // Vault has the funds
+        .call(owner) // Staking has the funds at the time
         .unwrap();
 
     // Check that new funds have been staked as well
@@ -116,4 +118,44 @@ fn staking() {
         .unwrap()
         .unwrap();
     assert_eq!(delegation.amount, coin(3, DENOM));
+}
+
+#[test]
+fn restaking() {
+    let owner = "staking"; // The staking contract is the owner of the staking-proxy contracts
+    let user = "user1"; // One who wants to local stake (uses the proxy)
+    let validator = "validator1"; // Where to stake
+    let validator2 = "validator2"; // Where to re-stake
+
+    let app = init_app(owner, &[validator, validator2]);
+
+    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
+    let staking_proxy = staking_proxy_code
+        .instantiate(DENOM.to_owned(), user.to_owned(), validator.to_owned())
+        .with_label("Local Staking Proxy")
+        .with_funds(&coins(10, DENOM))
+        .call(owner) // Instantiated by the staking contract
+        .unwrap();
+
+    // Restake 30% to a different validator
+    staking_proxy
+        .restake(validator.to_owned(), validator2.to_owned(), coin(3, DENOM))
+        .call(user)
+        .unwrap();
+
+    // Check that funds have been re-staked
+    let delegation = app
+        .app()
+        .wrap()
+        .query_delegation(staking_proxy.contract_addr.clone(), validator.to_owned())
+        .unwrap()
+        .unwrap();
+    assert_eq!(delegation.amount, coin(7, DENOM));
+    let delegation2 = app
+        .app()
+        .wrap()
+        .query_delegation(staking_proxy.contract_addr, validator2.to_owned())
+        .unwrap()
+        .unwrap();
+    assert_eq!(delegation2.amount, coin(3, DENOM));
 }
