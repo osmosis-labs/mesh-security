@@ -3,7 +3,7 @@ name = "external-staking"
 description = "The external staking contract is the window to the other chains participating in Mesh Security protocol via IBC"
 version =    { workspace = true }
 edition =    { workspace = true }
-licence =    { workspace = true }
+license =    { workspace = true }
 repository = { workspace = true }
 
 [lib]
