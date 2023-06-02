@@ -49,13 +49,13 @@ impl Stake {
         };
 
         // First item is still not ready for release
-        if self.pending_unbonds[0].release_at < info.time {
+        if self.pending_unbonds[0].release_at > info.time {
             return Uint128::zero();
         }
 
         let non_expired_idx = self
             .pending_unbonds
-            .partition_point(|pending| pending.release_at >= info.time);
+            .partition_point(|pending| pending.release_at <= info.time);
 
         self.pending_unbonds
             .drain(..non_expired_idx)
