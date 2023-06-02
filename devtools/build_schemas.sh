@@ -13,7 +13,7 @@ for C in contracts/*/Cargo.toml contracts/consumer/*/Cargo.toml; do
     cd "$DIR"; 
     cargo schema > /dev/null;
     ls ./schema/*.json;
-    cp ./schema/*.json $BASEDIR/schemas;
+    cp ./schema/*.json "$BASEDIR/schemas";
     cd -
   )
 done
