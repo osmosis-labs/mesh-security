@@ -1,0 +1,75 @@
+# Based on https://github.com/actions-rs/example/blob/master/.github/workflows/quickstart.yml
+
+# on: [pull_request]
+
+on:
+  push:
+    tags:
+      - '*'
+
+name: Release artifacts
+
+jobs:
+  release:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+    defaults:
+      # hack to see if this works at all, we need to do all contracts
+      working-directory: ./contract/vault
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.65.0
+          target: wasm32-unknown-unknown
+          override: true
+
+      # no way of looping... let's just do one dir
+      # - name: Build schemas
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     toolchain: 1.65.0
+      #     command: schema
+      #     args: --workspace
+
+      - name: Build schemas
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: 1.65.0
+          command: schema
+          args: --workspace
+
+      # See https://trstringer.com/github-actions-create-release-upload-artifacts/
+      - name: Create release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: Mesh Security ${{ github.ref }}
+          tag_name: ${{ github.ref }}
+          body_path: CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: upload schemas
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./schema/mesh-vault.json
+          asset_name: mesh-vault.json
+          asset_content_type: application/json
+
+      # - name: Compile WASM contract
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     toolchain: 1.65.0
+      #     command: wasm
+      #   env:
+      #     RUSTFLAGS: "-C link-arg=-s"
