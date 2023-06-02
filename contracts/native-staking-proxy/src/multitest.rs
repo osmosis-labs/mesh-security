@@ -56,14 +56,79 @@ fn instantiation() {
     );
 
     // Check that funds have been staked
-    let proxy_addr = staking_proxy.contract_addr;
     assert_eq!(
         app.app()
             .wrap()
-            .query_balance(proxy_addr.clone(), DENOM)
+            .query_balance(staking_proxy.contract_addr.clone(), DENOM)
             .unwrap(),
         coin(0, DENOM)
     );
+    let delegation = app
+        .app()
+        .wrap()
+        .query_delegation(staking_proxy.contract_addr, validator.to_owned())
+        .unwrap()
+        .unwrap();
+    assert_eq!(delegation.amount, coin(1000, DENOM));
 
-    // TODO: Check "side" effects: Staking msg emitted, data payload, etc.
+    // TODO: Check side effects: data payload, etc.
+}
+
+#[test]
+fn staking() {
+    let owner = "staking"; // The staking contract is the owner of the staking-proxy contracts
+    let user = "user1"; // One who wants to local stake (uses the proxy)
+    let validator = "validator1"; // Where to stake
+
+    // Fund the staking contract, and add validator to staking keeper
+    let block = mock_env().block;
+    let app = MtApp::new(|router, api, storage| {
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(owner), coins(1000, DENOM))
+            .unwrap();
+
+        let valoper1 = Validator {
+            address: validator.to_owned(),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(20),
+            max_change_rate: Decimal::percent(1),
+        };
+        router
+            .staking
+            .add_validator(api, storage, &block, valoper1)
+            .unwrap();
+    });
+    let app = App::new(app);
+
+    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
+    let staking_proxy = staking_proxy_code
+        .instantiate(DENOM.to_owned(), user.to_owned(), validator.to_owned())
+        .with_label("Local Staking Proxy")
+        .with_funds(&coins(1, DENOM))
+        .call(owner) // Instantiated by the staking contract
+        .unwrap();
+
+    // Stake some more on behalf of the user
+    staking_proxy
+        .stake(validator.to_owned())
+        .with_funds(&coins(2, DENOM))
+        .call(owner)
+        .unwrap();
+
+    // Check that new funds have been staked as well
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr.clone(), DENOM)
+            .unwrap(),
+        coin(0, DENOM)
+    );
+    let delegation = app
+        .app()
+        .wrap()
+        .query_delegation(staking_proxy.contract_addr, validator.to_owned())
+        .unwrap()
+        .unwrap();
+    assert_eq!(delegation.amount, coin(3, DENOM));
 }
