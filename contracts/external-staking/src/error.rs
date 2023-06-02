@@ -1,10 +1,17 @@
-use cosmwasm_std::{StdError, Uint128};
+use cosmwasm_std::{ConversionOverflowError, StdError, Uint128};
+use cw_utils::PaymentError;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
+
+    #[error("{0}")]
+    Payment(#[from] PaymentError),
+
+    #[error("{0}")]
+    Conversion(#[from] ConversionOverflowError),
 
     #[error("Unauthorized")]
     Unauthorized,

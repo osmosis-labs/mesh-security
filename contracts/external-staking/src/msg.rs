@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Coin, Uint128};
 
 use crate::state::Config;
 
@@ -52,4 +52,10 @@ pub struct UserInfo {
 #[cw_serde]
 pub struct UsersResponse {
     pub users: Vec<UserInfo>,
+}
+
+/// Response for penging rewards query
+#[cw_serde]
+pub struct PendingRewards {
+    pub amount: Coin,
 }

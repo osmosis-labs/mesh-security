@@ -12,11 +12,11 @@ use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
 use crate::msg::{ReceiveVirtualStake, StakeInfo};
-use crate::state::Stake;
 
 use anyhow::Result as AnyResult;
 
 const OSMO: &str = "osmo";
+const STAR: &str = "star";
 
 // Shortcut setuping all needed contracts
 //
@@ -50,6 +50,7 @@ fn setup<'app>(
     let contract = contract_code
         .instantiate(
             OSMO.to_owned(),
+            STAR.to_owned(),
             vault.contract_addr.to_string(),
             unbond_period,
         )
@@ -196,46 +197,22 @@ fn staking() {
     let stake = contract
         .stake(users[0].to_owned(), validators[0].to_owned())
         .unwrap();
-    assert_eq!(
-        stake,
-        Stake {
-            stake: 200u128.into(),
-            pending_unbonds: vec![]
-        }
-    );
+    assert_eq!(stake.stake.u128(), 200);
 
     let stake = contract
         .stake(users[0].to_owned(), validators[1].to_owned())
         .unwrap();
-    assert_eq!(
-        stake,
-        Stake {
-            stake: 100u128.into(),
-            pending_unbonds: vec![]
-        }
-    );
+    assert_eq!(stake.stake.u128(), 100);
 
     let stake = contract
         .stake(users[1].to_owned(), validators[0].to_owned())
         .unwrap();
-    assert_eq!(
-        stake,
-        Stake {
-            stake: 100u128.into(),
-            pending_unbonds: vec![]
-        }
-    );
+    assert_eq!(stake.stake.u128(), 100);
 
     let stake = contract
         .stake(users[1].to_owned(), validators[1].to_owned())
         .unwrap();
-    assert_eq!(
-        stake,
-        Stake {
-            stake: 200u128.into(),
-            pending_unbonds: vec![]
-        }
-    );
+    assert_eq!(stake.stake.u128(), 200);
 
     // Querying fo all the stakes
     let stakes = contract.stakes(users[0].to_owned(), None, None).unwrap();
