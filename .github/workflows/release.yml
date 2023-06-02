@@ -41,26 +41,15 @@ jobs:
 
       # See https://trstringer.com/github-actions-create-release-upload-artifacts/
       - name: Create release
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v1
         id: create_release
         with:
           draft: false
           prerelease: false
-          release_name: Mesh Security ${{ github.ref }}
-          tag_name: ${{ github.ref }}
           body_path: CHANGELOG.md
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: upload schemas
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./contracts/vault/schema/mesh-vault.json
-          asset_name: mesh-vault.json
-          asset_content_type: application/json
+          tag_name: ${{ github.ref }}
+          files: |
+            contracts/vault/schema/mesh-vault.json
 
       # - name: Compile WASM contract
       #   uses: actions-rs/cargo@v1
