@@ -1,0 +1,50 @@
+# Based on https://github.com/actions-rs/example/blob/master/.github/workflows/quickstart.yml
+
+# on: [pull_request]
+
+on:
+  push:
+    tags:
+      - '*'
+
+name: Release artifacts
+
+jobs:
+  release:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.65.0
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Build schemas
+        run: ./devtools/build_schemas.sh
+
+      # This must go after the other cargo commands, as it writes lots of stuff to
+      # target/ with root permissions (from docker)
+      - name: Build Wasm images
+        uses: addnab/docker-run-action@v3
+        with:
+          image: cosmwasm/workspace-optimizer:0.12.13
+          options: -v ${{ github.workspace }}:/code 
+          run: optimize_workspace.sh
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          body_path: RELEASE_NOTES.md
+          tag_name: ${{ github.ref }}
+          files: |
+            artifacts/*
+            schemas/*
