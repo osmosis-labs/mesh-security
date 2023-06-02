@@ -1,5 +1,5 @@
 use cosmwasm_std::testing::mock_env;
-use cosmwasm_std::{coins, Addr, Decimal, Validator};
+use cosmwasm_std::{coin, coins, Addr, Decimal, Validator};
 use cw_multi_test::App as MtApp;
 
 use sylvia::multitest::App;
@@ -34,11 +34,10 @@ fn instantiation() {
             .add_validator(api, storage, &block, valoper1)
             .unwrap();
     });
-
     let app = App::new(app);
 
+    // Contract setup, with funds transfer
     let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
-
     let staking_proxy = staking_proxy_code
         .instantiate(DENOM.to_owned(), user.to_owned(), validator.to_owned())
         .with_label("Local Staking Proxy")
@@ -56,7 +55,15 @@ fn instantiation() {
         }
     );
 
-    // TODO: Check funds are in the proxy
+    // Check that funds have been staked
+    let proxy_addr = staking_proxy.contract_addr;
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(proxy_addr.clone(), DENOM)
+            .unwrap(),
+        coin(0, DENOM)
+    );
 
     // TODO: Check "side" effects: Staking msg emitted, data payload, etc.
 }
