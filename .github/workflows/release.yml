@@ -25,47 +25,18 @@ jobs:
           target: wasm32-unknown-unknown
           override: true
 
-      # no way of looping... let's just do one dir
-      # - name: Build schemas
-      #   uses: actions-rs/cargo@v1
-      #   with:
-      #     toolchain: 1.65.0
-      #     command: schema
-      #     args: --workspace
+      - name: Build schemas
+        run: ./devtools/build_schemas.sh
 
+      # This must go after the other cargo commands, as it writes lots of stuff to
+      # target/ with root permissions (from docker)
       - name: Build Wasm images
         uses: addnab/docker-run-action@v3
         with:
           image: cosmwasm/workspace-optimizer:0.12.13
-          options: -v ${{ github.workspace }}:/code --mount type=volume,source=contract_cache,target=/code/target --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry
+          options: -v ${{ github.workspace }}:/code 
           run: optimize_workspace.sh
 
-      - name: Build schemas
-        # Need run, as uses doesn't work with 'working-directory'
-        run: cargo +1.65.0 schema
-        working-directory: contracts/vault
-
-      - name: Build schemas
-        # Need run, as uses doesn't work with 'working-directory'
-        run: cargo +1.65.0 schema
-        working-directory: contracts/vault
-
-      - name: Build schemas
-        # Need run, as uses doesn't work with 'working-directory'
-        run: cargo +1.65.0 schema
-        working-directory: contracts/native-staking
-
-      - name: Build schemas
-        # Need run, as uses doesn't work with 'working-directory'
-        run: cargo +1.65.0 schema
-        working-directory: contracts/native-staking-proxy
-
-      - name: Build schemas
-        # Need run, as uses doesn't work with 'working-directory'
-        run: cargo +1.65.0 schema
-        working-directory: contracts/external-staking
-
-      # See https://trstringer.com/github-actions-create-release-upload-artifacts/
       - name: Create release
         uses: softprops/action-gh-release@v1
         id: create_release
@@ -76,15 +47,4 @@ jobs:
           tag_name: ${{ github.ref }}
           files: |
             artifacts/*
-            contracts/vault/schema/mesh-vault.json
-            contracts/native-staking/schema/mesh-native-staking.json
-            contracts/native-staking-proxy/schema/mesh-native-staking-proxy.json
-            contracts/external-staking/schema/external-staking.json
-
-      # - name: Compile WASM contract
-      #   uses: actions-rs/cargo@v1
-      #   with:
-      #     toolchain: 1.65.0
-      #     command: wasm
-      #   env:
-      #     RUSTFLAGS: "-C link-arg=-s"
+            schemas/*
