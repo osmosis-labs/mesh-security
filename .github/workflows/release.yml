@@ -33,11 +33,37 @@ jobs:
       #     command: schema
       #     args: --workspace
 
+      - name: Build Wasm images
+        uses: addnab/docker-run-action@v3
+        with:
+          image: cosmwasm/workspace-optimizer:0.12.13
+          options: -v ${{ github.workspace }}:/code --mount type=volume,source=contract_cache,target=/code/target --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry
+          run: optimize_workspace.sh
+
       - name: Build schemas
         # Need run, as uses doesn't work with 'working-directory'
         run: cargo +1.65.0 schema
-        # hack to see if this works at all, we need to do all contracts
         working-directory: contracts/vault
+
+      - name: Build schemas
+        # Need run, as uses doesn't work with 'working-directory'
+        run: cargo +1.65.0 schema
+        working-directory: contracts/vault
+
+      - name: Build schemas
+        # Need run, as uses doesn't work with 'working-directory'
+        run: cargo +1.65.0 schema
+        working-directory: contracts/native-staking
+
+      - name: Build schemas
+        # Need run, as uses doesn't work with 'working-directory'
+        run: cargo +1.65.0 schema
+        working-directory: contracts/native-staking-proxy
+
+      - name: Build schemas
+        # Need run, as uses doesn't work with 'working-directory'
+        run: cargo +1.65.0 schema
+        working-directory: contracts/external-staking
 
       # See https://trstringer.com/github-actions-create-release-upload-artifacts/
       - name: Create release
@@ -46,10 +72,14 @@ jobs:
         with:
           draft: false
           prerelease: false
-          body_path: CHANGELOG.md
+          body_path: RELEASE_NOTES.md
           tag_name: ${{ github.ref }}
           files: |
+            artifacts/*
             contracts/vault/schema/mesh-vault.json
+            contracts/native-staking/schema/mesh-native-staking.json
+            contracts/native-staking-proxy/schema/mesh-native-staking-proxy.json
+            contracts/external-staking/schema/external-staking.json
 
       # - name: Compile WASM contract
       #   uses: actions-rs/cargo@v1
