@@ -16,7 +16,7 @@ use crate::state::Stake;
 
 use anyhow::Result as AnyResult;
 
-const OSMO: &str = "OSMO";
+const OSMO: &str = "osmo";
 
 // Shortcut setuping all needed contracts
 //
@@ -487,8 +487,8 @@ fn unstaking() {
         .unwrap();
     assert_eq!(stake.stake.u128(), 0);
 
-    // Another timetravel - just enough for first bathc of stakes to release,
-    // to early for second batch
+    // Another timetravel - just enough for first batch of stakes to release,
+    // too early for second batch
     app.app_mut().update_block(|block| {
         block.height += 1;
         block.time = block.time.plus_seconds(50);
@@ -498,7 +498,7 @@ fn unstaking() {
     contract.withdraw_unbonded().call(users[0]).unwrap();
     contract.withdraw_unbonded().call(users[1]).unwrap();
 
-    // Now claims on vauld got reduced, but only for first batch amount
+    // Now claims on vault got reduced, but only for first batch amount
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
@@ -509,7 +509,7 @@ fn unstaking() {
         .unwrap();
     assert_eq!(claim.amount.u128(), 240);
 
-    // Moving forward more, passign through second bath pending duration
+    // Moving forward more, passing through second bath pending duration
     app.app_mut().update_block(|block| {
         block.height += 1;
         block.time = block.time.plus_seconds(60);

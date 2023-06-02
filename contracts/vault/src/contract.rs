@@ -263,7 +263,7 @@ impl VaultContract<'_> {
         Ok(resp)
     }
 
-    /// Returns a singl claim between the user and lienholder
+    /// Returns a single claim between the user and lienholder
     #[msg(query)]
     fn claim(
         &self,
