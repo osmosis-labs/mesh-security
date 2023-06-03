@@ -232,7 +232,8 @@ mod tests {
     use cosmwasm_std::VoteOption::Yes;
 
     static OSMO: &str = "uosmo";
-    static OWNER: &str = "owner";
+    static CREATOR: &str = "staking"; // The creator of the proxy contract(s) is the staking contract
+    static OWNER: &str = "user";
     static VALIDATOR: &str = "validator";
 
     fn do_instantiate(deps: DepsMut) -> (ExecCtx, NativeStakingProxyContract) {
@@ -240,7 +241,7 @@ mod tests {
         let mut ctx = InstantiateCtx {
             deps,
             env: mock_env(),
-            info: mock_info(OWNER, &[coin(100, OSMO)]),
+            info: mock_info(CREATOR, &[coin(100, OSMO)]),
         };
         contract
             .instantiate(
@@ -256,9 +257,10 @@ mod tests {
     #[test]
     fn voting() {
         let mut deps = mock_dependencies();
-        let (ctx, contract) = do_instantiate(deps.as_mut());
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // Vote
+        // The owner can vote
+        ctx.info = mock_info(OWNER, &[]);
         let proposal_id = 1;
         let vote = Yes;
         let res = contract.vote(ctx, proposal_id, vote.clone()).unwrap();
@@ -273,9 +275,10 @@ mod tests {
     #[test]
     fn weighted_voting() {
         let mut deps = mock_dependencies();
-        let (ctx, contract) = do_instantiate(deps.as_mut());
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // Vote weighted
+        // The owner can weighted vote
+        ctx.info = mock_info(OWNER, &[]);
         let proposal_id = 2;
         let vote = vec![WeightedVoteOption {
             option: Yes,
