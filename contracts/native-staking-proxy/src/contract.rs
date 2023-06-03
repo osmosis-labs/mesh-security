@@ -221,3 +221,52 @@ impl NativeStakingProxyContract<'_> {
         todo!()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::DepsMut;
+    use cosmwasm_std::GovMsg::Vote;
+
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::VoteOption::Yes;
+
+    static OSMO: &str = "uosmo";
+    static OWNER: &str = "owner";
+    static VALIDATOR: &str = "validator";
+
+    fn do_instantiate(deps: DepsMut) -> (ExecCtx, NativeStakingProxyContract) {
+        let contract = NativeStakingProxyContract::new();
+        let mut ctx = InstantiateCtx {
+            deps,
+            env: mock_env(),
+            info: mock_info(OWNER, &[coin(100, OSMO)]),
+        };
+        contract
+            .instantiate(
+                ctx.branch(),
+                OSMO.to_owned(),
+                OWNER.to_owned(),
+                VALIDATOR.to_owned(),
+            )
+            .unwrap();
+        (ctx, contract)
+    }
+
+    #[test]
+    fn voting() {
+        let mut deps = mock_dependencies();
+        let (ctx, contract) = do_instantiate(deps.as_mut());
+
+        // vote
+        let proposal_id = 1;
+        let vote = Yes;
+        let res = contract.vote(ctx, proposal_id, vote.clone()).unwrap();
+        assert_eq!(1, res.messages.len());
+        // Assert it's a governance vote
+        assert_eq!(
+            res.messages[0].msg,
+            cosmwasm_std::CosmosMsg::Gov(Vote { proposal_id, vote })
+        );
+    }
+}
