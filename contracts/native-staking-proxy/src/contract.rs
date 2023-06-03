@@ -11,7 +11,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::msg::{ClaimsResponse, ConfigResponse, OwnerMsg};
+use crate::msg::{ConfigResponse, OwnerMsg};
 use crate::native_staking_callback;
 use crate::state::Config;
 
@@ -188,8 +188,6 @@ impl NativeStakingProxyContract<'_> {
             ContractError::InvalidDenom(amount.denom)
         );
 
-        // TODO?: Register unbonding as pending (needs unbonding period)
-
         let msg = StakingMsg::Undelegate { validator, amount };
         Ok(Response::new().add_message(msg))
     }
@@ -205,7 +203,6 @@ impl NativeStakingProxyContract<'_> {
         nonpayable(&ctx.info)?;
 
         // Simply assume all of our liquid assets are from unbondings
-        // TODO?: Get the list of all the completed unbondings
         let balance = ctx
             .deps
             .querier
@@ -225,14 +222,6 @@ impl NativeStakingProxyContract<'_> {
     #[msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         Ok(self.config.load(ctx.deps.storage)?)
-    }
-
-    /// Returns all pending unbonding.
-    /// TODO: can we do that with contract API?
-    /// Or better they use CosmJS native delegation queries with this proxy address
-    #[msg(query)]
-    fn unbonding(&self, _ctx: QueryCtx) -> Result<ClaimsResponse, ContractError> {
-        todo!()
     }
 }
 
