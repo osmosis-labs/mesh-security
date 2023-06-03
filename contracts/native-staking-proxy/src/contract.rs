@@ -6,7 +6,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
-use cw_utils::must_pay;
+use cw_utils::{must_pay, nonpayable};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -112,6 +112,8 @@ impl NativeStakingProxyContract<'_> {
         proposal_id: u64,
         vote: VoteOption,
     ) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
@@ -127,6 +129,8 @@ impl NativeStakingProxyContract<'_> {
         proposal_id: u64,
         vote: Vec<WeightedVoteOption>,
     ) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
