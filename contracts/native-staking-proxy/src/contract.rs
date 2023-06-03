@@ -90,6 +90,9 @@ impl NativeStakingProxyContract<'_> {
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
+
         ensure_eq!(
             amount.denom,
             cfg.denom,
@@ -112,10 +115,10 @@ impl NativeStakingProxyContract<'_> {
         proposal_id: u64,
         vote: VoteOption,
     ) -> Result<Response, ContractError> {
-        nonpayable(&ctx.info)?;
-
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
 
         let msg = GovMsg::Vote { proposal_id, vote };
         Ok(Response::new().add_message(msg))
@@ -129,10 +132,10 @@ impl NativeStakingProxyContract<'_> {
         proposal_id: u64,
         vote: Vec<WeightedVoteOption>,
     ) -> Result<Response, ContractError> {
-        nonpayable(&ctx.info)?;
-
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
 
         let msg = GovMsg::VoteWeighted {
             proposal_id,
@@ -148,6 +151,8 @@ impl NativeStakingProxyContract<'_> {
     fn withdraw_rewards(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
 
         // Withdraw all delegations to the owner (already set as withdrawal address in instantiate)
         let msgs = ctx
@@ -174,6 +179,9 @@ impl NativeStakingProxyContract<'_> {
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
+
         ensure_eq!(
             amount.denom,
             cfg.denom,
@@ -193,6 +201,8 @@ impl NativeStakingProxyContract<'_> {
     fn release_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
 
         // Simply assume all of our liquid assets are from unbondings
         // TODO?: Get the list of all the completed unbondings
