@@ -259,17 +259,32 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // The owner can vote
+        // the owner can vote
         ctx.info = mock_info(OWNER, &[]);
         let proposal_id = 1;
         let vote = Yes;
-        let res = contract.vote(ctx, proposal_id, vote.clone()).unwrap();
+        let res = contract
+            .vote(ctx.branch(), proposal_id, vote.clone())
+            .unwrap();
         assert_eq!(1, res.messages.len());
-        // Assert it's a governance vote
+        // assert it's a governance vote
         assert_eq!(
             res.messages[0].msg,
-            cosmwasm_std::CosmosMsg::Gov(Vote { proposal_id, vote })
+            cosmwasm_std::CosmosMsg::Gov(Vote {
+                proposal_id,
+                vote: vote.clone()
+            })
         );
+
+        // Nobody else can vote
+        ctx.info = mock_info("somebody", &[]);
+        let res = contract.vote(ctx.branch(), proposal_id, vote.clone());
+        assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
+
+        // Not even the creator
+        ctx.info = mock_info(CREATOR, &[]);
+        let res = contract.vote(ctx, proposal_id, vote);
+        assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
     }
 
     #[test]
@@ -285,7 +300,7 @@ mod tests {
             weight: Decimal::percent(50),
         }];
         let res = contract
-            .vote_weighted(ctx, proposal_id, vote.clone())
+            .vote_weighted(ctx.branch(), proposal_id, vote.clone())
             .unwrap();
         assert_eq!(1, res.messages.len());
         // Assert it's a weighted governance vote
@@ -293,8 +308,18 @@ mod tests {
             res.messages[0].msg,
             cosmwasm_std::CosmosMsg::Gov(VoteWeighted {
                 proposal_id,
-                options: vote
+                options: vote.clone()
             })
         );
+
+        // Nobody else can vote
+        ctx.info = mock_info("somebody", &[]);
+        let res = contract.vote_weighted(ctx.branch(), proposal_id, vote.clone());
+        assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
+
+        // Not even the creator
+        ctx.info = mock_info(CREATOR, &[]);
+        let res = contract.vote_weighted(ctx, proposal_id, vote);
+        assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
     }
 }
