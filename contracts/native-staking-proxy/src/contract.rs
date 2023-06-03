@@ -234,6 +234,7 @@ mod tests {
 
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
     use cosmwasm_std::VoteOption::Yes;
+    use cw_utils::PaymentError;
 
     static OSMO: &str = "uosmo";
     static CREATOR: &str = "staking"; // The creator of the proxy contract(s) is the staking contract
@@ -263,7 +264,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // the owner can vote
+        // The owner can vote
         ctx.info = mock_info(OWNER, &[]);
         let proposal_id = 1;
         let vote = Yes;
@@ -279,6 +280,14 @@ mod tests {
                 vote: vote.clone()
             })
         );
+
+        // But not send funds
+        ctx.info = mock_info(OWNER, &[coin(1, OSMO)]);
+        let res = contract.vote(ctx.branch(), proposal_id, vote.clone());
+        assert!(matches!(
+            res.unwrap_err(),
+            ContractError::Payment(PaymentError::NonPayable {})
+        ));
 
         // Nobody else can vote
         ctx.info = mock_info("somebody", &[]);
@@ -315,6 +324,14 @@ mod tests {
                 options: vote.clone()
             })
         );
+
+        // But not send funds
+        ctx.info = mock_info(OWNER, &[coin(1, OSMO)]);
+        let res = contract.vote_weighted(ctx.branch(), proposal_id, vote.clone());
+        assert!(matches!(
+            res.unwrap_err(),
+            ContractError::Payment(PaymentError::NonPayable {})
+        ));
 
         // Nobody else can vote
         ctx.info = mock_info("somebody", &[]);
