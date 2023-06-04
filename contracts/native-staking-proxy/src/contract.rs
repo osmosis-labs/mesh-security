@@ -155,14 +155,15 @@ impl NativeStakingProxyContract<'_> {
         nonpayable(&ctx.info)?;
 
         // Withdraw all delegations to the owner (already set as withdrawal address in instantiate)
-        let msgs = ctx
+        let msgs: Vec<_> = ctx
             .deps
             .querier
             .query_all_delegations(ctx.env.contract.address)?
             .into_iter()
             .map(|delegation| DistributionMsg::WithdrawDelegatorReward {
                 validator: delegation.validator,
-            });
+            })
+            .collect();
         let res = Response::new().add_messages(msgs);
         Ok(res)
     }
