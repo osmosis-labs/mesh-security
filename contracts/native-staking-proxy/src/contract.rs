@@ -229,8 +229,9 @@ impl NativeStakingProxyContract<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cosmwasm_std::DistributionMsg::SetWithdrawAddress;
     use cosmwasm_std::GovMsg::{Vote, VoteWeighted};
-    use cosmwasm_std::{Decimal, DepsMut};
+    use cosmwasm_std::{CosmosMsg, Decimal, DepsMut};
 
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
     use cosmwasm_std::VoteOption::Yes;
@@ -257,6 +258,50 @@ mod tests {
             )
             .unwrap();
         (ctx, contract)
+    }
+
+    // Extra checks of instantiate returned messages and data
+    #[test]
+    fn instantiating() {
+        let mut deps = mock_dependencies();
+        let contract = NativeStakingProxyContract::new();
+        let mut ctx = InstantiateCtx {
+            deps: deps.as_mut(),
+            env: mock_env(),
+            info: mock_info(CREATOR, &[coin(100, OSMO)]),
+        };
+        let res = contract
+            .instantiate(
+                ctx.branch(),
+                OSMO.to_owned(),
+                OWNER.to_owned(),
+                VALIDATOR.to_owned(),
+            )
+            .unwrap();
+
+        // Assert returned messages
+        assert_eq!(
+            res.messages[0].msg,
+            CosmosMsg::Staking(StakingMsg::Delegate {
+                validator: VALIDATOR.to_owned(),
+                amount: coin(100, OSMO)
+            })
+        );
+        assert_eq!(
+            res.messages[1].msg,
+            CosmosMsg::Distribution(SetWithdrawAddress {
+                address: OWNER.to_owned(),
+            })
+        );
+
+        // Assert data payload
+        assert_eq!(
+            res.data.unwrap(),
+            to_binary(&OwnerMsg {
+                owner: OWNER.to_owned(),
+            })
+            .unwrap()
+        );
     }
 
     #[test]
