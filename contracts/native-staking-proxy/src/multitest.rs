@@ -360,16 +360,23 @@ fn releasing_unbonded() {
 fn withdrawing_rewards() {
     let owner = "vault_admin";
 
+    let staking_addr = "contract1"; // Second contract (instantiated by vault)
     let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
 
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    let _vault = setup(&app, owner, user, validator).unwrap();
+    let vault = setup(&app, owner, user, validator).unwrap();
 
-    // Record current user funds
-    let original_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
+    // Record current vault, staking and user funds
+    let original_vault_funds = app
+        .app()
+        .wrap()
+        .query_balance(vault.contract_addr.clone(), OSMO)
+        .unwrap();
+    let original_staking_funds = app.app().wrap().query_balance(staking_addr, OSMO).unwrap();
+    let original_user_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
 
     // Access staking proxy instance
     let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
@@ -388,5 +395,17 @@ fn withdrawing_rewards() {
 
     // User now has some rewards
     let current_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
-    assert!(current_funds.amount > original_funds.amount);
+    assert!(current_funds.amount > original_user_funds.amount);
+
+    // Staking hasn't received any rewards
+    let staking_funds = app.app().wrap().query_balance(staking_addr, OSMO).unwrap();
+    assert_eq!(original_staking_funds, staking_funds);
+
+    // Vault hasn't received any rewards
+    let vault_funds = app
+        .app()
+        .wrap()
+        .query_balance(vault.contract_addr, OSMO)
+        .unwrap();
+    assert_eq!(original_vault_funds, vault_funds);
 }
