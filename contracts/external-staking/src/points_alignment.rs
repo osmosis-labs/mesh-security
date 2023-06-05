@@ -6,7 +6,7 @@ use cosmwasm_std::{Uint128, Uint256};
 /// Points alignment is how much points should be added / subtracted from points calculated per
 /// user due to stake changes. It has to be signed type, but no signed integrals are right now
 /// in CosmWasm - using `Uint256` here as a "fake" type, so for calculations it is shifted - the
-/// real value storedis `points_alignment - Uint256::MAX / 2` - this is not ideal, but it makes
+/// real value stored is `points_alignment - Uint256::MAX / 2` - this is not ideal, but it makes
 /// calculations always fit in U256.
 #[cw_serde]
 #[derive(Copy)]
