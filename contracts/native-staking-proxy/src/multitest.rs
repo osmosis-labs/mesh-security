@@ -51,7 +51,12 @@ fn init_app(owner: &str, validators: &[&str]) -> App {
     App::new(app)
 }
 
-fn setup<'app>(app: &'app App, owner: &str) -> AnyResult<VaultContractProxy<'app>> {
+fn setup<'app>(
+    app: &'app App,
+    owner: &str,
+    user: &str,
+    validator: &str,
+) -> AnyResult<VaultContractProxy<'app>> {
     let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(app);
     let staking_code = mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
     let staking_proxy_code = contract::multitest_utils::CodeId::store_code(app);
@@ -74,6 +79,26 @@ fn setup<'app>(app: &'app App, owner: &str) -> AnyResult<VaultContractProxy<'app
         .with_label("Vault")
         .call(owner)
         .unwrap();
+
+    // Bond some funds to the vault
+    vault
+        .bond()
+        .with_funds(&coins(200, OSMO))
+        .call(user)
+        .unwrap();
+
+    // Stakes some of it locally. This instantiates the staking proxy contract for user
+    vault
+        .stake_local(
+            coin(100, OSMO),
+            to_binary(&mesh_native_staking::msg::StakeMsg {
+                validator: validator.to_owned(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
     Ok(vault)
 }
 
@@ -266,34 +291,13 @@ fn unstaking() {
 fn releasing_unbonded() {
     let owner = "vault_admin";
 
-    let vault_addr = "contract0"; // First created contract
-    let _staking_addr = "contract1"; // Second created contract. Created by vault contract on init
     let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
 
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    let vault = setup(&app, owner).unwrap();
-
-    // Bond some funds to the vault
-    vault
-        .bond()
-        .with_funds(&coins(200, OSMO))
-        .call(user)
-        .unwrap();
-
-    // Stakes some of it locally. This instantiates the staking proxy contract for user
-    vault
-        .stake_local(
-            coin(100, OSMO),
-            to_binary(&mesh_native_staking::msg::StakeMsg {
-                validator: validator.to_owned(),
-            })
-            .unwrap(),
-        )
-        .call(user)
-        .unwrap();
+    let vault = setup(&app, owner, user, validator).unwrap();
 
     // Access staking proxy instance
     let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
@@ -330,7 +334,10 @@ fn releasing_unbonded() {
 
     // Check that the vault has the funds again
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(vault.contract_addr, OSMO)
+            .unwrap(),
         coin(200, OSMO)
     );
 }
@@ -339,34 +346,13 @@ fn releasing_unbonded() {
 fn withdrawing_rewards() {
     let owner = "vault_admin";
 
-    let _vault_addr = "contract0"; // First created contract
-    let _staking_addr = "contract1"; // Second created contract. Created by vault contract on init
     let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
 
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    let vault = setup(&app, owner).unwrap();
-
-    // Bond some funds to the vault
-    vault
-        .bond()
-        .with_funds(&coins(200, OSMO))
-        .call(user)
-        .unwrap();
-
-    // Stakes some of it locally. This instantiates the staking proxy contract for user
-    vault
-        .stake_local(
-            coin(100, OSMO),
-            to_binary(&mesh_native_staking::msg::StakeMsg {
-                validator: validator.to_owned(),
-            })
-            .unwrap(),
-        )
-        .call(user)
-        .unwrap();
+    let _vault = setup(&app, owner, user, validator).unwrap();
 
     // Record current user funds
     let original_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
