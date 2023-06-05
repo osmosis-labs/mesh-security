@@ -104,32 +104,35 @@ fn setup<'app>(
 
 #[test]
 fn instantiation() {
-    let owner = "staking"; // The staking contract is the owner of the staking-proxy contracts
+    let owner = "vault_admin";
+
+    let staking_addr = "contract1"; // Second contract (instantiated by vault)
+    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
+
     let user = "user1"; // One who wants to local stake (uses the proxy)
-    let validator = "validator1"; // Where to stake
+    let validator = "validator1"; // Where to stake / unstake
 
-    let app = init_app(owner, &[validator]);
+    let app = init_app(user, &[validator]); // Fund user, create validator
+    setup(&app, owner, user, validator).unwrap();
 
-    // Contract setup, with funds transfer
-    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
-    let staking_proxy = staking_proxy_code
-        .instantiate(OSMO.to_owned(), user.to_owned(), validator.to_owned())
-        .with_label("Local Staking Proxy")
-        .with_funds(&coins(1000, OSMO))
-        .call(owner) // Instantiated by the staking contract
-        .unwrap();
+    // Access staking proxy instance
+    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
+        Addr::unchecked(proxy_addr),
+        &app,
+    );
 
+    // Check config
     let config = staking_proxy.config().unwrap();
     assert_eq!(
         config,
         ConfigResponse {
             denom: OSMO.to_owned(),
-            parent: Addr::unchecked(owner), // parent is the staking contract
-            owner: Addr::unchecked(user),   // owner is the user
+            parent: Addr::unchecked(staking_addr), // parent is the staking contract
+            owner: Addr::unchecked(user),          // owner is the user
         }
     );
 
-    // Check that funds have been staked
+    // Check that initial funds have been staked
     assert_eq!(
         app.app()
             .wrap()
@@ -143,7 +146,7 @@ fn instantiation() {
         .query_delegation(staking_proxy.contract_addr, validator.to_owned())
         .unwrap()
         .unwrap();
-    assert_eq!(delegation.amount, coin(1000, OSMO));
+    assert_eq!(delegation.amount, coin(100, OSMO));
 }
 
 #[test]
@@ -171,7 +174,7 @@ fn staking() {
             to_binary(&mesh_native_staking::msg::StakeMsg {
                 validator: validator.to_owned(),
             })
-                .unwrap(),
+            .unwrap(),
         )
         .call(user)
         .unwrap();
