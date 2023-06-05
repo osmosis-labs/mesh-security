@@ -1,19 +1,24 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{BlockInfo, Timestamp, Uint128};
+use cosmwasm_std::{BlockInfo, Timestamp, Uint128, Uint256};
 use mesh_apis::vault_api::VaultApiHelper;
+
+use crate::points_alignment::PointsAlignment;
 
 /// Contract configuration
 #[cw_serde]
 pub struct Config {
     /// Local native token this contracts operate on
     pub denom: String,
+    /// Rewards token for this contract (remote IBC token)
+    pub rewards_denom: String,
     /// Vault contract address
     pub vault: VaultApiHelper,
     /// Ubbounding period for claims in seconds
     pub unbonding_period: u64,
 }
 
-/// All single stake related information - entry per `(user, validator)` pair
+/// All single stake related information - entry per `(user, validator)` pair, including
+/// distribution alignment
 #[cw_serde]
 #[derive(Default)]
 pub struct Stake {
@@ -26,6 +31,11 @@ pub struct Stake {
     /// `unbonding_period` after current time - this way this is guaranteed to be
     /// always sorted (as time is guaranteed to be monotonic).
     pub pending_unbonds: Vec<PendingUnbond>,
+    /// Points alignment is how much points should be added/substracted from points caltulated per
+    /// user due to stake changes.
+    pub points_alignment: PointsAlignment,
+    /// Tokens already withdrawn by this user
+    pub withdrawn_funds: Uint128,
 }
 
 /// Description of tokens in unbonding period
@@ -62,4 +72,16 @@ impl Stake {
             .map(|pending| pending.amount)
             .sum()
     }
+}
+
+/// Per validator distribution information
+#[cw_serde]
+#[derive(Default)]
+pub struct Distribution {
+    /// Total tokens staken on this validator by all users
+    pub total_stake: Uint128,
+    /// Points user is eligible to by single token staken
+    pub points_per_stake: Uint256,
+    /// Points which were not distributed previously
+    pub points_leftover: Uint256,
 }
