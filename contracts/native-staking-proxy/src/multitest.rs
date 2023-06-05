@@ -228,23 +228,25 @@ fn restaking() {
 
 #[test]
 fn unstaking() {
-    let owner = "staking"; // The staking contract is the owner of the staking-proxy contracts
+    let owner = "vault_admin";
+
+    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
+
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
-    let app = init_app(owner, &[validator]);
+    let app = init_app(user, &[validator]); // Fund user, create validator
+    setup(&app, owner, user, validator).unwrap();
 
-    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
-    let staking_proxy = staking_proxy_code
-        .instantiate(OSMO.to_owned(), user.to_owned(), validator.to_owned())
-        .with_label("Local Staking Proxy")
-        .with_funds(&coins(10, OSMO))
-        .call(owner) // Instantiated by the staking contract
-        .unwrap();
+    // Access staking proxy instance
+    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
+        Addr::unchecked(proxy_addr),
+        &app,
+    );
 
     // Unstake 50%
     staking_proxy
-        .unstake(validator.to_owned(), coin(5, OSMO))
+        .unstake(validator.to_owned(), coin(50, OSMO))
         .call(user)
         .unwrap();
 
@@ -255,7 +257,7 @@ fn unstaking() {
         .query_delegation(staking_proxy.contract_addr.clone(), validator.to_owned())
         .unwrap()
         .unwrap();
-    assert_eq!(delegation.amount, coin(5, OSMO));
+    assert_eq!(delegation.amount, coin(50, OSMO));
 
     // And that they are now held, until the unbonding period
     // First, check that the contract has no funds
@@ -283,7 +285,7 @@ fn unstaking() {
             .wrap()
             .query_balance(staking_proxy.contract_addr, OSMO)
             .unwrap(),
-        coin(5, OSMO)
+        coin(50, OSMO)
     );
 }
 
