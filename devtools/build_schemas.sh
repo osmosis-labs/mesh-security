@@ -6,11 +6,11 @@ rm -rf ./schemas
 mkdir -p ./schemas
 
 BASEDIR=$(pwd)
-for C in contracts/*/Cargo.toml contracts/consumer/*/Cargo.toml; do
+for C in contracts/{consumer,provider}/*/Cargo.toml; do
   DIR=$(dirname "$C")
   echo "Building schema for $DIR"
   (
-    cd "$DIR"; 
+    cd "$DIR";
     cargo schema > /dev/null;
     ls ./schema/*.json;
     cp ./schema/*.json "$BASEDIR/schemas";
