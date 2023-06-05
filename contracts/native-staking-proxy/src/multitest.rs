@@ -188,24 +188,26 @@ fn staking() {
 
 #[test]
 fn restaking() {
-    let owner = "staking"; // The staking contract is the owner of the staking-proxy contracts
+    let owner = "vault_admin";
+
+    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
+
     let user = "user1"; // One who wants to local stake (uses the proxy)
-    let validator = "validator1"; // Where to stake
+    let validator = "validator1"; // Where to stake / unstake
     let validator2 = "validator2"; // Where to re-stake
 
-    let app = init_app(owner, &[validator, validator2]);
+    let app = init_app(user, &[validator, validator2]); // Fund user, create validator
+    setup(&app, owner, user, validator).unwrap();
 
-    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(&app);
-    let staking_proxy = staking_proxy_code
-        .instantiate(OSMO.to_owned(), user.to_owned(), validator.to_owned())
-        .with_label("Local Staking Proxy")
-        .with_funds(&coins(10, OSMO))
-        .call(owner) // Instantiated by the staking contract
-        .unwrap();
+    // Access staking proxy instance
+    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
+        Addr::unchecked(proxy_addr),
+        &app,
+    );
 
     // Restake 30% to a different validator
     staking_proxy
-        .restake(validator.to_owned(), validator2.to_owned(), coin(3, OSMO))
+        .restake(validator.to_owned(), validator2.to_owned(), coin(30, OSMO))
         .call(user)
         .unwrap();
 
@@ -216,14 +218,14 @@ fn restaking() {
         .query_delegation(staking_proxy.contract_addr.clone(), validator.to_owned())
         .unwrap()
         .unwrap();
-    assert_eq!(delegation.amount, coin(7, OSMO));
+    assert_eq!(delegation.amount, coin(70, OSMO));
     let delegation2 = app
         .app()
         .wrap()
         .query_delegation(staking_proxy.contract_addr, validator2.to_owned())
         .unwrap()
         .unwrap();
-    assert_eq!(delegation2.amount, coin(3, OSMO));
+    assert_eq!(delegation2.amount, coin(30, OSMO));
 }
 
 #[test]
