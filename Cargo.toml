@@ -34,7 +34,7 @@ thiserror        = "1.0.38"
 
 # dev deps
 anyhow        = "1"
-cw-multi-test = "0.16"
+cw-multi-test = "0.16.4"
 derivative    = "2"
 test-case     = "2.2.0"
 

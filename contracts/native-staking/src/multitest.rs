@@ -19,7 +19,7 @@ const OSMO: &str = "OSMO";
 fn instantiation() {
     let app = App::default();
 
-    let owner = "owner";
+    let owner = "vault"; // Owner of the staking contract (i. e. the vault contract)
 
     let staking_proxy_code = local_staking_proxy::multitest_utils::CodeId::store_code(&app);
     let staking_code = contract::multitest_utils::CodeId::store_code(&app);
@@ -166,7 +166,7 @@ fn receiving_stake() {
 
 #[test]
 fn releasing_proxy_stake() {
-    let owner = "vault_admin"; // Owner of the staking contract (i. e. the vault contract)
+    let owner = "vault_admin"; // Owner of the vault contract
 
     let vault_addr = "contract0"; // First created contract
     let staking_addr = "contract1"; // Second contract (instantiated by vault)
@@ -201,7 +201,7 @@ fn releasing_proxy_stake() {
         label: None,
     };
 
-    // Instantiates vault, staking and staking proxy contracts
+    // Instantiates vault and staking contracts
     let vault = vault_code
         .instantiate(OSMO.to_owned(), staking_init_info)
         .with_label("Vault")
@@ -233,7 +233,8 @@ fn releasing_proxy_stake() {
         coin(200, OSMO)
     );
 
-    // Stakes some of it locally, to validator
+    // Stakes some of it locally, to validator. This instantiates the staking proxy contract for
+    // user
     vault
         .stake_local(
             coin(100, OSMO),

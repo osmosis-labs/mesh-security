@@ -6,12 +6,12 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
-use cw_utils::must_pay;
+use cw_utils::{must_pay, nonpayable};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::msg::{ClaimsResponse, ConfigResponse, OwnerMsg};
+use crate::msg::{ConfigResponse, OwnerMsg};
 use crate::native_staking_callback;
 use crate::state::Config;
 
@@ -90,6 +90,9 @@ impl NativeStakingProxyContract<'_> {
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
+
         ensure_eq!(
             amount.denom,
             cfg.denom,
@@ -115,6 +118,8 @@ impl NativeStakingProxyContract<'_> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
+        nonpayable(&ctx.info)?;
+
         let msg = GovMsg::Vote { proposal_id, vote };
         Ok(Response::new().add_message(msg))
     }
@@ -129,6 +134,8 @@ impl NativeStakingProxyContract<'_> {
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
 
         let msg = GovMsg::VoteWeighted {
             proposal_id,
@@ -145,15 +152,18 @@ impl NativeStakingProxyContract<'_> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
+        nonpayable(&ctx.info)?;
+
         // Withdraw all delegations to the owner (already set as withdrawal address in instantiate)
-        let msgs = ctx
+        let msgs: Vec<_> = ctx
             .deps
             .querier
             .query_all_delegations(ctx.env.contract.address)?
             .into_iter()
             .map(|delegation| DistributionMsg::WithdrawDelegatorReward {
                 validator: delegation.validator,
-            });
+            })
+            .collect();
         let res = Response::new().add_messages(msgs);
         Ok(res)
     }
@@ -170,13 +180,14 @@ impl NativeStakingProxyContract<'_> {
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
+
         ensure_eq!(
             amount.denom,
             cfg.denom,
             ContractError::InvalidDenom(amount.denom)
         );
-
-        // TODO?: Register unbonding as pending (needs unbonding period)
 
         let msg = StakingMsg::Undelegate { validator, amount };
         Ok(Response::new().add_message(msg))
@@ -190,8 +201,9 @@ impl NativeStakingProxyContract<'_> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
+        nonpayable(&ctx.info)?;
+
         // Simply assume all of our liquid assets are from unbondings
-        // TODO?: Get the list of all the completed unbondings
         let balance = ctx
             .deps
             .querier
@@ -212,12 +224,169 @@ impl NativeStakingProxyContract<'_> {
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         Ok(self.config.load(ctx.deps.storage)?)
     }
+}
 
-    /// Returns all pending unbonding.
-    /// TODO: can we do that with contract API?
-    /// Or better they use CosmJS native delegation queries with this proxy address
-    #[msg(query)]
-    fn unbonding(&self, _ctx: QueryCtx) -> Result<ClaimsResponse, ContractError> {
-        todo!()
+// Some unit tests, due to mt limitations / unsupported msgs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::DistributionMsg::SetWithdrawAddress;
+    use cosmwasm_std::GovMsg::{Vote, VoteWeighted};
+    use cosmwasm_std::{CosmosMsg, Decimal, DepsMut};
+
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::VoteOption::Yes;
+    use cw_utils::PaymentError;
+
+    static OSMO: &str = "uosmo";
+    static CREATOR: &str = "staking"; // The creator of the proxy contract(s) is the staking contract
+    static OWNER: &str = "user";
+    static VALIDATOR: &str = "validator";
+
+    fn do_instantiate(deps: DepsMut) -> (ExecCtx, NativeStakingProxyContract) {
+        let contract = NativeStakingProxyContract::new();
+        let mut ctx = InstantiateCtx {
+            deps,
+            env: mock_env(),
+            info: mock_info(CREATOR, &[coin(100, OSMO)]),
+        };
+        contract
+            .instantiate(
+                ctx.branch(),
+                OSMO.to_owned(),
+                OWNER.to_owned(),
+                VALIDATOR.to_owned(),
+            )
+            .unwrap();
+        (ctx, contract)
+    }
+
+    // Extra checks of instantiate returned messages and data
+    #[test]
+    fn instantiating() {
+        let mut deps = mock_dependencies();
+        let contract = NativeStakingProxyContract::new();
+        let mut ctx = InstantiateCtx {
+            deps: deps.as_mut(),
+            env: mock_env(),
+            info: mock_info(CREATOR, &[coin(100, OSMO)]),
+        };
+        let res = contract
+            .instantiate(
+                ctx.branch(),
+                OSMO.to_owned(),
+                OWNER.to_owned(),
+                VALIDATOR.to_owned(),
+            )
+            .unwrap();
+
+        // Assert returned messages
+        assert_eq!(
+            res.messages[0].msg,
+            CosmosMsg::Staking(StakingMsg::Delegate {
+                validator: VALIDATOR.to_owned(),
+                amount: coin(100, OSMO)
+            })
+        );
+        assert_eq!(
+            res.messages[1].msg,
+            CosmosMsg::Distribution(SetWithdrawAddress {
+                address: OWNER.to_owned(),
+            })
+        );
+
+        // Assert data payload
+        assert_eq!(
+            res.data.unwrap(),
+            to_binary(&OwnerMsg {
+                owner: OWNER.to_owned(),
+            })
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn voting() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // The owner can vote
+        ctx.info = mock_info(OWNER, &[]);
+        let proposal_id = 1;
+        let vote = Yes;
+        let res = contract
+            .vote(ctx.branch(), proposal_id, vote.clone())
+            .unwrap();
+        assert_eq!(1, res.messages.len());
+        // assert it's a governance vote
+        assert_eq!(
+            res.messages[0].msg,
+            cosmwasm_std::CosmosMsg::Gov(Vote {
+                proposal_id,
+                vote: vote.clone()
+            })
+        );
+
+        // But not send funds
+        ctx.info = mock_info(OWNER, &[coin(1, OSMO)]);
+        let res = contract.vote(ctx.branch(), proposal_id, vote.clone());
+        assert!(matches!(
+            res.unwrap_err(),
+            ContractError::Payment(PaymentError::NonPayable {})
+        ));
+
+        // Nobody else can vote
+        ctx.info = mock_info("somebody", &[]);
+        let res = contract.vote(ctx.branch(), proposal_id, vote.clone());
+        assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
+
+        // Not even the creator
+        ctx.info = mock_info(CREATOR, &[]);
+        let res = contract.vote(ctx, proposal_id, vote);
+        assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
+    }
+
+    #[test]
+    fn weighted_voting() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // The owner can weighted vote
+        ctx.info = mock_info(OWNER, &[]);
+        let proposal_id = 2;
+        let vote = vec![WeightedVoteOption {
+            option: Yes,
+            weight: Decimal::percent(50),
+        }];
+        let res = contract
+            .vote_weighted(ctx.branch(), proposal_id, vote.clone())
+            .unwrap();
+        assert_eq!(1, res.messages.len());
+        // Assert it's a weighted governance vote
+        assert_eq!(
+            res.messages[0].msg,
+            cosmwasm_std::CosmosMsg::Gov(VoteWeighted {
+                proposal_id,
+                options: vote.clone()
+            })
+        );
+
+        // But not send funds
+        ctx.info = mock_info(OWNER, &[coin(1, OSMO)]);
+        let res = contract.vote_weighted(ctx.branch(), proposal_id, vote.clone());
+        assert!(matches!(
+            res.unwrap_err(),
+            ContractError::Payment(PaymentError::NonPayable {})
+        ));
+
+        // Nobody else can vote
+        ctx.info = mock_info("somebody", &[]);
+        let res = contract.vote_weighted(ctx.branch(), proposal_id, vote.clone());
+        assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
+
+        // Not even the creator
+        ctx.info = mock_info(CREATOR, &[]);
+        let res = contract.vote_weighted(ctx, proposal_id, vote);
+        assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
     }
 }
