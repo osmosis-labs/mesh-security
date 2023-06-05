@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use cosmwasm_std::{
     coin, coins, ensure, ensure_eq, from_binary, Addr, BankMsg, Binary, Coin, Decimal, Order,
     Response, StdResult, Uint128, Uint256,
@@ -117,7 +115,9 @@ impl ExternalStakingContract<'_> {
         stake.pending_unbonds.push(unbond);
 
         // Distribution alignment
-        stake.points_alignment += Uint256::from(amount.amount) * distribution.points_per_stake;
+        stake
+            .points_alignment
+            .stake_decreased(amount.amount, distribution.points_per_stake);
         distribution.total_stake -= amount.amount;
 
         self.stakes
@@ -351,7 +351,7 @@ impl ExternalStakingContract<'_> {
         let config = self.config.load(ctx.deps.storage)?;
 
         let resp = PendingRewards {
-            amount: coin(amount.u128(), &config.rewards_denom),
+            amount: coin(amount.u128(), config.rewards_denom),
         };
 
         Ok(resp)
@@ -370,26 +370,7 @@ impl ExternalStakingContract<'_> {
     ) -> Result<Uint128, ContractError> {
         let points = distribution.points_per_stake * Uint256::from(stake.stake);
 
-        // Points alignment application - way very much around because of offset of `Uint256` we
-        // used
-        let points = match stake
-            .points_alignment
-            .cmp(&(Uint256::MAX / Uint256::from_u128(2)))
-        {
-            // Points alignemnt negative - first we need to add alignment and then add offset
-            // to avoid exceeding limit
-            Ordering::Less => {
-                points + stake.points_alignment - Uint256::MAX / Uint256::from_u128(2)
-            }
-            // Points alignment is positive - first we reduce it by offset and then add to the
-            // poits
-            Ordering::Greater => {
-                points + (stake.points_alignment - Uint256::MAX / Uint256::from_u128(2))
-            }
-            // Alignment is `0`, no math to be done
-            Ordering::Equal => points,
-        };
-
+        let points = stake.points_alignment.align(points);
         let total = Uint128::try_from(points / DISTRIBUTION_POINTS_SCALE)?;
 
         Ok(total - stake.withdrawn_funds)
@@ -437,7 +418,9 @@ pub mod cross_staking {
             stake.stake += amount.amount;
 
             // Distribution alignment
-            stake.points_alignment -= Uint256::from(amount.amount) * distribution.points_per_stake;
+            stake
+                .points_alignment
+                .stake_increased(amount.amount, distribution.points_per_stake);
             distribution.total_stake += amount.amount;
 
             self.stakes
