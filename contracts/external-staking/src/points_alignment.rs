@@ -20,7 +20,7 @@ impl PointsAlignment {
     /// Align points with alignment
     pub fn align(self, points: Uint256) -> Uint256 {
         match self.0.cmp(&(Uint256::MAX >> 1)) {
-            // Points alignemnt negative - first we need to add alignment and then add offset
+            // Points aligment negative - first we need to add alignment and then add offset
             // to avoid exceeding limit
             Ordering::Less => points + self.0 - (Uint256::MAX >> 1),
             // Points alignment is positive - first we reduce it by offset and then add to the
