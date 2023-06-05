@@ -119,8 +119,6 @@ fn instantiation() {
         .unwrap()
         .unwrap();
     assert_eq!(delegation.amount, coin(1000, OSMO));
-
-    // TODO: Check side effects: data payload, etc.
 }
 
 #[test]
@@ -229,12 +227,39 @@ fn unstaking() {
     let delegation = app
         .app()
         .wrap()
-        .query_delegation(staking_proxy.contract_addr, validator.to_owned())
+        .query_delegation(staking_proxy.contract_addr.clone(), validator.to_owned())
         .unwrap()
         .unwrap();
     assert_eq!(delegation.amount, coin(5, OSMO));
 
-    // TODO: And that they are now held, until the unbonding period
+    // And that they are now held, until the unbonding period
+    // First, check that the contract has no funds
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr.clone(), OSMO)
+            .unwrap(),
+        coin(0, OSMO)
+    );
+
+    // Advance time until the unbonding period is over
+    app.update_block(|block| {
+        block.height += 1234;
+        block.time = block.time.plus_seconds(UNBONDING_PERIOD + 1);
+    });
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
+
+    // Check that the contract now has the funds
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr, OSMO)
+            .unwrap(),
+        coin(5, OSMO)
+    );
 }
 
 #[test]
@@ -292,7 +317,7 @@ fn releasing_unbonded() {
 
     // Advance time until the unbonding period is over
     app.update_block(|block| {
-        block.height += 1234;
+        block.height += 12345;
         block.time = block.time.plus_seconds(UNBONDING_PERIOD + 1);
     });
     // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
