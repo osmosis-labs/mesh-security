@@ -226,6 +226,7 @@ impl NativeStakingProxyContract<'_> {
     }
 }
 
+// Some unit tests, due to mt limitations / unsupported msgs
 #[cfg(test)]
 mod tests {
     use super::*;
