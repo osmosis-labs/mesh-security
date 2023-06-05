@@ -24,7 +24,7 @@ impl PointsAlignment {
             // to avoid exceeding limit
             Ordering::Less => points + self.0 - (Uint256::MAX >> 1),
             // Points alignment is positive - first we reduce it by offset and then add to the
-            // poits
+            // points
             Ordering::Greater => points + (self.0 - (Uint256::MAX >> 1)),
             // Alignment is `0`, no math to be done
             Ordering::Equal => points,
@@ -34,16 +34,16 @@ impl PointsAlignment {
     /// Modify points alignment due to increased stake - increasing weight immediately "adds" points
     /// distributed to owner, so they need to be reduced
     ///
-    /// * amount - amouont just staken
+    /// * amount - amount just staken
     /// * pps - points per stake right now
     pub fn stake_increased(&mut self, amount: Uint128, pps: Uint256) {
         self.0 -= Uint256::from(amount) * pps;
     }
 
-    /// Modify points alignment due to decreased stake - increasing weight immediately "removes" points
+    /// Modify points alignment due to decreased stake - decreasing weight immediately "removes" points
     /// distributed to owner, so they need to be increased
     ///
-    /// * amount - amouont just staken
+    /// * amount - amount just staken
     /// * pps - points per stake right now
     pub fn stake_decreased(&mut self, amount: Uint128, pps: Uint256) {
         self.0 += Uint256::from(amount) * pps;
