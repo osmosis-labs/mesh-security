@@ -1,11 +1,10 @@
 [workspace]
-# TODO: move other contracts into provider subdirectory
-members = ["packages/*", "contracts/external-staking", "contracts/native-staking*", "contracts/vault", "contracts/consumer/*"]
+members = ["packages/*", "contracts/provider/*", "contracts/consumer/*"]
 resolver = "2"
 
 [workspace.package]
 edition       = "2021"
-version       = "0.1.0"
+version       = "0.2.0"
 license       = "MIT"
 repository    = "https://github.com/osmosis-labs/mesh-security"
 
@@ -14,10 +13,13 @@ mesh-apis        = { path = "./packages/apis" }
 mesh-bindings        = { path = "./packages/bindings" }
 mesh-mocks        = { path = "./packages/mocks" }
 
-mesh-vault    = { path = "./contracts/vault" }
-mesh-native-staking    = { path = "./contracts/native-staking" }
-mesh-native-staking-proxy    = { path = "./contracts/native-staking-proxy" }
+mesh-vault    = { path = "./contracts/provider/vault" }
+mesh-external-staking    = { path = "./contracts/provider/external-staking" }
+mesh-native-staking    = { path = "./contracts/provider/native-staking" }
+mesh-native-staking-proxy    = { path = "./contracts/provider/native-staking-proxy" }
+
 mesh-converter    = { path = "./contracts/consumer/converter" }
+mesh-simple-price-feed    = { path = "./contracts/consumer/simple-price-feed" }
 mesh-virtual-staking    = { path = "./contracts/consumer/virtual-staking" }
 
 sylvia           = "0.4.2"
