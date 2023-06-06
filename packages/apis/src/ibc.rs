@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Coin, Uint128};
 
 /// These are messages sent from provider -> consumer
 /// ibc_packet_receive in converter must handle them all.
@@ -12,16 +12,18 @@ pub enum ProviderMsg {
     /// This should be called when we lock more tokens to virtually stake on a given validator
     Stake {
         validator: String,
-        /// We can't really use Coin here, as which denom? Remote staking denom, or how that
-        /// token appears as ibc denom. Just encode the amount.
-        amount: Uint128,
+        /// This is the local (provider-side) denom that is held in the vault.
+        /// It will be converted to the consumer-side staking token in the converter with help
+        /// of the price feed.
+        stake: Coin,
     },
     /// This should be called when we begin the unbonding period of some more tokens previously virtually staked
     Unstake {
         validator: String,
-        /// We can't really use Coin here, as which denom? Remote staking denom, or how that
-        /// token appears as ibc denom. Just encode the amount.
-        amount: Uint128,
+        /// This is the local (provider-side) denom that is held in the vault.
+        /// It will be converted to the consumer-side staking token in the converter with help
+        /// of the price feed.
+        unstake: Coin,
     },
 }
 
@@ -49,6 +51,7 @@ pub struct Validator {
     /// This is needed to detect slashing conditions
     pub pub_key: String,
 
+    // TODO: remove this? add other metadata?
     /// This is the moniker of the validator, used for display purposes
     pub moniker: String,
 }
@@ -57,16 +60,12 @@ pub struct Validator {
 /// ibc_packet_receive in external-staking must handle them all.
 #[cw_serde]
 pub enum ConsumerMsg {
-    /// This should be sent when the validator set changes.
-    /// Add includes full validator info to add.
-    /// Remove includes only the valoper_address to remove.
-    ///
-    /// Question: This should not be sent when a validator enters/leaves the "active set",
-    /// but rather when they are tombstoned.
-    UpdateValidatorSet {
-        add: Vec<Validator>,
-        remove: Vec<String>,
-    },
+    /// This is sent when a new validator registers and is available to receive
+    /// delegations.
+    AddValidator(Validator),
+    /// This is sent when a validator is tombstoned. Not just leaving the active state,
+    /// but when it is no longer a valid target to delegate to.
+    RemoveValidator { valoper_address: String },
 }
 
 /// Ack sent for ConsumerMsg::UpdateValidatorSet
