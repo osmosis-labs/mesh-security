@@ -12,11 +12,53 @@ It is also **not** used to [handle slashing](./Slashing.md), as there are concer
 a malicious state machine would lie, so we demand original evidence of Tendermint
 misbehavior on the provider chain.
 
-## Handshake
-
-**TODO** any limitations around setting up a new channel
+## Establishing a Channel
 
 This must use an ordered channel as [discussed below](#channel-ordering).
+
+### Handshake
+
+Before creating that channel, you must have created the `external-staking` and
+`converter` contracts. The `external-staking` contract must be initialized with
+the valid (connection, port) from which the converter will connect, which means that
+the converter contract must be established before the `external-staking` contract.
+
+The channel is initiated by a relayer, with party A being the appropriate `converter`
+contract on the consumer chain, and party B being the `external-staking` contract.
+
+The general process (assuming a vault is already established on the provider) is:
+
+1. Instantiate price feed, converter, virtual staking contracts on the consumer chain
+2. Instantiate external staking contract on the provider chain (referencing IBC port of the converter)
+3. Create IBC channel from provider to consumer
+4. Apply to consumer governance to provide a virtual staking max cap to the associated virtual staking contract, so that this connection may have voting power.
+
+### Version Negotiation
+
+The channel version uses a JSON-encoded struct with the following fields:
+
+```json
+{
+    "protocol": "mesh-security",
+    "version": "1.0.0",
+}
+```
+
+It is important that you **do not** use `#[cw_serde]` on the Rust struct as we explicitly
+want to **allow unknown fields**. This allows us to add new fields in the future.
+`#[cw_serde]` generates `#[serde(deny_unknown_fields)]` which would break this.
+
+Both sides must error if the protocol is not `mesh-security`. 
+
+The version is used to allow for future upgrades. The provider should always send the
+highest protocol version it supports to start the handshake. The consumer should
+error if the major version is higher than it's known versions (for now, anything besides `1`).
+The consumer should respond with the highest version it supports, but no higher than
+that proposed by the provider. 
+
+At the end, the version is the highest version supported by both sides and they may freely make
+use of any features added up to that version. This document describes version `1.0.0` of
+the protocol, but additions may be added in the future (which must be linked to from this section).
 
 ## Validator Metadata
 

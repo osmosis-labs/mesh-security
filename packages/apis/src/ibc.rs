@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Uint128};
+use cosmwasm_std::Coin;
 
 /// These are messages sent from provider -> consumer
 /// ibc_packet_receive in converter must handle them all.
