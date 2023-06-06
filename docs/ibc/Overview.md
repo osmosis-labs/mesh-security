@@ -89,4 +89,5 @@ Read more about the mechanics of the [Slashing Evidence Handling](./Slashing.md)
 
 ## Trust Assumptions
 
-**TODO** list between the consumer and the provider
+The [top-level introduction covers many concerns](../README.md#common-concerns)
+about possible exploits in the trust relationship between consumer and provider.
