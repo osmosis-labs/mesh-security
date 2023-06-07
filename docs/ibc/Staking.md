@@ -110,11 +110,12 @@ This requires that all operations are commutative. We also guarantee they are id
 although that is not strictly required given IBC's "exactly once" delivery.
 
 In this section, we consider the operations that compose IBC packets:
+
 * `A(x, p)` - Add validator `x` with pubkey `p` to the validator set
 * `R(x)` - Remove validator `x` from the validator set
 
-**TODO** For now, we skip key rotation, such that `p` is always the same for a given `x`.
-We will improve this before merging.
+We do not consider Tendermint key rotation in this section, but describe it as an addition
+in the following section. This should support the basic operations available today.
 
 We wish to maintain a validator set `V` on the Provider with the following properties:
 
@@ -151,16 +152,17 @@ let new_state: State = match (old_state, op) {
     (_, R(_)) => State::Tombstoned,
     (Some(State::Tombstoned), _) => State::Tombstoned,
     (None, A(_, p)) => Some(State::Present(p)),
-    (Some(State::Present(p1)), A(_, p)) => {
-        assert_eq!(p, p1); // TODO: handle this better
+    (Some(State::Present(p)), A(_, p1)) => {
+        assert_eq!(p, p1); // Return error if we have different views
         Some(State::Present(p)),
     }
 };
 ```
 
-**T
-
 ### Proof of correctness
+
+The basic implementation without public key rotation is another expression of the same algorithm
+used in [`2P-Set`](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#2P-Set_(Two-Phase_Set)). This is a proven CRDT. But we explain the three properties here for completeness.
 
 We promise to hold 3 properties:
 
@@ -178,6 +180,79 @@ _If `A(x, p)` has been received, but no `R(x)`, `x` is in `V` with pubkey `p`_ -
 is set when `A(x, p)` is seen the first time, and maintained when seen a second time.
 The "but no R(x)" clause is maintained by the proof above, which overrides any other state
 and enforces a permanent tombstone.
+
+### Validator Key Rotation
+
+In addition to the basic operations described above, there is another operations we would like
+to support. This protocol is designed to handle Tendermint key rotation, such that a validator address
+may be associated with multiple public keys over the course of it's existence. 
+
+This feature is not implemented in Cosmos SDK yet, but long-requested and the Mesh Security
+protocol should be future proof. (Note: we do not handle changing the `valoper` address as
+we use that as the unique identifier).
+
+To support key rotation, we must clarify what is desired... we want to keep the "most recent"
+pubkey for a given validator. We also want to maintain a list of "past pubkeys" alogn with their
+last active date. This is to allow for slashing to be associated with them,
+if a double sign occurs within the "unbonding period" (ie. 21 days) of them being rotated out
+(based on timestamps of the consumer chain).
+
+This is very much like the state above, but we expand the content stored in the `State::Present`
+variant. We also add a new operation: 
+
+* `K(x, p, po, t)` - Update validator `x` to have pubkey `p`. The previous pubkey was `po` and the update occurred at time `t`.
+
+The state transitions is the same as above, except we handle `K` like `A`. What we want to focus on
+is the merge function for the inner state.
+
+```rust
+type Validator = Option<ValidatorState>
+
+enum State {
+    /// The first entry is the current key.
+    /// The second entry is a list of past keys, with their last active time.
+    Present(Pubkey, Vec<(Pubkey, Timestamp)>),
+    Tombstoned,
+}
+```
+
+This adds three state transitions to consider:
+
+* `None` + `K(x, p, po, t)` => `State::Present`
+* `Some(State::Present(_))` + `K(x, p, po, t)` => `State::Present(_)`
+* `Some(State::Present(_))` + `A(x, p)` => `State::Present(_)`
+
+The last one is either a no-op or an error. `A(x, p)` should only show up for the latest pubkey,
+and return an error if it differs. In no case does it change the state. Let's now consider what
+happens when applying `K` to the state.
+
+```rust
+let new_state: State = match (old_state, op) {
+    // .. other branches as defined above
+    (None, K(_, p, po, t)) => Some(State::Present(p, vec![(po, t)])),
+    (Some(State::Present(p, mut v)), K(_, p, po, tn)) => {
+        let seen = v.iter().find(|(k, to)| k == &po)
+        if let Some((_, to)) = seen {
+            // We already have this key in the list, if the "last used" timestamp is newer,
+            // we update it, otherwise we do nothing
+            if to < tn {
+                v = v.into_iter().map(|(k, t)| if k == &po { (k, tn) } else { (k, t) }).collect();
+            }
+        } else {
+            // We don't have this key in the list, so we add it
+            v.push((po, tn));
+        }
+        Some(State::Present(p, v)),
+    }
+};
+```
+
+### Proof of correctness
+
+**TODO** We have to show that for a set of `A` and `K` operations, all permutations of the order
+of those operations result in the same state. 
+
+Note: In fact, this requires the keys to be sorted, which would be an adjustment above.
 
 ## Staking Messages
 
