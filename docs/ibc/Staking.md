@@ -14,7 +14,12 @@ misbehavior on the provider chain.
 
 ## Establishing a Channel
 
-This must use an ordered channel as [discussed below](#channel-ordering).
+As [discussed below](#channel-ordering), ordered channels are extremely fragile and
+one packet that causes and error can shut down the channel forever.
+
+Unordered channels make it harder to prove guarantees for the application in an asynchronous
+environment, but we will use them here. Thus, all communication must have a proof that
+it maintains correctness in face of arbitrary packet reordering and dropping (via error/timeout).
 
 ### Handshake
 
@@ -66,22 +71,117 @@ It is important for the provider to know the proper validators on the consumer c
 Both in order to limit the delegations to valid targets *before* creating an IBC message,
 but also in order to track tendermint public keys to be able to slash properly.
 
-Once the channel is established, the provider will send a `ListValidators` message requesting
-all validators on the consumer, and will store the response locally.
+We define the "Validator Subprotocol" as a way to sync this information. It uses a CRDT-like
+design to maintain consistency in the face of arbitrary reordering. And retries in order
+to ensure dropped packets are eventually received.
 
-Everytime this changes, either by a new validator registering, or by tombstoning an
-existing validator, the consumer will send an `AddValidator` or `RemoveValidator` message
-with the change. It is up to the external-staking contract to keep track of these changes
-and maintain a local copy.
+### Message Types
 
-Note that this list of validators should maintain all validators who can be delegated to,
-not just the active set. And removing should only be done when all delegators have been slashed.
-You can also mark it as "to remove" while retaining local data in order to map pubkey to
-the valoper address to slash if needed. 
+All validator change messages are initiated from the consumer side. The provider is
+responsible for guaranteeing any packet with a success ACK is written to state.
+Given all successful acks have been committed, the consumer maintains enough
+information to sync otustanding changes and guarantee the Provider will eventually
+have a proper view of the dynamic validator set.
 
-_Note: sending these updates as a stream (rather than polling for the whole list every epoch) requires some custom sdk bindings. This should be done as part of the virtual staking module, but the implementation will target v1. For MVP, we can just list the initial validators._
+We make use of two messages. `AddValidators` and `RemoveValidators`. These are batch messages
+due to the IBC packet overhead, but conceptually we can consider them as vectors of "AddValidator"
+(`A(x)`) and "RemoveValidator" (`R(x)`) messages.
+
+### Message Sending Strategy
+
+Once the channel is established, the consumer will sync the current state via an `AddValidators`
+message for all validators in the current active set. This is a one-time message, and
+all future messages are diffs on top of this initial state. Future changes will be sent as a
+stream of `AddValidators` and `RemoveValidators` messages.
+
+As new validators are added to the active set, the consumer will send an `AddValidators`
+message with their information. We do not signal when a validator is removed from the active
+set as long as it is still valid to delegate to them (ie. they have not been tombstoned).
+
+When a validator is tombstoned, the consumer will send a `RemoveValidators` message with
+the address of that validator. Once it has been removed, it can never be added again.
+
+_Note: sending these updates as a stream (rather than polling for the whole list every epoch) requires some custom sdk bindings. This should be done as part of the virtual staking module, but the implementation will target v1. For MVP, we can just do batches every epoch and ignore slashing._
+
+### CRDT Design
+
+As you see from the message types, we are using an operation-based CRDT design.
+This requires that all operations are commutative. We also guarantee they are idempotent,
+although that is not strictly required given IBC's "exactly once" delivery.
+
+In this section, we consider the operations that compose IBC packets:
+* `A(x, p)` - Add validator `x` with pubkey `p` to the validator set
+* `R(x)` - Remove validator `x` from the validator set
+
+**TODO** For now, we skip key rotation, such that `p` is always the same for a given `x`.
+We will improve this before merging.
+
+We wish to maintain a validator set `V` on the Provider with the following properties:
+
+* If no packet has been received for a given `x`, `x` is not in `V`
+* If `R(x)` has been received, `x` is not in `V`
+* If `A(x, p)` has been received, but no `R(x)`, `x` is in `V` with pubkey `p`
+
+The naive implementation of add on A and remove on R would not work. `[A(x, p), R(x)]` would
+be properly processed, but `[R(x), A(x, p)]` would leave A in the set.
+
+Instead, we store an enum for each validator, with the following states: 
+
+```rust
+type Validator = Option<ValidatorState>
+
+enum State {
+    Present(Pubkey),
+    Tombstoned,
+}
+```
+
+The two states for a "seen" validator are embedded inside `Some(_)`, as any Rust Map implementation
+will provide us with `None` for any unseen validator.
+
+We define the state transitions as:
+
+```rust
+let x = match &op {
+    R(x) => x,
+    A(x, _) => x,
+};
+let old_state: Option<State> = VALIDATORS.may_load(storage, x)?;
+let new_state: State = match (old_state, op) {
+    (_, R(_)) => State::Tombstoned,
+    (Some(State::Tombstoned), _) => State::Tombstoned,
+    (None, A(_, p)) => Some(State::Present(p)),
+    (Some(State::Present(p1)), A(_, p)) => {
+        assert_eq!(p, p1); // TODO: handle this better
+        Some(State::Present(p)),
+    }
+};
+```
+
+**T
+
+### Proof of correctness
+
+We promise to hold 3 properties:
+
+_If no packet has been received for a given `x`, `x` is not in `V`_ - This is trivially true as we start with an empty map and only add validators via operations that include their address.
+
+_If `R(x)` has been received, `x` is not in `V`_ - Upon the first receipt of `R(x)`, `V(x)`
+transitions to `Tombstoned` from any previous state. 
+`(Some(State::Tombstoned), _) => State::Tombstoned` will guarantee that once a validator
+is in the `Tombstoned` state, it will never leave that state.
+
+We also see that multiple receipts of `R(x)` have the same effect as a single such message, making
+this idempotent.
+
+_If `A(x, p)` has been received, but no `R(x)`, `x` is in `V` with pubkey `p`_ - The first part
+is set when `A(x, p)` is seen the first time, and maintained when seen a second time.
+The "but no R(x)" clause is maintained by the proof above, which overrides any other state
+and enforces a permanent tombstone.
 
 ## Staking Messages
+
+**TODO**
 
 Once it has the information of the valid set of validators, the main action taken 
 by the provider is assigning virtual stake to particular validator and removing it.
