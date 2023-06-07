@@ -16,7 +16,7 @@ signatures from the Tendermint headers on the Consumer chain. These cannot be fo
 unless the private key is compromised.
 
 As of V1, the external staker must have a method to allow submitting such evidence of
-double-signing which can be verified and immediately slash all delegators to that
+double-signing which can be verified and immediately slash all delegators of that
 validator.
 
 ## Detecting Byzantine Chains
@@ -32,7 +32,7 @@ allowed until the governance intervention is complete.
 
 Mesh Security should detect such a state and likewise freeze the relevant `external-staking`
 contract, or alternatively slash all delegators to all validators on that chain.
-The simple act of freezing the channel will prevent anyone from unstaking, but pending unbonding
+The simple act of freezing the channel will prevent anyone from unstaking, but pending unbondings
 will process as usual.
 
 **TODO** decide on proper handling of this case, and see how to get updates from the ibc-go
@@ -46,7 +46,7 @@ on Cosmos SDK chains and been properly slashed in-protocol by CometBFT.
 We need to add identical detection and slashing to the `external-staking` contract.
 
 We can base our checks on the path Comet BFT validates double signing evidence.
-It verfies [general aspects of evidence](https://github.com/cometbft/cometbft/blob/v0.37.1/evidence/verify.go#L13-L58)
+It verifies [general aspects of evidence](https://github.com/cometbft/cometbft/blob/v0.37.1/evidence/verify.go#L13-L58)
 and then [specific properties of a duplicate vote](https://github.com/cometbft/cometbft/blob/v0.37.1/evidence/verify.go#L156-L222).
 
 To validate, we need [the two votes](https://github.com/cometbft/cometbft/blob/v0.37.1/proto/tendermint/types/evidence.pb.go#L116-L122). Each vote contains many fields about the header,
@@ -60,8 +60,8 @@ The basic checks are:
 4. Finally, [verify the signature on both votes](https://github.com/cometbft/cometbft/blob/v0.37.1/evidence/verify.go#L211-L219) using the public key and the chain-id of the consumer chain (this must be set up in the `external-staking` contract)
 
 We can also add some consistency checks, like "this evidence has not been seen before", which is
-equivalent to "this validator has not been tombstoned yet". And maybe some limit on age of
-evidence, or accept any age and just use the age of the evidence to decide what is slashed
+equivalent to "this validator has not been tombstoned yet", and maybe some limit on age of
+evidence. Or we just accept any age and just use the age of the evidence to decide what is slashed
 (based on the unbonding period). Or just slash everyone bonded or unbonding, as the timestamps
 of the two votes may be wildly different, and they really shouldn't have trusted this
 cheating validator in the first place.

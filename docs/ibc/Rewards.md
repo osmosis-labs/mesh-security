@@ -38,12 +38,11 @@ The converter contract will send the reward tokens to the provider chain via ICS
 and when the ack is received, it will send an ICA message to execute `distribute_rewards`
 on the `external-staking` contract, along with the previously transfered funds.
 
-**Problem**: There are currently no contract callbacks on ICS20 not ICA. This means we cannot reliably
+**Problem**: There are currently no contract callbacks on ICS20 nor ICA. This means we cannot reliably
 orchestrate these two events. Furthermore, the ICA message may fail, and the reward tokens will 
 be stranded, as there is no callback to inform them.
 
-This approach should only be considered 
-
+**This approach should only be considered if there is no other option.**
 
 ### ICS20 with Memo Field
 
@@ -57,7 +56,7 @@ is permissionless and accepts any payment in the proper denom.
 
 This is a nice solution, as it allows the converter to perform all actions in a single
 IBC packet call and not worry about orchestrating multiple packets. However, as of the
-writing of this document, there is no callback on failed packet receive
+writing of this document, there is **no callback** on failed packet receive
 (that is left for a future version of the protocol). This means that if the `distribute_rewards`
 call fails for whatever reason, the reward tokens will be effectively lost.
 

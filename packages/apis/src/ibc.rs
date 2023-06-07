@@ -50,10 +50,6 @@ pub struct Validator {
     /// This is the *Tendermint* public key, used for signing blocks.
     /// This is needed to detect slashing conditions
     pub pub_key: String,
-
-    // TODO: remove this? add other metadata?
-    /// This is the moniker of the validator, used for display purposes
-    pub moniker: String,
 }
 
 /// These are messages sent from consumer -> provider
