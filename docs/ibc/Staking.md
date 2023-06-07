@@ -132,7 +132,7 @@ Instead, we store an enum for each validator, with the following states:
 type Validator = Option<ValidatorState>
 
 enum State {
-    Present(Pubkey),
+    Active(Pubkey),
     Tombstoned,
 }
 ```
@@ -151,11 +151,9 @@ let old_state: Option<State> = VALIDATORS.may_load(storage, x)?;
 let new_state: State = match (old_state, op) {
     (_, R(_)) => State::Tombstoned,
     (Some(State::Tombstoned), _) => State::Tombstoned,
-    (None, A(_, p)) => Some(State::Present(p)),
-    (Some(State::Present(p)), A(_, p1)) => {
-        assert_eq!(p, p1); // Return error if we have different views
-        Some(State::Present(p)),
-    }
+    (None, A(_, p)) => Some(State::Active(p)),
+    // Ignore A if we have received state already
+    (Some(State::Active(p)), A(_, _)) => Some(State::Active(p)),
 };
 ```
 
@@ -197,13 +195,17 @@ last active date. This is to allow for slashing to be associated with them,
 if a double sign occurs within the "unbonding period" (ie. 21 days) of them being rotated out
 (based on timestamps of the consumer chain).
 
-This is very much like the state above, but we expand the content stored in the `State::Present`
+This is very much like the state above, but we expand the content stored in the `State::Active`
 variant. We also add a new operation: 
 
-* `K(x, p, po, t)` - Update validator `x` to have pubkey `p`. The previous pubkey was `po` and the update occurred at time `t`.
+* `K(x, p, po, h)` - Update validator `x` to have pubkey `p`. The previous pubkey was `po` and the update occurred on block height `h`.
 
-The state transitions is the same as above, except we handle `K` like `A`. What we want to focus on
-is the merge function for the inner state.
+We add the limitation that is is invalid behavior to produce two different `K(x, p, po, h)` and `K(x, p', po', h)`, with the same `x`
+and `h`, but different public keys. Basically, a given validator may not rotate their keys more than once per block height (which is
+a very reasonable limitation).
+
+The state transitions is the same as above, except we handle `K` similar to `A` (in terms of `None` -> `Active` -> `Tombstoned`).
+What we want to focus on is the merge function for the inner state. We add a list of all past pubkeys, with their last active time.
 
 ```rust
 type Validator = Option<ValidatorState>
@@ -211,48 +213,117 @@ type Validator = Option<ValidatorState>
 enum State {
     /// The first entry is the current key.
     /// The second entry is a list of past keys, with their last active time.
-    Present(Pubkey, Vec<(Pubkey, Timestamp)>),
+    /// This list is sorted in descending order, with the most recent key first.
+    Active(Pubkey, Vec<(Pubkey, Timestamp)>),
     Tombstoned,
 }
 ```
 
 This adds three state transitions to consider:
 
-* `None` + `K(x, p, po, t)` => `State::Present`
-* `Some(State::Present(_))` + `K(x, p, po, t)` => `State::Present(_)`
-* `Some(State::Present(_))` + `A(x, p)` => `State::Present(_)`
+* `None` + `K(x, p, po, t)` => `State::Active`
+* `Some(State::Active(_))` + `K(x, p, po, t)` => `State::Active(_)`
+* `Some(State::Active(_))` + `A(x, p)` => `State::Active(_)`
 
 The last one is either a no-op or an error. `A(x, p)` should only show up for the latest pubkey,
 and return an error if it differs. In no case does it change the state. Let's now consider what
-happens when applying `K` to the state.
+happens when applying `K` to the state; in particular, what are the invariants we want to hold
+when applying `permutation(A, K1, K2, ... Kn)`?
+
+* If `R(x)` has been seen, the state is `Tombstoned`. Otherwise, it is `Active`. (Same as before)
+* `Active(p, v)` should hold the following invariants for `p`:
+    * If `A(x, p)` has been seen, amd no `K(x, ..)`, then `p` comes from `A(_, p)` (Same as before)
+    * Otherwise, `p` comes from the most recent `K(x, p, _, h)` (Maximum h)
+* `Active(p, v)` should hold the following invariants for `v`:
+    * There is one element in `v` for each `K` operation seen (from `(po, h)`)
+    * `v` is sorted by `h` in descending order
+    * There are no duplicate `h` values in `v`
 
 ```rust
 let new_state: State = match (old_state, op) {
     // .. other branches as defined above
-    (None, K(_, p, po, t)) => Some(State::Present(p, vec![(po, t)])),
-    (Some(State::Present(p, mut v)), K(_, p, po, tn)) => {
-        let seen = v.iter().find(|(k, to)| k == &po)
-        if let Some((_, to)) = seen {
-            // We already have this key in the list, if the "last used" timestamp is newer,
-            // we update it, otherwise we do nothing
-            if to < tn {
-                v = v.into_iter().map(|(k, t)| if k == &po { (k, tn) } else { (k, t) }).collect();
-            }
-        } else {
-            // We don't have this key in the list, so we add it
-            v.push((po, tn));
-        }
-        Some(State::Present(p, v)),
+
+    // if we see K without a previous state, we treat it like `A` happened with `po` before
+    (None, K(_, p, po, h)) => Some(State::Active(p, vec![(po, h)])),
+
+    // if there is a state, we must insert the transition properly into the list and only update
+    // the pubkey if 
+    (Some(State::Active(cur, mut v)), K(_, p, po, h)) => {
+        // --- if this transition is more recent that the last one, we update the current pubkey
+        let updated = match v.get(0) {
+            Some((_, h0)) if *h0 > h => cur,
+            _ => p.clone(),
+        };
+ 
+        // ---- now we add this transition to the list of past pubkeys
+        // Add this transition
+        v.push((po, h));
+        // sort the array from largest to smallest.
+        v.sort_by(|a, b| a.cmp(b).reverse());
+        // remove all duplicates (handle if `K` was seen before)
+        v.dedup();
+        // assert invariant violation if there are now multiple items with tn
+        assert_eq!(v.iter().filter(|(_, x)| x == &h).count(), 1);
+
+        Some(State::Active(updated, v)),
     }
 };
 ```
 
 ### Proof of correctness
 
-**TODO** We have to show that for a set of `A` and `K` operations, all permutations of the order
+We have to show that for a set of `A` and `K` operations, all permutations of the order
 of those operations result in the same state. 
 
-Note: In fact, this requires the keys to be sorted, which would be an adjustment above.
+* `Active(p, v)` should hold the following invariants for `v`:
+    * There is one element in `v` for each `K` operation seen (from `(po, h)`)
+    * `v` is sorted by `h` in descending order
+    * There are no duplicate `h` values in `v`
+
+The previous invariants for `v` are covered quite straightforwardly, by always adding new entries,
+sorting the array and removing duplicates. The implementation can be optimized from the above description
+(using clever inserting), but the code is a straightforward enforcement of the invariants.
+
+* `Active(p, v)` should hold the following invariants for `p`:
+    * If `A(x, p)` has been seen, amd no `K(x, ..)`, then `p` comes from `A(_, p)` (Same as before)
+    * Otherwise, `p` comes from the most recent `K(x, p, _, h)` (Maximum h)
+
+First of all, the initial state from the first `A` or `K` operation sets the initial value of `p`,
+which will hold the invariant, as the "most recently seen" value is the "only seen" value.
+
+```rust
+    (None, A(_, p)) => Some(State::Active(p, [])),
+    (None, K(_, p, po, h)) => Some(State::Active(p, vec![(po, h)])),
+    (Some(State::Active(p, v)), A(_, _)) => Some(State::Active(p, v)),
+```
+
+We consider the case for `A` like a transition at height 0, meaning any further transition would
+be more recent and should update the current pubkey. If we receive `[A, K]`, then we hit the case for `K` below 
+(`v.get(0) == None`) and use the pubkey from `K`. If we receive `[K, A]`, then we set the pubkey from `K` first,
+and return an Error for `A` with no state change (as it asserts a different pubkey than the state).
+
+```rust
+        let updated = match v.get(0) {
+            Some((_, h0)) if *h0 > h => cur,
+            _ => p.clone(),
+        };
+```
+
+The case for `K` is more interesting, as the messages could be out-of-order, and we can't simply ignore them like `A`.
+Assume `K(x, p, po, h)` and `K'(x, p', po', h')` with `h < h'` (and likely `po' = p`).
+They could be received `[K, K']` or `[K', K]`, and both orderings should give the same response for the final pubkey (`p'`).
+
+We have shown the first message will hold the invariant. In order to keep the invariant, we must update the pubkey
+in the case `[K, K']` and not update it in the case `[K', K]`. Let's verify the algorithm maintains that.
+
+In `[K, K']`, we initially set `v` to `[(po, h)]`. When adding `K'`, we compare `h'` to `h` and find `h' > h`, so it doesn't match
+the first branch, and we overwrite the pubkey with that contained in `K'`.
+
+In `[K', K]`, we initially set `v` to `[(po', h')]`. When adding `K`, we compare `h` to `h'` and find `h < h'`, so it matches
+the first branch, and keep the pubkey originally set by `K'`.
+
+Both cases maintain the invariant. And by induction, we can assert any new `K''` added to the existing state will maintain said invariant. 
+Thus, we have shown that the algorithm is correct.
 
 ## Staking Messages
 
