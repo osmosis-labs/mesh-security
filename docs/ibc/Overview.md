@@ -66,9 +66,10 @@ No forks, no complicated processes... just one proposal.
 
 We use this custom channel to communicate securely and directly
 between the two sides, sending messages about bonding and unbonding
-delegations. This is the principle form of communication,
-and we dig into the [Cross-Chain Staking Protocol](./Staking.md)
-in more depth.
+delegations, validator updates, and possibly more. This is the
+principle form of communication, called the 
+[Control Channel](./ControlChannel.md), and is the core
+piece of the Mesh Security IBC protocol.
 
 We send reward tokens over a standard ics20 channel so that
 they are fungible with the native staking token currently sent
