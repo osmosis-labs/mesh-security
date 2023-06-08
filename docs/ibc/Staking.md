@@ -1,20 +1,107 @@
 # Cross-Chain Staking Protocol
 
-**TODO** Create this document for unordered conditions!!
+The staking protocol has two basic operations:
 
-## Staking Messages
+* Stake X tokens on Validator V - `S(V, X)`
+* Unstake X tokens from Validator V - `U(V, X)`
 
-**TODO**
+We want to ensure that at any point in time, when all in-flight messages would be resolved, both the
+provider and the consumer chain have the same view of the staking state. (**TODO** Consider the
+effects of slashing, not included in this document currently). 
 
-Once it has the information of the valid set of validators, the main action taken
-by the provider is assigning virtual stake to particular validator and removing it.
+We also want to guarantee that the provider chain always maintains sufficient staked tokens
+in the vault to cover all virtual staking actions currently outstanding on the provider chain.
 
-It does so via `Stake` and `Unstake` messages, specifying the valoper address it wishes
-to delegate to and the amount of local (provider-side, held in the vault) tokens that
-it wishes to virtually stake.
+As [mentioned before](./ControlChannel.md#channel-ordering), we wish to use an unordered channel,
+and therefore must bring a degree of understading of [Serializability](./Serializability.md)
+to this protocol.
 
-The converter must track the total sum of these messages for each validator on the consumer
-side, convert them to proper values of native tokens and "virtual stake" them.
+## Delegation Syncing
+
+The consumer side wants to maintain the same counter per validator as the provider side.
+It manages a delegation count per validator - `D[V]`, with the following rules:
+
+* Uninitialized is equivalent to `D[V] = 0`
+* `S(V, X)` => `D[V] += X`, return success ack
+* `U(V, X)` => 
+  * if `D[V] < X`, return error ack
+  * else `D[V] -= X`, return success ack
+
+This is pretty straightforward counter with a lower bound of 0, along with an increment and decrement
+counters. 
+
+The only requirements to ensure this stays in sync is that the provider can successfully commit the same
+changes upon a success ack, and is able to revert then (unstake) on an error ack. 
+
+**TODO** Do we need text / code / explanation here?
+
+## Provider Side Design
+
+Beyond this delegation list, the provider must maintain much more information.
+The delegation to a given validator must be mapped to a user on the provider chain.
+This user must also have a sufficient lien on the vault to cover the delegation.
+And the vault must have sufficient funds to cover the lien.
+
+This means we must maintain invariants over at least two contracts - the `external-staking` contract
+and the `vault`. It includes possible conflicts with non-IBC transactions, like a user to withdrawing 
+collateral from the vault that would be needed to cover the lien for an in-flight delegation.
+
+Let us start analysing the protocol, but viewing all the state transitions that must be made on proper
+success acks. These same state transitions must always be reverted without problem upon receiving error acks.
+
+### Identifying Potential Conflicts
+
+A staking operation would have the following steps and checks:
+
+* Send a lien from `vault` to `external-staking` contract
+  * Ensure there is sufficient collateral to cover max(lien)
+  * Ensure there is sufficient collateral in sum(potential slashes)
+  * Increase the lien for that given user on the `external-staking` contract
+* Add a delegation in `external-staking` contract
+  * Increase stake count for (user, validator)
+  * Increase total stake on the validator
+  * Increase the user's shares in the reward distribution
+* Send an IBC packet to inform the Consumer
+  * Guarantee we can commit all above on success
+  * Guarantee we can rollback all above on error
+
+An unstaking operation would have the following steps and checks:
+
+* Remove a delegation in `external-staking` contract
+  * Ensure stake count (user, validator) is set and greater than desired unstake amount
+    * Ensure total stake on the validator is set and greater than desired unstake amount (should always be true if above is true)
+  * Decrease stake count for (user, validator)
+  * Decrease total stake on the validator
+  * Decrease the user's shares in the reward distribution
+  * Add an entry to the (user, validator) "pending unbonding" to withdraw said tokens after the unbonding period.
+* Send an IBC packet to inform the Consumer
+  * Guarantee we can commit all above on success
+  * Guarantee we can rollback all above on error
+
+Possible keys with conflicts are:
+
+* In `vault` - `collateral(user)` and `lein(user, external-staking)`
+* In `external-staking` - `stake(user, validator)`, `total-stake(validator)`, `reward-shares(user)`, `pending-unbonding(user, validator)`
+
+### Identifying Potential Commutatibility
+
+**TODO** Describe the conditions when a transaction would and would not be commutative with in-flight messages.
+
+### Ensuring Invariants
+
+**TODO** How to detect if a newly submitted transaction on the provider would possibly violate commutability, and thus should be rejected
+
+## Protocol Implementation
+
+**TODO** Rust enums for the messages
+
+**TODO** Implementation for sending
+
+**TODO** Detecting conflicting transactions
+
+----- 
+
+**TODO** below here is old, can be removed
 
 ## Implementation Notes
 
