@@ -7,7 +7,7 @@ to the provider chain, where it will be distributed among the virtual delegators
 
 The original reward token is the native staking token of the consumer chain,
 and it should be transfered to the provider chain using the most commonly accepted
-token bridge, to ensure fungibility. Generally this will be the ICS20 channel 
+token bridge, to ensure fungibility. Generally this will be the ICS20 channel
 between `transfer` ports on a standard accepted channel. However, if there is
 another bridge that is more commonly used, it may be used instead.
 
@@ -21,8 +21,8 @@ along with a whitelisted IBC token denom.
 As mentioned above, the general protocol design supports multiple bridges,
 and the external staking contract need not be aware of the bridge used.
 However, it is essential that the converter contract select an adequate process
-that allows it to (a) send the reward tokens to the provider chain, 
-(b) execute the `external-staking` contract to distribute the tokens, and 
+that allows it to (a) send the reward tokens to the provider chain,
+(b) execute the `external-staking` contract to distribute the tokens, and
 (c) handle any IBC errors (timeout, etc) that may occur.
 
 Below we discuss some proposed implementations:
@@ -39,7 +39,7 @@ and when the ack is received, it will send an ICA message to execute `distribute
 on the `external-staking` contract, along with the previously transfered funds.
 
 **Problem**: There are currently no contract callbacks on ICS20 nor ICA. This means we cannot reliably
-orchestrate these two events. Furthermore, the ICA message may fail, and the reward tokens will 
+orchestrate these two events. Furthermore, the ICA message may fail, and the reward tokens will
 be stranded, as there is no callback to inform them.
 
 **This approach should only be considered if there is no other option.**
