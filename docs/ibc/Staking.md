@@ -1,87 +1,10 @@
 # Cross-Chain Staking Protocol
 
-This describes the "control channel", which is a direct IBC channel between the
-`external-staking` contract on the provider side and the `converter` contract
-on the consumer side. This is used to send messages about bonding and unbonding,
-and any other metadata about the protocol (like validators).
-
-It is **not** used to [send reward tokens](./Rewards.md), which must be sent over
-the commonly accepted ICS20 interface, so they are fungible after receipt.
-
-It is also **not** used to [handle slashing](./Slashing.md), as there are concerns
-a malicious state machine would lie, so we demand original evidence of Tendermint
-misbehavior on the provider chain.
-
-## Establishing a Channel
-
-This must use an ordered channel as [discussed below](#channel-ordering).
-
-### Handshake
-
-Before creating that channel, you must have created the `external-staking` and
-`converter` contracts. The `external-staking` contract must be initialized with
-the valid (connection, port) from which the converter will connect, which means that
-the converter contract must be established before the `external-staking` contract.
-
-The channel is initiated by a relayer, with party A being the appropriate `converter`
-contract on the consumer chain, and party B being the `external-staking` contract.
-
-The general process (assuming a vault is already established on the provider) is:
-
-1. Instantiate price feed, converter, virtual staking contracts on the consumer chain
-2. Instantiate external staking contract on the provider chain (referencing IBC port of the converter)
-3. Create IBC channel from provider to consumer
-4. Apply to consumer governance to provide a virtual staking max cap to the associated virtual staking contract, so that this connection may have voting power.
-
-### Version Negotiation
-
-The channel version uses a JSON-encoded struct with the following fields:
-
-```json
-{
-    "protocol": "mesh-security",
-    "version": "1.0.0",
-}
-```
-
-It is important that you **do not** use `#[cw_serde]` on the Rust struct as we explicitly
-want to **allow unknown fields**. This allows us to add new fields in the future.
-`#[cw_serde]` generates `#[serde(deny_unknown_fields)]` which would break this.
-
-Both sides must error if the protocol is not `mesh-security`. 
-
-The version is used to allow for future upgrades. The provider should always send the
-highest protocol version it supports to start the handshake. The consumer should
-error if the major version is higher than its known versions (for now, anything besides `1`).
-The consumer should respond with the highest version it supports, but no higher than
-that proposed by the provider. 
-
-At the end, the version is the highest version supported by both sides and they may freely make
-use of any features added up to that version. This document describes version `1.0.0` of
-the protocol, but additions may be added in the future (which must be linked to from this section).
-
-## Validator Metadata
-
-It is important for the provider to know the proper validators on the consumer chain.
-Both in order to limit the delegations to valid targets *before* creating an IBC message,
-but also in order to track tendermint public keys to be able to slash properly.
-
-Once the channel is established, the provider will send a `ListValidators` message requesting
-all validators on the consumer, and will store the response locally.
-
-Everytime this changes, either by a new validator registering, or by tombstoning an
-existing validator, the consumer will send an `AddValidator` or `RemoveValidator` message
-with the change. It is up to the external-staking contract to keep track of these changes
-and maintain a local copy.
-
-Note that this list of validators should maintain all validators who can be delegated to,
-not just the active set. And removing should only be done when all delegators have been slashed.
-You can also mark it as "to remove" while retaining local data in order to map pubkey to
-the valoper address to slash if needed. 
-
-_Note: sending these updates as a stream (rather than polling for the whole list every epoch) requires some custom sdk bindings. This should be done as part of the virtual staking module, but the implementation will target v1. For MVP, we can just list the initial validators._
+**TODO** Create this document for unordered conditions!!
 
 ## Staking Messages
+
+**TODO**
 
 Once it has the information of the valid set of validators, the main action taken 
 by the provider is assigning virtual stake to particular validator and removing it.
@@ -93,25 +16,6 @@ it wishes to virtually stake.
 The converter must track the total sum of these messages for each validator on the consumer
 side, convert them to proper values of native tokens and "virtual stake" them.
 
-## Channel Ordering
-
-Note the entire protocol is designed around syncing an initial state and sending a stream
-of diffs, such that `State = Initial + Sum(Diffs)`. This applies to both the validator set
-as well as the total amounts staked. 
-
-If we reorder the diffs, it is possible to get a different result, so we need to be careful
-about relying on Unordered channels. Imagine Stake 100 and Unstake 50. If Unstake goes first,
-it would return an error, yet the Stake would apply properly, leaving a total of 100 not 50.
-Furthermore, if a packet is dropped, and the diff is not applied, the two sides will
-get out of sync, where eg the Provider believes there is 500k staked to a given validator,
-while the Consumer believes there is 400k. 
-
-At the same time, Ordered channels are fragile, in that a single timed-out or undeliverable packet
-will render the channel useless forever. We must make sure to use extremely large timeouts
-(say 7 days) to handle the case of a prolonged chain halt. We must also ensure that the
-receiving contract always returns Acks with errors on failure, and never panics.
-A contract panic will abort the tx containing the IbcPacketReceiveMsg as of wasmd 0.40
-(MSV for Mesh Security)
 
 ## Implementation Notes
 

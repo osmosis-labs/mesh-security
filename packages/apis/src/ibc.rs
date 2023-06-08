@@ -6,9 +6,6 @@ use cosmwasm_std::Coin;
 /// Each one has a different ack to be used in the reply.
 #[cw_serde]
 pub enum ProviderMsg {
-    /// This should be called on initialization to get current list of validators.
-    /// Any changes to the set should be sent as a ConsumerMsg::UpdateValidatorSet
-    ListValidators {},
     /// This should be called when we lock more tokens to virtually stake on a given validator
     Stake {
         validator: String,
@@ -27,12 +24,6 @@ pub enum ProviderMsg {
     },
 }
 
-/// Ack sent for ProviderMsg::ListValidators
-#[cw_serde]
-pub struct ListValidatorsAck {
-    pub validators: Vec<Validator>,
-}
-
 /// Ack sent for ProviderMsg::Stake
 #[cw_serde]
 pub struct StakeAck {}
@@ -40,6 +31,31 @@ pub struct StakeAck {}
 /// Ack sent for ProviderMsg::Unstake
 #[cw_serde]
 pub struct UnstakeAck {}
+
+/// These are messages sent from consumer -> provider
+/// ibc_packet_receive in external-staking must handle them all.
+#[cw_serde]
+pub enum ConsumerMsg {
+    /// This is sent when a new validator registers and is available to receive
+    /// delegations.
+    /// This packet is sent right after the channel is opened to sync initial state
+    AddValidators(Vec<Validator>),
+    /// This is sent when a validator is tombstoned. Not just leaving the active state,
+    /// but when it is no longer a valid target to delegate to.
+    /// It contains a list of `valoper_address` to be removed
+    RemoveValidators(Vec<String>),
+    /// This is sent a validator changes the pubkey
+    UpdatePubkey {
+        /// This is the validator address that is changing the pubkey
+        valoper_address: String,
+        /// This is the block height (on the consumer) at which the pubkey was changed
+        height: u64,
+        /// This is the pubkey signing all blocks after `height`
+        new_pubkey: String,
+        /// This is the pubkey signing all blocks up to and including `height`
+        old_pubkey: String,
+    },
+}
 
 #[cw_serde]
 pub struct Validator {
@@ -52,18 +68,14 @@ pub struct Validator {
     pub pub_key: String,
 }
 
-/// These are messages sent from consumer -> provider
-/// ibc_packet_receive in external-staking must handle them all.
+/// Ack sent for ConsumerMsg::AddValidators
 #[cw_serde]
-pub enum ConsumerMsg {
-    /// This is sent when a new validator registers and is available to receive
-    /// delegations.
-    AddValidator(Validator),
-    /// This is sent when a validator is tombstoned. Not just leaving the active state,
-    /// but when it is no longer a valid target to delegate to.
-    RemoveValidator { valoper_address: String },
-}
+pub struct AddValidatorsAck {}
 
-/// Ack sent for ConsumerMsg::UpdateValidatorSet
+/// Ack sent for ConsumerMsg::RemoveValidators
 #[cw_serde]
-pub struct UpdateValidatorSetAck {}
+pub struct RemoveValidatorsAck {}
+
+/// Ack sent for ConsumerMsg::UpdatePubkey
+#[cw_serde]
+pub struct UpdatePubkeyAck {}
