@@ -65,7 +65,7 @@ the details of the actual transactions being executed.
 
 The idea of "commutative operations" gets very attractive for our case. In this case, we need no
 locks, or special handling of the packet and ack ordering. One way to guarantee communativity
-is to create a [data structure that is a CRDT](#crdt) (link to section below). Often that is
+is to create a [data structure that is a CRDT](#crdts) (link to section below). Often that is
 not possible (we have some global invariants that may never be broken), and we need to
 look further. But if it is possible to use CRDTs, you can always guarantee serializability, without
 the need for locks or any other book-keeping.
@@ -120,24 +120,110 @@ This can be implemented in a two-chain IBC protocol with the following approach:
 This builds on the existing IBC infrastructure and is the reason why ACKs were introduced
 into the IBC protocol in the first place. 
 
-## CRDT
+## CRDTs
 
-**TODO**
+CRDTs are "magical" beasts. Since they are fully commutative, there is no more concern about ordering or conflicts.
+If we can express our data in terms of commutative operations and a manifested state of them, this allows unordered channels
+without any more concerns about data consistency.
 
-Explain **commutative** replicated data types.
+> **Commutative** replicated data types (`CmRDTs`) replicas propagate state by transmitting only the update operation. For example, a CmRDT of a single
+> integer might broadcast the operations (+10) or (−20). Replicas receive the updates and apply them locally. The operations are commutative. However, they are 
+> not necessarily idempotent. The communications infrastructure must therefore ensure that all operations on a replica are delivered to the other replicas, 
+> without duplication, but in any order.
 
-Allows unordered channels without any more concerns about data consistency.
+(From [Wikipedia - CRDT](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#Known_CRDTs))
+
+The key point here is every operation is commutative. This works great for a counter (increment and decrement) **over all integer values**. 
+However, if we could ever hit a limit (`i64::MAX` or simply `0`), then one of the the operations would fail. And the particular operation
+that fails depends on the ordering of the operations, thus rendering it no longer commutative. If the limits are `i128::MAX` and `i128::MIN`
+and there is a limit to the value of the counter (not used defined), then we can prove we will never hit the said limits and this
+would be commutative. However, since we usually enforce `value > 0` on blockchains, this would rarely work.
+
+Other types that are well defined and may be useful to IBC protocols are "grow-only set", "two-phase-set" (once removed, it can never enter),
+"last write wins" (based on some trusted timestamp). These are mathematical definitions and can be implemented in a variety of ways.
+For example "grow-only set" could be an "append-only vector" where we keep it sorted and remove duplicates.
+
+You can read more on some [standard defined CRDT types](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#Known_CRDTs)
 
 ## Locking
 
-**TODO** Brief example and explain why it is not a good solution for IBC.
+CRDTs are extremelely flexible and resillient, but it is very difficult to map most business logic to such types.
+On the opposite extreme, we can use locking to ensure that only one transaction is processed at a time. This is very limiting,
+but it provably correct over any business logic.
 
-Note: requires **ordered** channels, as commit ordering is essential here.
+Note that is **requires ordered channels**, as commit ordering is essential here. If we start transaction A, B, C on the sending chain
+in that order, then A', B', C' must be process on the receiving chain in that order, and the commit/rollback order (based on getting
+acks on the sending chain must be also be A, B, C). This is exactly the guarantee that ordered channels provide.
 
-## Vector Clocks
+On top of this, we have to ensure that no other transactions conflict with any open IBC transactions. Transaction A is "open" from the
+time the first logic is run on the sending chain (which will send the IBC message) until the ack is fully process and committed on
+the sending chain. This will span several blocks, possibly hours in the case of timeouts. 
 
-**TODO**
+We can model this with [Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking#Two-phase_locking_and_its_special_cases)
+, which defines a "growing phase" of acquiring locks, followed by a "shrinking phase" of releasing locks. This is done to be
+resistent to deadlock. We would do the following:s
 
-Show how we maintain multiple possible states, such that any merge order is valid.
+1. Start Tx on Sending Chain: Acquire all read/write locks on all data that will be touched. This is the "growing" phase of the lock.
+2. Process Packet on Receiving Chain: Aquire all read/write locks on all data, process data, release all locks. This goes from the "growing" phase to the "shrinking" phase.
+3. Process Ack on the Sending Chain: Process ack, and release all locks. This is the "shrinking" phase.
 
-This requires careful construction of the merge function, but can allow unordered channels
+If we guarantee that we never read any data that is not under a write lock, we can release the read locks at end of "start tx", as they are not needed.
+Furthermore, the "process packet" phase just defines the normal sematics of blockchain processing. With that, we can simplify to:
+
+1. Start Tx on Sending Chain: Acquire all write locks on all data that will be committed or rolled-back.
+2. Process Packet on Receiving Chain: Process data, and return success or error ack.
+3. Process Ack on the Sending Chain: Commit or rollback based on ack. Only can read/write data held under write lock from step 1
+
+If we modelled ICS20 like this, it would require us to hold a lock on the account balance of the sender (at least the keys holding the
+denom being sent) from the original send until the ack. This would not interfere with any other processes, 
+but that user could not send tokens locally, stake those tokens, receive local tokens, or even properly query his balance (as it is undefined).
+
+In some cases where the business logic is very complex and hard to model commutatively, and the keys under lock are only used by this one
+sub-system (nothing universal like bank), this may be the best approach. However, it is very limiting and should be avoided if possible.
+
+## Forcing Commutativity
+
+Here we go beyond the well-defined theories presented above, and to my own suggestions to how to safely convert many types of business logic
+into something commutative. If a reader knows of some theory that explains the (in)correctness of such a scheme, it would be helpful
+to expand the basis of this knowledge and a PR would be most welcome.
+
+The basic concept is that to avoid conflicts, we do not need to make all possible operations commutative, but rather just guarantee that
+**all concurrent operations** are commutative. This is a much weaker requirement, and can be achieved in many cases not by modifying the
+data structures, but by aborting any transaction in the first phase (before IBC packet send), if it is not fully commutative with
+all operations that are currently in-flight. That means, other operations that have previously sent an IBC packet and not yet received an ACK.
+Furthermore, if the state transitions involded are local to one or two contracts, we only have to provide checks on those contracts,
+which makes this a manageable task.
+
+We can say that ICS20 implementation does something like this. As the only invairant is that the value never goes below zero,
+it pre-emptively moves the tokens out of the users account to an escrow. This doesn't require any further lock on the user's account,
+but ensures no other transaction will be possible to execute that would render the user's balance below 0 if this was committed.
+Thus, any other transaction that would be commutative with this (commit or rollback) can be executed concurrently, but any other
+transaction that would conflict with this (eg. spend the same tokens, and only be valid if the ICS20 transfer gets an error ack),
+will immediately fail.
+
+ICS20 is an extremely simple case and you don't need such theory to describe decrementing one counter. However, assume there was not
+only a min token balance (0) but some max, say 1 million. Then ICS20 would not work, as you could excrow 500k tokens, then receive
+600k tokens, and if the ICS20 received an error ACK, it would be impossible to validly roll this back (another example of non-commutative,
+or conflicting, operations).
+
+### Value range
+
+One idea to implement this would be to not just store one value (the balance), but a range of values, covering possible values if
+all in-flight transactions were to succeed or fail. Normal transactions (send 100 tokens) would update both values and error if either
+one violated some invariant (too high or too low). When an IBC transaction is initiated, it would execute eg. "maybe 200", which would
+attempt to decrease the min by 200 but leave the max unchanged (requiring this range to remain valid). 
+
+This approach would only work by values not used by complex forumulas, such as balances of an AMM (we can't calculate prices off ranges),
+or paying out staking rewards (the value received by all other users depends on your stake, and we can't propogate this to all those accounts,
+as it would be prohibitively expensive to collapse them all when the transaction is committed or rolled-back).
+
+But for counters with comparisons, increments, and decrements, it could work well. Even enforcing logic like
+"total amount of collateral is greater than the max lien amount" could be enforced if collateral and lien amounts 
+were value ranges. In this case, the max of (`lien.max`) would be compared against `collateral.min`.
+With some clever reasoning, we could possibly enforce such value ranges without actually storing multiple fields.
+
+## Next Steps
+
+With this understanding, we can now start to design IBC applications that are safe and correct.
+I will reference these theoretical concpets while defining a safe implementation of the Mesh Security control
+protocol in face of unordered channels.
