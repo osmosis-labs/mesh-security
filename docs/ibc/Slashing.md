@@ -22,8 +22,8 @@ validator.
 ## Detecting Byzantine Chains
 
 The IBC light clients have a
-[built-in mechanism to detect](https://github.com/cosmos/ibc-go/blob/v7.0.1/modules/light-clients/07-tendermint/misbehaviour_handle.go) 
-if the **entire chain** has gone Byzantine, which is to say that there are two valid 
+[built-in mechanism to detect](https://github.com/cosmos/ibc-go/blob/v7.0.1/modules/light-clients/07-tendermint/misbehaviour_handle.go)
+if the **entire chain** has gone Byzantine, which is to say that there are two valid
 light client proofs for the same height, and over 1/3 of the validators have double-signed.
 
 At such a point, the light client will halt and require governance intervention to
@@ -42,7 +42,7 @@ modules to detect such state.
 
 The much more common case we should defend against is a single validator on the consumer
 chain signing two different blocks at the same height. This has occurred a number of times
-on Cosmos SDK chains and been properly slashed in-protocol by CometBFT. 
+on Cosmos SDK chains and been properly slashed in-protocol by CometBFT.
 We need to add identical detection and slashing to the `external-staking` contract.
 
 We can base our checks on the path Comet BFT validates double signing evidence.

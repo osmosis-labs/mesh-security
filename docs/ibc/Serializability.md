@@ -4,7 +4,7 @@
 standard databases that can be accepted when certain guarantees are more important
 than raw throughput. The process of consensus and creating and ordered block of
 transactions provides the basis for this guarantee. If the state machine then
-executes them sequentially, we have the *serializable* property, because we actually
+executes them sequentially, we have the _serializable_ property, because we actually
 execute them serially.
 
 However, in a multi-chain (IBC) system, we have to be careful about how we implement this,
@@ -12,7 +12,7 @@ as the state transitions in the receiving chain are no longer atomic with the st
 on the sending chain, and we no longer have a guarantee of sequential order. Also, if there
 are attempts to speed up performance by optimistically executing transactions in parallel,
 the designer must be very careful of this implementation and understand the concept
-of *serializability* very well to avoid unexpected behavior.
+of _serializability_ very well to avoid unexpected behavior.
 
 ## In ACID Databases
 
@@ -27,11 +27,11 @@ may well have encountered and used:
 
 It goes on and explains
 
-> The *Serializable* isolation level provides the strictest transaction isolation. This level emulates serial transaction execution for all committed transactions; as if transactions had been executed one after another, serially, rather than concurrently. However, like the Repeatable Read level, applications using this level must be prepared to retry transactions due to serialization failures. In fact, this isolation level works exactly the same as Repeatable Read except that it also monitors for conditions which could make execution of a concurrent set of serializable transactions behave in a manner inconsistent with all possible serial (one at a time) executions of those transactions. This monitoring does not introduce any blocking beyond that present in repeatable read, but there is some overhead to the monitoring, and detection of the conditions which could cause a *serialization anomaly* will trigger a *serialization failure*.
+> The _Serializable_ isolation level provides the strictest transaction isolation. This level emulates serial transaction execution for all committed transactions; as if transactions had been executed one after another, serially, rather than concurrently. However, like the Repeatable Read level, applications using this level must be prepared to retry transactions due to serialization failures. In fact, this isolation level works exactly the same as Repeatable Read except that it also monitors for conditions which could make execution of a concurrent set of serializable transactions behave in a manner inconsistent with all possible serial (one at a time) executions of those transactions. This monitoring does not introduce any blocking beyond that present in repeatable read, but there is some overhead to the monitoring, and detection of the conditions which could cause a _serialization anomaly_ will trigger a _serialization failure_.
 
 Continuing with an example of [such a case that you can read](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-SERIALIZABLE).
 
-The key note here is that, in the interest of performance, the database *does not* actually run them
+The key note here is that, in the interest of performance, the database _does not_ actually run them
 serially, not use locking to ensure key portions are run serially. Instead, it detects any conflict, and
 if present, aborts the transaction with an error (to be retried later). Such a definition may be useful
 when speeding up local changes, but it is not possible when the transaction consists of sub-transactions on different blockchains, as we cannot roll them both back on failure.
@@ -46,12 +46,12 @@ if the other fails.
 
 In distributed systems, we need to be more careful, and go back to the general defintion of
 Serialiazable systems, to determine which primitives we need to implement it. And from there
-determine which technique will be most effective in our system. Let's start with 
+determine which technique will be most effective in our system. Let's start with
 [Wikipedia (which has quite good references in computer science)](https://en.m.wikipedia.org/wiki/Serializability#View_and_conflict_serializability). (All quotes below are from this page, unless otherwise noted)
 
 ### Locking Data
 
-> Operations upon data are *read* or *write* (a write: insert, update, or delete). Two operations are conflicting if they are of different transactions, upon the same datum (data item), and at least one of them is write. Each such pair of conflicting operations has a conflict type: it is either a read–write, or write–read, or a write–write conflict. The transaction of the second operation in the pair is said to be in conflict with the transaction of the first operation. 
+> Operations upon data are _read_ or _write_ (a write: insert, update, or delete). Two operations are conflicting if they are of different transactions, upon the same datum (data item), and at least one of them is write. Each such pair of conflicting operations has a conflict type: it is either a read–write, or write–read, or a write–write conflict. The transaction of the second operation in the pair is said to be in conflict with the transaction of the first operation.
 
 So far, we can start thinking of Read-Write Locks to avoid said conflicts.
 [Two-Phase Locking](https://en.m.wikipedia.org/wiki/Two-phase_locking) explains how to handle these
@@ -61,7 +61,7 @@ the details of the actual transactions being executed.
 
 ### Commumtative Operations
 
-> A more general definition of conflicting operations (also for complex operations, which may each consist of several "simple" read/write operations) requires that they are noncommutative (changing their order also changes their combined result). Each such operation needs to be atomic by itself (using proper system support) in order to be considered an operation for a commutativity check. For example, read–read operations are commutative (unlike read–write and the other possibilities) and thus read–read is not a conflict. Another more complex example: the operations increment and decrement of a counter are both write operations (both modify the counter), but do not need to be considered conflicting (write-write conflict type) since they are commutative (thus increment–decrement is not a conflict; e.g., already has been supported in the old IBM's IMS "fast path"). 
+> A more general definition of conflicting operations (also for complex operations, which may each consist of several "simple" read/write operations) requires that they are noncommutative (changing their order also changes their combined result). Each such operation needs to be atomic by itself (using proper system support) in order to be considered an operation for a commutativity check. For example, read–read operations are commutative (unlike read–write and the other possibilities) and thus read–read is not a conflict. Another more complex example: the operations increment and decrement of a counter are both write operations (both modify the counter), but do not need to be considered conflicting (write-write conflict type) since they are commutative (thus increment–decrement is not a conflict; e.g., already has been supported in the old IBM's IMS "fast path").
 
 The idea of "commutative operations" gets very attractive for our case. In this case, we need no
 locks, or special handling of the packet and ack ordering. One way to guarantee communativity
@@ -103,22 +103,22 @@ process of committing.
 (From [Wikipedia - Distributed Serializability](https://en.m.wikipedia.org/wiki/Serializability#Distributed_serializability))
 
 A [Two-Phase Commit](https://en.m.wikipedia.org/wiki/Two-phase_commit_protocol) requires
-significant communication between the nodes, and is not suitable for an IBC system. 
-For our purposed, we can look at the basic requirements of 
+significant communication between the nodes, and is not suitable for an IBC system.
+For our purposed, we can look at the basic requirements of
 [Atomic Commits](https://en.m.wikipedia.org/wiki/Atomic_commit):
 
 > In the field of computer science, an atomic commit is an operation that applies a set of distinct changes as a single operation. If the changes are applied, then the atomic commit is said to have succeeded. If there is a failure before the atomic commit can be completed, then all of the changes completed in the atomic commit are reversed. This ensures that the system is always left in a consistent state
 
 This can be implemented in a two-chain IBC protocol with the following approach:
 
-1. The sending chain A completes its sub-transaction and maintains all needed locks 
-  (or other structs) to guarantee it can commit or rollback the state transitions as needed.
+1. The sending chain A completes its sub-transaction and maintains all needed locks
+   (or other structs) to guarantee it can commit or rollback the state transitions as needed.
 2. The receiving chain B processes its sub-transaction and returns a success or error ack.
 3. If the ack is a success, chain A commits its state transitions. If it is an error, chain A
-  rolls back its state transitions.
+   rolls back its state transitions.
 
 This builds on the existing IBC infrastructure and is the reason why ACKs were introduced
-into the IBC protocol in the first place. 
+into the IBC protocol in the first place.
 
 ## CRDTs
 
@@ -127,13 +127,13 @@ If we can express our data in terms of commutative operations and a manifested s
 without any more concerns about data consistency.
 
 > **Commutative** replicated data types (`CmRDTs`) replicas propagate state by transmitting only the update operation. For example, a CmRDT of a single
-> integer might broadcast the operations (+10) or (−20). Replicas receive the updates and apply them locally. The operations are commutative. However, they are 
-> not necessarily idempotent. The communications infrastructure must therefore ensure that all operations on a replica are delivered to the other replicas, 
+> integer might broadcast the operations (+10) or (−20). Replicas receive the updates and apply them locally. The operations are commutative. However, they are
+> not necessarily idempotent. The communications infrastructure must therefore ensure that all operations on a replica are delivered to the other replicas,
 > without duplication, but in any order.
 
 (From [Wikipedia - CRDT](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#Known_CRDTs))
 
-The key point here is every operation is commutative. This works great for a counter (increment and decrement) **over all integer values**. 
+The key point here is every operation is commutative. This works great for a counter (increment and decrement) **over all integer values**.
 However, if we could ever hit a limit (`i64::MAX` or simply `0`), then one of the the operations would fail. And the particular operation
 that fails depends on the ordering of the operations, thus rendering it no longer commutative. If the limits are `i128::MAX` and `i128::MIN`
 and there is a limit to the value of the counter (not used defined), then we can prove we will never hit the said limits and this
@@ -157,7 +157,7 @@ acks on the sending chain must be also be A, B, C). This is exactly the guarante
 
 On top of this, we have to ensure that no other transactions conflict with any open IBC transactions. Transaction A is "open" from the
 time the first logic is run on the sending chain (which will send the IBC message) until the ack is fully process and committed on
-the sending chain. This will span several blocks, possibly hours in the case of timeouts. 
+the sending chain. This will span several blocks, possibly hours in the case of timeouts.
 
 We can model this with [Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking#Two-phase_locking_and_its_special_cases)
 , which defines a "growing phase" of acquiring locks, followed by a "shrinking phase" of releasing locks. This is done to be
@@ -175,7 +175,7 @@ Furthermore, the "process packet" phase just defines the normal sematics of bloc
 3. Process Ack on the Sending Chain: Commit or rollback based on ack. Only can read/write data held under write lock from step 1
 
 If we modelled ICS20 like this, it would require us to hold a lock on the account balance of the sender (at least the keys holding the
-denom being sent) from the original send until the ack. This would not interfere with any other processes, 
+denom being sent) from the original send until the ack. This would not interfere with any other processes,
 but that user could not send tokens locally, stake those tokens, receive local tokens, or even properly query his balance (as it is undefined).
 
 In some cases where the business logic is very complex and hard to model commutatively, and the keys under lock are only used by this one
@@ -211,14 +211,14 @@ or conflicting, operations).
 One idea to implement this would be to not just store one value (the balance), but a range of values, covering possible values if
 all in-flight transactions were to succeed or fail. Normal transactions (send 100 tokens) would update both values and error if either
 one violated some invariant (too high or too low). When an IBC transaction is initiated, it would execute eg. "maybe 200", which would
-attempt to decrease the min by 200 but leave the max unchanged (requiring this range to remain valid). 
+attempt to decrease the min by 200 but leave the max unchanged (requiring this range to remain valid).
 
 This approach would only work by values not used by complex forumulas, such as balances of an AMM (we can't calculate prices off ranges),
 or paying out staking rewards (the value received by all other users depends on your stake, and we can't propogate this to all those accounts,
 as it would be prohibitively expensive to collapse them all when the transaction is committed or rolled-back).
 
 But for counters with comparisons, increments, and decrements, it could work well. Even enforcing logic like
-"total amount of collateral is greater than the max lien amount" could be enforced if collateral and lien amounts 
+"total amount of collateral is greater than the max lien amount" could be enforced if collateral and lien amounts
 were value ranges. In this case, the max of (`lien.max`) would be compared against `collateral.min`.
 With some clever reasoning, we could possibly enforce such value ranges without actually storing multiple fields.
 

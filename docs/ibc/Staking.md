@@ -6,7 +6,7 @@
 
 **TODO**
 
-Once it has the information of the valid set of validators, the main action taken 
+Once it has the information of the valid set of validators, the main action taken
 by the provider is assigning virtual stake to particular validator and removing it.
 
 It does so via `Stake` and `Unstake` messages, specifying the valoper address it wishes
@@ -16,14 +16,13 @@ it wishes to virtually stake.
 The converter must track the total sum of these messages for each validator on the consumer
 side, convert them to proper values of native tokens and "virtual stake" them.
 
-
 ## Implementation Notes
 
 In order to maintain state synchronized on both sides, we must ensure that the
-sending side properly handle ACKs, for both the success and failure case. 
+sending side properly handle ACKs, for both the success and failure case.
 
 If there is a failure sending a validator set update, it should be retried later.
-A safe way to do so would be to store these messages in some "queue" and trigger sending 
+A safe way to do so would be to store these messages in some "queue" and trigger sending
 such `AddValidator` and `RemoveValidator` packets on the next incoming Stake/Unstake command
 (when we know the provider side is working). They should be re-sent in the same order
 they were originally sent.
@@ -45,13 +44,13 @@ in the `external-staking` contract. If an error ack comes back, then the
 the lien for the amount of that packet. If a success ack comes back, it should
 actually apply the staking changes locally.
 
-Likewise, when unstaking, we first create an `Unstake` packet. However, here 
+Likewise, when unstaking, we first create an `Unstake` packet. However, here
 we want to avoid the situation of `Unstaking` 100% of the tokens multiple times,
-as this would apply invalid state changes to the consumer. We need to enforce this 
+as this would apply invalid state changes to the consumer. We need to enforce this
 limit on the provider side (which is handled by the vault in the staking case).
 
 For `Unstake`, we should update a local "unstaking" value on the `(user, validator)`
-staking info, but not create a claim nor apply a diff to the validator. 
+staking info, but not create a claim nor apply a diff to the validator.
 We ensure that this "unstaking" amount can never be larger than the properly staked
 (and ack'ed) value. On an error ack, we simply reduce "unstaking" by that amount.
 On a success ack, we commit these changes, reducing not only "unstaking", but
@@ -73,8 +72,8 @@ on top of the snapshot that it sent to the consumer, thus modifying it and the t
 will have diverged again.
 
 This whole issue becomes much more difficult to manage if we are relying on unordered channels.
-For example, if there is an "in-flight" `Stake` message that has not been processed, and we 
-"re-sync" by sending the provider's view of the entire staking assignment, a malicious 
+For example, if there is an "in-flight" `Stake` message that has not been processed, and we
+"re-sync" by sending the provider's view of the entire staking assignment, a malicious
 relayer could post the re-sync packet first and the `Stake` message second, thus double applying it.
 
 ### Error correction

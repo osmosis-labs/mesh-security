@@ -1,7 +1,7 @@
 # Validator Metadata
 
 It is important for the provider to know the proper validators on the consumer chain.
-Both in order to limit the delegations to valid targets *before* creating an IBC message,
+Both in order to limit the delegations to valid targets _before_ creating an IBC message,
 but also in order to track tendermint public keys to be able to slash properly.
 
 We define the "Validator Subprotocol" as a way to sync this information. It uses a CRDT-like
@@ -44,25 +44,25 @@ although that is not strictly required given IBC's "exactly once" delivery.
 
 In this section, we consider the operations that compose IBC packets:
 
-* `A(x, p)` - Add validator `x` with pubkey `p` to the validator set
-* `R(x)` - Remove validator `x` from the validator set
+- `A(x, p)` - Add validator `x` with pubkey `p` to the validator set
+- `R(x)` - Remove validator `x` from the validator set
 
 We do not consider Tendermint key rotation in this section, but describe it as an addition
-in [the following section](#validator-key-rotation). 
+in [the following section](#validator-key-rotation).
 This section is sufficient to support the basic operations available today.
 
 We wish to maintain a validator set `V` on the Provider with the following properties:
 
-* If no packet has been received for a given `x`, `x` is not in `V`
-* If `R(x)` has been received, `x` is not in `V`
-* If `A(x, p)` has been received, but no `R(x)`, `x` is in `V` with pubkey `p`
+- If no packet has been received for a given `x`, `x` is not in `V`
+- If `R(x)` has been received, `x` is not in `V`
+- If `A(x, p)` has been received, but no `R(x)`, `x` is in `V` with pubkey `p`
 
 ### Basic Implementation
 
 The naive implementation of add on A and remove on R would not work. `[A(x, p), R(x)]` would
 be properly processed, but `[R(x), A(x, p)]` would leave A in the set.
 
-Instead, we store an enum for each validator, with the following states: 
+Instead, we store an enum for each validator, with the following states:
 
 ```rust
 type Validator = Option<ValidatorState>
@@ -102,14 +102,14 @@ let new_state: State = match (old_state, op) {
 ### Proof of correctness
 
 The basic implementation without public key rotation is another expression of the same algorithm
-used in [`2P-Set`](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#2P-Set_(Two-Phase_Set)). This is a proven CRDT, and if we implement it to match the spec, we have a 
+used in [`2P-Set`](<https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#2P-Set_(Two-Phase_Set)>). This is a proven CRDT, and if we implement it to match the spec, we have a
 guarantee of commutability.
 
 ## Validator Key Rotation
 
 In addition to the basic operations described above, there is another operations we would like
 to support. This protocol is designed to handle Tendermint key rotation, such that a validator
-address may be associated with multiple public keys over the course of it's existence. 
+address may be associated with multiple public keys over the course of it's existence.
 
 This feature is not implemented in Cosmos SDK yet, but long-requested and the Mesh Security
 protocol should be future proof. (Note: we do not handle changing the `valoper` address as
@@ -119,19 +119,19 @@ We wish the materialized state to have the following properties:
 
 We wish to maintain a validator set `V` on the Provider with the following properties:
 
-* If no packet has been received for a given `x`, `x` is not in `V`
-* If `R(x)` has been received, `x` is not in `V`
-* If at least one `A(x, _, _)` has been received, but no `R(x)`, `x` is in `V` with:
-    * A set of all pubkeys, along with the block height they were first active from.     
+- If no packet has been received for a given `x`, `x` is not in `V`
+- If `R(x)` has been received, `x` is not in `V`
+- If at least one `A(x, _, _)` has been received, but no `R(x)`, `x` is in `V` with:
+  - A set of all pubkeys, along with the block height they were first active from.  
     (We may represent this as a sorted list without duplicates, but that is a mathematically
     equivalent optimization)
 
 To ensure we can perform all this with the commutivity property, we look for a mapping
 of our concepts to proven CRDT types. The top level set is, as in the last section,
-a [`2P-Set`](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#2P-Set_(Two-Phase_Set)).
+a [`2P-Set`](<https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#2P-Set_(Two-Phase_Set)>).
 
 Inside each element that has not been removed, we store the set of pubkeys
-as a [`G-Set`](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#G-Set_(Grow-only_Set)),
+as a [`G-Set`](<https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#G-Set_(Grow-only_Set)>),
 which grows when each pubkey is added.
 
 ### Rotation Implementation
@@ -147,7 +147,7 @@ type Validator = Option<State>
 
 enum State {
     /// The first entry is the most recent pubkey seen.
-    /// 
+    ///
     /// The second entry is a list of past keys, with their last active time.
     /// This list is sorted in descending order, with the most recent key first.
     /// (We can consider this a serializable form of a set)
@@ -203,4 +203,3 @@ keeping the property of a set that each element is only present once.
 
 With this, we have proven that our algorithm is equivalent to a CRDT, and thus
 fully commutative and maintains the desired properties regardless of packet ordering.
-

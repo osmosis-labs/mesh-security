@@ -13,7 +13,7 @@ a malicious state machine would lie, so we demand original evidence of Tendermin
 misbehavior on the provider chain.
 
 This channel encompasses to sub-protocols, which are described in their own documents.
-The establishment of the channel (including handshake and version negotiation) 
+The establishment of the channel (including handshake and version negotiation)
 [is described further below](#establishing-a-channel).
 
 ## Start with Theory
@@ -21,7 +21,7 @@ The establishment of the channel (including handshake and version negotiation)
 This is the core IBC protocol of Mesh Security and requires a solid design to guarantee
 correct operation in face of asynchronous communication, reordering, and errors.
 
-In order to make the protocol documents more compact, 
+In order to make the protocol documents more compact,
 [all theoretical foundations are described separately](./Serializability.md).
 Please read through that document and have a decent grasp of those concepts before
 digging into the sub-protocols below.
@@ -43,7 +43,6 @@ on the consumer chain. This must be done in such a way that it is robust in face
 of reordering and errors upon an unordered channel.
 
 The [full description of the algorithm](./Staking.md) is quite lengthy and defined in its own page.
-
 
 ## Establishing a Channel
 
@@ -77,8 +76,8 @@ The channel version uses a JSON-encoded struct with the following fields:
 
 ```json
 {
-    "protocol": "mesh-security",
-    "version": "1.0.0",
+  "protocol": "mesh-security",
+  "version": "1.0.0"
 }
 ```
 
@@ -86,13 +85,13 @@ It is important that you **do not** use `#[cw_serde]` on the Rust struct as we e
 want to **allow unknown fields**. This allows us to add new fields in the future.
 `#[cw_serde]` generates `#[serde(deny_unknown_fields)]` which would break this.
 
-Both sides must error if the protocol is not `mesh-security`. 
+Both sides must error if the protocol is not `mesh-security`.
 
 The version is used to allow for future upgrades. The provider should always send the
 highest protocol version it supports to start the handshake. The consumer should
 error if the major version is higher than its known versions (for now, anything besides `1`).
 The consumer should respond with the highest version it supports, but no higher than
-that proposed by the provider. 
+that proposed by the provider.
 
 At the end, the version is the highest version supported by both sides and they may freely make
 use of any features added up to that version. This document describes version `1.0.0` of
@@ -102,14 +101,14 @@ the protocol, but additions may be added in the future (which must be linked to 
 
 Note the entire protocol is designed around syncing an initial state and sending a stream
 of diffs, such that `State = Initial + Sum(Diffs)`. This applies to both the validator set
-as well as the total amounts staked. 
+as well as the total amounts staked.
 
 If we reorder the diffs, it is possible to get a different result, so we need to be careful
 about relying on Unordered channels. Imagine Stake 100 and Unstake 50. If Unstake goes first,
 it would return an error, yet the Stake would apply properly, leaving a total of 100 not 50.
 Furthermore, if a packet is dropped, and the diff is not applied, the two sides will
 get out of sync, where eg the Provider believes there is 500k staked to a given validator,
-while the Consumer believes there is 400k. 
+while the Consumer believes there is 400k.
 
 At the same time, Ordered channels are fragile, in that a single timed-out or undeliverable packet
 will render the channel useless forever. We must make sure to use extremely large timeouts
