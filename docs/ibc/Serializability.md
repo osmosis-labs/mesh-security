@@ -194,6 +194,10 @@ all operations that are currently in-flight. That means, other operations that h
 Furthermore, if the state transitions involded are local to one or two contracts, we only have to provide checks on those contracts,
 which makes this a manageable task.
 
+Note that is this not a general approach in most distributed systems, where we have a multi-writer scenario, and no ability to enforce
+some global invariants before initiating a transaction. However, since all changes to the given data is initiated in the provider
+blockchain, and we have a complete view of currently in-flight transactions, this approach could work for IBC protocols.
+
 We can say that ICS20 implementation does something like this. As the only invairant is that the value never goes below zero,
 it pre-emptively moves the tokens out of the users account to an escrow. This doesn't require any further lock on the user's account,
 but ensures no other transaction will be possible to execute that would render the user's balance below 0 if this was committed.
@@ -210,8 +214,9 @@ or conflicting, operations).
 
 One idea to implement this would be to not just store one value (the balance), but a range of values, covering possible values if
 all in-flight transactions were to succeed or fail. Normal transactions (send 100 tokens) would update both values and error if either
-one violated some invariant (too high or too low). When an IBC transaction is initiated, it would execute eg. "maybe 200", which would
-attempt to decrease the min by 200 but leave the max unchanged (requiring this range to remain valid).
+one violated some invariant (too high or too low). When an IBC transaction is initiated, it would execute eg. "Maybe(200)", which would
+attempt to decrease the min by 200 but leave the max unchanged (requiring this range to remain valid). When the IBC ack is received,
+we would either `Commit(200)` or `Rollback(200)`, which would once again bring min and max to the same value (which one depends on Commit or Rollback).
 
 This approach would only work by values not used by complex forumulas, such as balances of an AMM (we can't calculate prices off ranges),
 or paying out staking rewards (the value received by all other users depends on your stake, and we can't propogate this to all those accounts,

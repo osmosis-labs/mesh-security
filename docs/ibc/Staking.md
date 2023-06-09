@@ -2,12 +2,12 @@
 
 The staking protocol has two basic operations:
 
-* Stake X tokens on Validator V - `S(V, X)`
-* Unstake X tokens from Validator V - `U(V, X)`
+- Stake X tokens on Validator V - `S(V, X)`
+- Unstake X tokens from Validator V - `U(V, X)`
 
 We want to ensure that at any point in time, when all in-flight messages would be resolved, both the
 provider and the consumer chain have the same view of the staking state. (**TODO** Consider the
-effects of slashing, not included in this document currently). 
+effects of slashing, not included in this document currently).
 
 We also want to guarantee that the provider chain always maintains sufficient staked tokens
 in the vault to cover all virtual staking actions currently outstanding on the provider chain.
@@ -21,17 +21,17 @@ to this protocol.
 The consumer side wants to maintain the same counter per validator as the provider side.
 It manages a delegation count per validator - `D[V]`, with the following rules:
 
-* Uninitialized is equivalent to `D[V] = 0`
-* `S(V, X)` => `D[V] += X`, return success ack
-* `U(V, X)` => 
-  * if `D[V] < X`, return error ack
-  * else `D[V] -= X`, return success ack
+- Uninitialized is equivalent to `D[V] = 0`
+- `S(V, X)` => `D[V] += X`, return success ack
+- `U(V, X)` =>
+  - if `D[V] < X`, return error ack
+  - else `D[V] -= X`, return success ack
 
 This is a pretty straightforward counter with a lower bound of 0, along with an increment and decrement
-counters. 
+counters.
 
 The only requirements to ensure this stays in sync is that the provider can successfully commit the same
-changes upon a success ack, and is able to revert them (unstake) on an error ack. 
+changes upon a success ack, and is able to revert them (unstake) on an error ack.
 
 **TODO** Do we need text / code / explanation here?
 
@@ -43,7 +43,7 @@ This user must also have a sufficient lien on the vault to cover the delegation.
 And the vault must have sufficient funds to cover the lien.
 
 This means we must maintain invariants over at least two contracts - the `external-staking` contract
-and the `vault`. It includes possible conflicts with non-IBC transactions, like a user withdrawing 
+and the `vault`. It includes possible conflicts with non-IBC transactions, like a user withdrawing
 collateral from the vault that would be needed to cover the lien for an in-flight delegation.
 
 Let us start analysing the protocol, but viewing all the state transitions that must be made on proper
@@ -53,53 +53,137 @@ success acks. These same state transitions must always be reverted without probl
 
 A staking operation would have the following steps and checks:
 
-* Send a lien from `vault` to `external-staking` contract
-  * Ensure there is sufficient collateral to cover max(lien)
-  * Ensure there is sufficient collateral in sum(potential slashes)
-  * Increase the lien for that given user on the `external-staking` contract
-* Add a delegation in `external-staking` contract
-  * Increase stake count for (user, validator)
-  * Increase total stake on the validator
-  * Increase the user's shares in the reward distribution
-* Send an IBC packet to inform the Consumer
-  * Guarantee we can commit all above on success
-  * Guarantee we can rollback all above on error
+- Send a lien from `vault` to `external-staking` contract
+  - Ensure there is sufficient collateral to cover max(lien)
+  - Ensure there is sufficient collateral in sum(potential slashes)
+  - Increase the lien for that given user on the `external-staking` contract
+- Add a delegation in `external-staking` contract
+  - Increase stake count for (user, validator)
+  - Increase total stake on the validator
+  - Increase the user's shares in the reward distribution
+- Send an IBC packet to inform the Consumer
+  - Guarantee we can commit all above on success
+  - Guarantee we can rollback all above on error
 
 An unstaking operation would have the following steps and checks:
 
-* Remove a delegation in `external-staking` contract
-  * Ensure stake count (user, validator) is set and greater than desired unstake amount
-    * Ensure total stake on the validator is set and greater than desired unstake amount (should always be true if above is true)
-  * Decrease stake count for (user, validator)
-  * Decrease total stake on the validator
-  * Decrease the user's shares in the reward distribution
-  * Add an entry to the (user, validator) "pending unbonding" to withdraw said tokens after the unbonding period.
-* Send an IBC packet to inform the Consumer
-  * Guarantee we can commit all above on success
-  * Guarantee we can rollback all above on error
+- Remove a delegation in `external-staking` contract
+  - Ensure stake count (user, validator) is set and greater than desired unstake amount
+    - Ensure total stake on the validator is set and greater than desired unstake amount (should always be true if above is true)
+  - Decrease stake count for (user, validator)
+  - Decrease total stake on the validator
+  - Decrease the user's shares in the reward distribution
+  - Add an entry to the (user, validator) "pending unbonding" to withdraw said tokens after the unbonding period.
+- Send an IBC packet to inform the Consumer
+  - Guarantee we can commit all above on success
+  - Guarantee we can rollback all above on error
 
 Possible keys with conflicts are:
 
-* In `vault` - `collateral(user)` and `lein(user, external-staking)`
-* In `external-staking` - `stake(user, validator)`, `total-stake(validator)`, `reward-shares(user)`, `pending-unbonding(user, validator)`
+- In `vault` - `collateral(user)` and `lein(user, external-staking)`
+- In `external-staking` - `stake(user, validator)`, `total-stake(validator)`, `reward-shares(user)`, `pending-unbonding(user, validator)`
 
 ### Identifying Potential Commutatibility
 
-**TODO** Describe the conditions when a transaction would and would not be commutative with in-flight messages.
+The general design should be to write all changes only on a successful ACK, but hold any locks needed to ensure those
+write will not fail in any condition. Using the apporach of [Value Ranges](./Serializability.md#value-ranges), let us analyze
+what needs to be minimally enforced here.
 
-### Ensuring Invariants
+For staking, we update:
 
-**TODO** How to detect if a newly submitted transaction on the provider would possibly violate commutability, and thus should be rejected
+- `vault::lien(user, external-staking)` => `Maybe(+X)`
+- `external-staking::stake(user, validator)` => `Maybe(+X)`
+- `external-staking::total-stake(validator)` => `Maybe(+X)`
+- `external-staking::reward-shares(validator, user)` => `Maybe(+X)`
+
+The lower three have no upper limit and thus can never fail, so those operations are always commutative with others valid operations.
+`vault::lein` has an upper value, and thus applying `Commit(+X)` could have a conflict with another transaction, so we must "lock" that
+value.
+
+For unstaking, we update:
+
+- `external-staking::stake(user, validator)` => `Maybe(-X)`
+- `external-staking::total-stake(validator)` => `Maybe(-X)`
+- `external-staking::reward-shares(validator, user)` => `Maybe(-X)`
+- `external-staking::total-shares(validator)` => `Maybe(-X)`
+- `external-staking::pending-unbonding(user, validator)` => `Append((X, T))`
+
+We have already seen that appending to an ordered/sorted list is commutative with other valid operations, so we can consider that as
+commutative. The other three are all decrements, and may well conflict with another concurrent operation, such as another unstake,
+as `Commit(-X)` could potentially fail.
+
+### Minimal Locking
+
+From the above, we have a list of all the values that could possibly cause conflicts with other transactions and thus must be locked:
+
+- `vault::lien(user, external-staking)`
+- `external-staking::stake(user, validator)`
+- `external-staking::total-stake(validator)`
+- `external-staking::reward-shares(validator, user)`
+- `external-staking::total-shares(validator)`
+
+We can simplify this list by making use of our knowledge of how various states are derived from each other:
+
+- `total-stake(validator)` is the sum of `stake(user, validator)` over all users.
+- `reward-shares(validator, user)` is the same as `stake(user, validator)`.
+- `total-shares(validator)` is the sum of `reward-shares(validator, user)` over all users.
+
+By analyzing how these other values are derived, we can see that if `stake(user, validator)` is never negative, then
+none of the other values can ever be negative either. This means we can simplify those four keys to simply lock `stake(user, validator)`,
+which is sufficient to guarantee the invariants of the other staking values, without interfering with actions by other users.
+
+We end up with two keys that need to write locks, both of which only affect a single user:
+
+- `vault::lien(user, external-staking)`
+- `external-staking::stake(user, validator)`
+
+Note that a write-lock will prevent reading of the value from any other transaction. That means the same user offering a lien on another
+validator, which iterates over all liens to find the sum of max slashing, will be blocked until the first transaction completes.
+We cannot actually block (or wait) transactions in this way, so we must return an error for the second transaction.
 
 ## Protocol Implementation
 
-**TODO** Rust enums for the messages
+The messages can be defined as follows:
+
+```rust
+enum Op {
+    Stake { validator, user, amount },
+    Unstake { validator, user, amount },
+}
+```
+
+One issue here is that the Consumer doesn't care about the user who made the staking action, only the validator.
+However, when processing the ack, the Provider will need to know which user performed the action.
+We could store this as local state in the Provider, indexed by the packet sequence, but simply including an extra
+field in the packet is much simpler.
+
+### Consumer-Side Logic
+
+This is quite simple, as the Consumer only needs to apply the staking action to its local state, and return an error
+if this violates some invariant (goes below 0):
+
+```rust
+match op {
+    Stake { validator, user, amount} => {
+        ensure_eq!(amount.denom, cfg.staking_denom, IbcError::InvalidDenom);
+        let delegated = DELEGATIONS.may_load(store, validator)?.unwrap_or_default();
+        delegated += amount.amount;
+        DELEGATIONS.save(store, validator, delegated)?;
+    }
+    Unstake { validator, user, amount} => {
+        ensure_eq!(amount.denom, cfg.staking_denom, IbcError::InvalidDenom);
+        /// They must have a previous delegation to unstake
+        let delegated = DELEGATIONS.load(store, validator)?.checked_sub(amount.amount)?;
+        DELEGATIONS.save(store, validator, delegated)?;
+    }
+}
+```
+
+### Provider-Side Logic
 
 **TODO** Implementation for sending
 
-**TODO** Detecting conflicting transactions
-
------ 
+---
 
 **TODO** below here is old, can be removed
 
