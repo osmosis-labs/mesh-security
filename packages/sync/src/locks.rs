@@ -8,6 +8,7 @@ pub struct Lockable<T> {
 }
 
 #[cw_serde]
+#[derive(Copy)]
 pub enum LockState {
     #[serde(rename = "no")]
     Unlocked,
@@ -17,7 +18,7 @@ pub enum LockState {
     ReadLocked(u32),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum LockError {
     #[error("Value is already write locked")]
     WriteLocked,
@@ -54,6 +55,10 @@ impl<T> Lockable<T> {
             LockState::ReadLocked(_) => Err(LockError::ReadLocked),
             LockState::Unlocked => Ok(&mut self.inner),
         }
+    }
+
+    pub fn state(&self) -> LockState {
+        self.lock
     }
 
     pub fn lock_write(&mut self) -> Result<(), LockError> {
@@ -105,5 +110,137 @@ impl<T> Lockable<T> {
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_lock_works() {
+        // let's try locking and
+        let mut lockable = Lockable::new(5u32);
+        assert_eq!(lockable.state(), LockState::Unlocked);
+
+        // lock it once
+        lockable.lock_write().unwrap();
+        assert_eq!(lockable.state(), LockState::WriteLocked);
+
+        // can't lock it again
+        let err = lockable.lock_write().unwrap_err();
+        assert_eq!(err, LockError::WriteLocked);
+
+        // can't read lock it
+        let err = lockable.lock_read().unwrap_err();
+        assert_eq!(err, LockError::WriteLocked);
+
+        // unlock it once
+        lockable.unlock_write().unwrap();
+        assert_eq!(lockable.state(), LockState::Unlocked);
+
+        // can't lock it again
+        let err = lockable.unlock_write().unwrap_err();
+        assert_eq!(err, LockError::NoLockHeld);
+    }
+
+    #[test]
+    fn read_lock_works() {
+        // let's try locking and
+        let mut lockable = Lockable::new(5u32);
+        assert_eq!(lockable.state(), LockState::Unlocked);
+
+        // lock it once
+        lockable.lock_read().unwrap();
+        assert_eq!(lockable.state(), LockState::ReadLocked(1));
+
+        // can't write lock it
+        let err = lockable.lock_write().unwrap_err();
+        assert_eq!(err, LockError::ReadLocked);
+
+        // can lock it again
+        lockable.lock_read().unwrap();
+        assert_eq!(lockable.state(), LockState::ReadLocked(2));
+
+        // unlock it once
+        lockable.unlock_read().unwrap();
+        assert_eq!(lockable.state(), LockState::ReadLocked(1));
+
+        // unlock it twice
+        lockable.unlock_read().unwrap();
+        assert_eq!(lockable.state(), LockState::Unlocked);
+
+        // can't unlock more than there were locks
+        let err = lockable.unlock_read().unwrap_err();
+        assert_eq!(err, LockError::NoLockHeld);
+    }
+
+    #[test]
+    fn write_lock_enforces_access() {
+        let mut lockable = Lockable::new(5u32);
+        lockable.lock_write().unwrap();
+
+        // cannot read nor write this data
+        let err = lockable.read().unwrap_err();
+        assert_eq!(err, LockError::WriteLocked);
+
+        let err = lockable.write().unwrap_err();
+        assert_eq!(err, LockError::WriteLocked);
+    }
+
+    #[test]
+    fn read_lock_enforces_access() {
+        let mut lockable = Lockable::new(5u32);
+        lockable.lock_read().unwrap();
+
+        // can read this data
+        let val = lockable.read().unwrap();
+        assert_eq!(*val, 5u32);
+
+        // cannot write this data
+        let err = lockable.write().unwrap_err();
+        assert_eq!(err, LockError::ReadLocked);
+    }
+
+    #[test]
+    fn modify_unlocked_number() {
+        let mut lockable = Lockable::new(5u32);
+
+        // update the data via deref
+        *lockable.write().unwrap() = 6u32;
+        assert_eq!(*lockable.read().unwrap(), 6u32);
+
+        // update the data via method
+        *lockable.write().unwrap() += 10;
+        assert_eq!(*lockable.read().unwrap(), 16u32);
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct TestStruct {
+        a: u32,
+        b: u32,
+    }
+
+    impl TestStruct {
+        fn new(a: u32, b: u32) -> Self {
+            Self { a, b }
+        }
+
+        fn multiply_vals(&mut self) {
+            self.b *= self.a;
+        }
+    }
+
+    #[test]
+    fn modify_unlocked_struct() {
+        let mut lockable = Lockable::new(TestStruct::new(5, 10));
+
+        // update a field
+        lockable.write().unwrap().a = 8u32;
+        assert_eq!(lockable.read().unwrap(), &TestStruct::new(8, 10));
+
+        // call a method
+        lockable.write().unwrap().multiply_vals();
+        assert_eq!(lockable.read().unwrap(), &TestStruct::new(8, 80));
     }
 }
