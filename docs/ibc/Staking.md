@@ -141,6 +141,41 @@ Note that a write-lock will prevent reading of the value from any other transact
 validator, which iterates over all liens to find the sum of max slashing, will be blocked until the first transaction completes.
 We cannot actually block (or wait) transactions in this way, so we must return an error for the second transaction.
 
+### Idea: Approximating Locks
+
+Holding an actual lock on `vault::lien(user, external-staking)` makes the inter-contract communication rather more complex.
+This means, that in addition to the call from vault -> external-staking to stake virtual tokens, we would require that
+the external-staking contract **always** calls this contract back either with a commit or rollback associated with that
+exact lock (we must store the value pending in vault to not trust the external-staking contract too much).
+
+In this case, we look to approximate the lock by a series of writes that guarantee the invariant is maintained.
+
+- Preparing Phase: `vault::lien(user, external-staking) += X`
+- Commit: do nothing (no message)
+- Rollback: (call release_lien) `vault::lien(user, external-staking) -= X`
+
+The principle questions we need to answer to prove this is safe is:
+
+- Can we guarantee that the rollback will never fail?
+- Is there any transaction that would be valid after the preparing phase, but not after the rollback?
+
+For the first one, since the increment is held by our the `external-staking` contract, by correct rules of not releasing until the IBC Ack,
+we can guarantee that lien is still held and able to be decremented.
+
+For the second one, the case is some transition that would be effectively using a "Phantom Read" to be valid. I will review the possible
+transactions on the vault:
+
+- `bond` - increases collateral
+- `unbond` - decreases collateral after comparing to max(liens)
+- `stake_remote` - sends call to stake after comparing to max(liens)
+- `stake_local` - sends call to stake after comparing to max(liens)
+- `release_local_stake` - reduces lien and adjusts max_lien, slashable
+- `release_remote_stake` - reduces lien and adjusts max_lien, slashable
+
+Many of these will return errors if the lien is too large to permit said operation. But via inspection, none
+would succeed with a larger lien that would not with a smaller one. However, this is not a proof,
+and based on the actual implementation of the vault contract rather than any protocol guarantees.
+
 ## Protocol Implementation
 
 The messages can be defined as follows:
@@ -155,7 +190,8 @@ enum Op {
 One issue here is that the Consumer doesn't care about the user who made the staking action, only the validator.
 However, when processing the ack, the Provider will need to know which user performed the action.
 We could store this as local state in the Provider, indexed by the packet sequence, but simply including an extra
-field in the packet is much simpler.
+field in the packet is much simpler. The Consumer should ignore the user field, but the Provider will receive this original
+Packet along with the ack and be able to properly commit/rollback the staking action.
 
 ### Consumer-Side Logic
 
@@ -179,74 +215,50 @@ match op {
 }
 ```
 
-### Provider-Side Logic
+### Provider-Side Staking
 
-**TODO** Implementation for sending
+This is more complex logic over multiple contracts, so I will only give a high-level overview here rather the Rust psuedo-code:
 
----
+**TODO**
+See [open question above](#idea-approximating-locks) for discussion of how to possibly avoid locking on staking.
+I would like feedback there before defining the actual implementation (which has two possible routes).
 
-**TODO** below here is old, can be removed
+### Provider-Side Unstaking
 
-## Implementation Notes
+Preparation Phase:
 
-In order to maintain state synchronized on both sides, we must ensure that the
-sending side properly handle ACKs, for both the success and failure case.
+```rust
+let mut stake = STAKE.load(store, validator, user)?;
+/// write_lock method marks a key as locked, and returns an error if it is already locked
+let view = stake.write_lock()?;
+/// Enforce the invairant, so we know we can commit later
+if view.staked < amount.amount {
+    return Err(IbcError::InsufficientFunds);
+}
+STAKE.save(store, validator, user, &stake)?;
+```
 
-If there is a failure sending a validator set update, it should be retried later.
-A safe way to do so would be to store these messages in some "queue" and trigger sending
-such `AddValidator` and `RemoveValidator` packets on the next incoming Stake/Unstake command
-(when we know the provider side is working). They should be re-sent in the same order
-they were originally sent.
+Rollback:
 
-If there is a failure sending a Stake / Unstake action, the safest response is to
-undo the action locally and inform the user. We need a solid UI here, as suddenly having
-a staking action disappear with no notification as to why will lead to serious confusion
-and cries of "bugs", when it was just an invisible, delayed error.
+```rust
+/// Just remove the write_lock from the key
+let mut stake = STAKE.load(store, validator, user)?;
+stake.release_write_lock()?;
+STAKE.save(store, validator, user, &stake)?;
+```
 
-An alternate approach here is to have some sort of "re-sync" design to re-synchronize the
-state on the two sides, but I argue this is too fragile in an asynchrnous environment.
-Much care must be taken to ensure that all application errors are handled well.
+Commit:
 
-### Error handling
+```rust
+/// Remove the write_lock from the key
+let mut stake = STAKE.load(store, validator, user)?;
+stake.release_write_lock()?;
+STAKE.save(store, validator, user, &stake)?;
 
-When staking, create a `Stake` packet, but do not update the user's / validator's state
-in the `external-staking` contract. If an error ack comes back, then the
-`external-staking` contract should immediately call back to the vault to release
-the lien for the amount of that packet. If a success ack comes back, it should
-actually apply the staking changes locally.
-
-Likewise, when unstaking, we first create an `Unstake` packet. However, here
-we want to avoid the situation of `Unstaking` 100% of the tokens multiple times,
-as this would apply invalid state changes to the consumer. We need to enforce this
-limit on the provider side (which is handled by the vault in the staking case).
-
-For `Unstake`, we should update a local "unstaking" value on the `(user, validator)`
-staking info, but not create a claim nor apply a diff to the validator.
-We ensure that this "unstaking" amount can never be larger than the properly staked
-(and ack'ed) value. On an error ack, we simply reduce "unstaking" by that amount.
-On a success ack, we commit these changes, reducing not only "unstaking", but
-also applying the deduction to actual stake for the user as well as the validator,
-updating the rewards claim table, and creating the claim, so the user can get their
-tokens / lien back after the unbonding period.
-
-### Re-syncing
-
-We could invent some "re-sync" mechanism, but would have to be careful mixing this with
-in-flight messages. For example, the provider sends a `Stake` message to the consumer,
-which returns an error for whatever reason. Before the ack has arrived, the provider
-sends a re-sync message with the entire content of its local state.
-
-Upon receiving that "re-sync" message, the consumer updates all tables and triggers the
-appropriate virtual staking commands. However, the error ack for the `Stake` packet
-now lands on the provider and it "undoes" the Stake action. This will be applied
-on top of the snapshot that it sent to the consumer, thus modifying it and the two sides
-will have diverged again.
-
-This whole issue becomes much more difficult to manage if we are relying on unordered channels.
-For example, if there is an "in-flight" `Stake` message that has not been processed, and we
-"re-sync" by sending the provider's view of the entire staking assignment, a malicious
-relayer could post the re-sync packet first and the `Stake` message second, thus double applying it.
+/// Call the actual staking logic we currently perform
+do_stake();
+```
 
 ### Error correction
 
-**TODO** Ideas about using values in success acks to double check the state matches expectations.
+**TODO** Ideas about using values in success acks to double check the state matches expectations and flag possible errors
