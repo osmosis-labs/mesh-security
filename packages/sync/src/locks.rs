@@ -2,14 +2,16 @@ use cosmwasm_schema::cw_serde;
 use thiserror::Error;
 
 #[cw_serde]
+#[derive(Default)]
 pub struct Lockable<T> {
     inner: T,
     lock: LockState,
 }
 
 #[cw_serde]
-#[derive(Copy)]
+#[derive(Copy, Default)]
 pub enum LockState {
+    #[default]
     #[serde(rename = "no")]
     Unlocked,
     #[serde(rename = "w")]
@@ -26,12 +28,6 @@ pub enum LockError {
     ReadLocked,
     #[error("Attempt to release a lock which was not held")]
     NoLockHeld,
-}
-
-impl Default for LockState {
-    fn default() -> Self {
-        LockState::Unlocked
-    }
 }
 
 impl<T> Lockable<T> {
@@ -242,5 +238,179 @@ mod tests {
         // call a method
         lockable.write().unwrap().multiply_vals();
         assert_eq!(lockable.read().unwrap(), &TestStruct::new(8, 80));
+    }
+}
+
+#[cfg(test)]
+mod tests_plus {
+    use super::*;
+
+    use cosmwasm_std::{testing::MockStorage, StdError, Uint128};
+    use cw_storage_plus::{Item, Map};
+
+    #[cw_serde]
+    pub struct Person {
+        name: String,
+        age: u32,
+    }
+
+    impl Person {
+        pub fn new(name: &str, age: u32) -> Self {
+            Self {
+                name: name.to_string(),
+                age,
+            }
+        }
+    }
+
+    #[derive(Error, Debug, PartialEq)]
+    pub enum PersonError {
+        #[error("{0}")]
+        Std(#[from] StdError),
+        #[error("{0}")]
+        Lock(#[from] LockError),
+    }
+
+    #[test]
+    fn modify_item_with_locks() {
+        let mut store = MockStorage::new();
+        const PERSON: Item<Lockable<Person>> = Item::new("person");
+
+        // store a normal unlocked person
+        PERSON
+            .save(&mut store, &Lockable::new(Person::new("John", 32)))
+            .unwrap();
+
+        // had a birthday
+        PERSON
+            .update(&mut store, |mut p| {
+                p.write()?.age += 1;
+                Ok::<_, PersonError>(p)
+            })
+            .unwrap();
+
+        // get this and read-lock it
+        PERSON
+            .update(&mut store, |mut p| {
+                assert_eq!(p.read()?.age, 33);
+                p.lock_read()?;
+                Ok::<_, PersonError>(p)
+            })
+            .unwrap();
+
+        // error trying to write it later
+        let mut p = PERSON.load(&store).unwrap();
+        let err = p.write().unwrap_err();
+        assert_eq!(err, LockError::ReadLocked);
+
+        // but we can unlock and save it to make to release
+        p.unlock_read().unwrap();
+        PERSON.save(&mut store, &p).unwrap();
+
+        // now, it is fine to change again
+        PERSON
+            .update(&mut store, |mut p| {
+                p.write()?.age += 1;
+                assert_eq!(p.read()?.age, 34);
+                Ok::<_, PersonError>(p)
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn map_methods_with_locks() {
+        let mut store = MockStorage::new();
+        const PEOPLE: Map<&str, Lockable<Uint128>> = Map::new("people");
+
+        // add a few people
+        PEOPLE
+            .save(&mut store, "John", &Lockable::new(Uint128::new(32)))
+            .unwrap();
+        PEOPLE
+            .save(&mut store, "Maria", &Lockable::new(Uint128::new(47)))
+            .unwrap();
+
+        // We can edit unlocked person
+        PEOPLE
+            .update(&mut store, "John", |p| {
+                let mut p = p.unwrap_or_default();
+                *p.write()? += Uint128::new(1);
+                Ok::<_, PersonError>(p)
+            })
+            .unwrap();
+
+        // Update works on new values, setting to unlocked by default
+        PEOPLE
+            .update(&mut store, "Wilber", |p| {
+                let mut p = p.unwrap_or_default();
+                *p.write()? += Uint128::new(2);
+                Ok::<_, PersonError>(p)
+            })
+            .unwrap();
+
+        // We can range over them well
+        let total_age = PEOPLE
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .fold(Ok(Uint128::zero()), |sum, item| {
+                Ok::<_, PersonError>(sum? + *item?.1.read()?)
+            })
+            .unwrap();
+        assert_eq!(total_age, Uint128::new(33 + 47 + 2));
+
+        // We can get count
+        let num_people = PEOPLE
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .count();
+        assert_eq!(num_people, 3);
+
+        // Read-lock John
+        let mut j = PEOPLE.load(&store, "John").unwrap();
+        j.lock_read().unwrap();
+        PEOPLE.save(&mut store, "John", &j).unwrap();
+
+        // We can no longer edit it
+        let err = PEOPLE
+            .update(&mut store, "John", |p| {
+                let mut p = p.unwrap_or_default();
+                *p.write()? += Uint128::new(1);
+                Ok::<_, PersonError>(p)
+            })
+            .unwrap_err();
+        assert_eq!(err, PersonError::Lock(LockError::ReadLocked));
+
+        // We can still range over all
+        let total_age = PEOPLE
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .fold(Ok(Uint128::zero()), |sum, item| {
+                Ok::<_, PersonError>(sum? + *item?.1.read()?)
+            })
+            .unwrap();
+        assert_eq!(total_age, Uint128::new(33 + 47 + 2));
+
+        // We can get count
+        let num_people = PEOPLE
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .count();
+        assert_eq!(num_people, 3);
+
+        // Write-lock Wilber
+        let mut w = PEOPLE.load(&store, "Wilber").unwrap();
+        w.lock_write().unwrap();
+        PEOPLE.save(&mut store, "Wilber", &w).unwrap();
+
+        // We cannot range over all
+        let err = PEOPLE
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .fold(Ok(Uint128::zero()), |sum, item| {
+                Ok::<_, PersonError>(sum? + *item?.1.read()?)
+            })
+            .unwrap_err();
+        assert_eq!(err, PersonError::Lock(LockError::WriteLocked));
+
+        // We can get count (kind of edge case bug, but I don't think we can change this or it matters)
+        let num_people = PEOPLE
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .count();
+        assert_eq!(num_people, 3);
     }
 }
