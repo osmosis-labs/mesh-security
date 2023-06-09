@@ -1,10 +1,14 @@
-use std::ops::{Add, Sub};
+use std::{
+    iter::Sum,
+    ops::{Add, Sub},
+};
 use thiserror::Error;
 
 use cosmwasm_schema::cw_serde;
 
 /// This is designed to work with two numeric primitives that can be added, subtracted, and compared.
 #[cw_serde]
+#[derive(Default, Copy)]
 pub struct ValueRange<T>(T, T);
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -59,7 +63,7 @@ where
 
     /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) a subtraction
     pub fn prepare_sub(&mut self, value: T) -> Result<(), RangeError> {
-        if value < self.0 {
+        if self.0 < value {
             return Err(RangeError::Underflow);
         }
         self.0 = self.0 - value;
@@ -106,8 +110,24 @@ impl<T: PartialOrd> PartialOrd<T> for ValueRange<T> {
     }
 }
 
+impl<T: Add<Output = T>> Add for ValueRange<T> {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        ValueRange(self.0 + rhs.0, self.1 + rhs.1)
+    }
+}
+
+impl<T: Add<Output = T> + Default> Sum for ValueRange<T> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(ValueRange::default(), |acc, x| acc + x)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use cosmwasm_std::Uint128;
+
     use super::*;
 
     #[test]
@@ -127,5 +147,51 @@ mod tests {
         assert!(!(range < 60));
         assert!(!(range > 60));
         assert!(range != 60);
+    }
+
+    #[test]
+    fn add_ranges() {
+        // (80, 120)
+        let mut range = ValueRange::new(80);
+        range.prepare_add(40).unwrap();
+
+        // (100, 200)
+        let mut other = ValueRange::new(200);
+        other.prepare_sub(100).unwrap();
+
+        let total = range + other;
+        assert_eq!(total, ValueRange(180, 320));
+    }
+
+    #[test]
+    fn sums() {
+        let ranges = [
+            ValueRange::new(100),
+            ValueRange(0, 250),
+            ValueRange::new(200),
+            ValueRange(170, 380),
+        ];
+        let total: ValueRange<u32> = ranges.into_iter().sum();
+        assert_eq!(total, ValueRange(470, 930));
+    }
+
+    // most tests will use i32 for simplicity - just ensure APIs work properly with Uint128
+    #[test]
+    fn works_with_uint128() {
+        // check for one point - it behaves like an integer
+        let mut range = ValueRange::new(Uint128::new(500));
+        assert!(range == Uint128::new(500));
+        assert!(range > Uint128::new(499));
+        assert!(range < Uint128::new(501));
+
+        // make a range (50, 80), it should compare normally to those outside the range
+        range.prepare_add(Uint128::new(250)).unwrap();
+        assert!(range > Uint128::new(499));
+        assert!(range < Uint128::new(751));
+
+        // all comparisons inside the range lead to false
+        assert!(!(range < Uint128::new(600)));
+        assert!(!(range > Uint128::new(600)));
+        assert!(range != Uint128::new(600));
     }
 }
