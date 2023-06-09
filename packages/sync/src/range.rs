@@ -36,9 +36,46 @@ where
     }
 }
 
+pub fn max_val<'a, I, T>(iter: I) -> T
+where
+    I: Iterator<Item = &'a ValueRange<T>> + 'a,
+    T: Ord + Copy + Default + 'a,
+{
+    iter.map(|r| r.max()).max().unwrap_or_default()
+}
+
+pub fn min_val<'a, I, T>(iter: I) -> T
+where
+    I: Iterator<Item = &'a ValueRange<T>> + 'a,
+    T: Ord + Copy + Default + 'a,
+{
+    iter.map(|r| r.min()).min().unwrap_or_default()
+}
+
+/// Captures the spread from the lowest low to the highest high
+pub fn spread<I, T>(iter: I) -> ValueRange<T>
+where
+    I: Iterator<Item = ValueRange<T>>,
+    T: Ord + Copy + Default,
+{
+    iter.reduce(|acc, x| {
+        ValueRange(
+            std::cmp::min(acc.min(), x.min()),
+            std::cmp::max(acc.max(), x.max()),
+        )
+    })
+    .unwrap_or_default()
+}
+
+impl<T: Ord> ValueRange<T> {
+    pub fn contains(&self, value: T) -> bool {
+        self.0 <= value && value <= self.1
+    }
+}
+
 impl<T> ValueRange<T>
 where
-    T: Add<Output = T> + Sub<Output = T> + PartialOrd + Ord + Copy,
+    T: Add<Output = T> + Sub<Output = T> + Ord + Copy,
 {
     /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) an addition
     pub fn prepare_add(&mut self, value: T) -> Result<(), RangeError> {
@@ -173,6 +210,24 @@ mod tests {
         ];
         let total: ValueRange<u32> = ranges.into_iter().sum();
         assert_eq!(total, ValueRange(470, 930));
+    }
+
+    #[test]
+    fn min_max() {
+        let ranges = [
+            ValueRange::new(100),
+            ValueRange(40, 250),
+            ValueRange::new(200),
+            ValueRange(170, 380),
+        ];
+        let max = max_val(ranges.iter());
+        assert_eq!(max, 380);
+
+        let min = min_val(ranges.iter());
+        assert_eq!(min, 40);
+
+        let all = spread(ranges.into_iter());
+        assert_eq!(all, ValueRange(40, 380));
     }
 
     // most tests will use i32 for simplicity - just ensure APIs work properly with Uint128
