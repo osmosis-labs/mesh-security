@@ -12,6 +12,7 @@ repository    = "https://github.com/osmosis-labs/mesh-security"
 mesh-apis        = { path = "./packages/apis" }
 mesh-bindings        = { path = "./packages/bindings" }
 mesh-mocks        = { path = "./packages/mocks" }
+mesh-sync        = { path = "./packages/sync" }
 
 mesh-vault    = { path = "./contracts/provider/vault" }
 mesh-external-staking    = { path = "./contracts/provider/external-staking" }

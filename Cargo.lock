@@ -672,6 +672,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-sync"
+version = "0.2.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "thiserror",
+]
+
+[[package]]
 name = "mesh-vault"
 version = "0.2.0"
 dependencies = [
