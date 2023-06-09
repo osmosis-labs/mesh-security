@@ -13,7 +13,7 @@ We also want to guarantee that the provider chain always maintains sufficient st
 in the vault to cover all virtual staking actions currently outstanding on the provider chain.
 
 As [mentioned before](./ControlChannel.md#channel-ordering), we wish to use an unordered channel,
-and therefore must bring a degree of understading of [Serializability](./Serializability.md)
+and therefore must bring a degree of understanding of [Serializability](./Serializability.md)
 to this protocol.
 
 ## Delegation Syncing
@@ -27,11 +27,11 @@ It manages a delegation count per validator - `D[V]`, with the following rules:
   * if `D[V] < X`, return error ack
   * else `D[V] -= X`, return success ack
 
-This is pretty straightforward counter with a lower bound of 0, along with an increment and decrement
+This is a pretty straightforward counter with a lower bound of 0, along with an increment and decrement
 counters. 
 
 The only requirements to ensure this stays in sync is that the provider can successfully commit the same
-changes upon a success ack, and is able to revert then (unstake) on an error ack. 
+changes upon a success ack, and is able to revert them (unstake) on an error ack. 
 
 **TODO** Do we need text / code / explanation here?
 
@@ -43,7 +43,7 @@ This user must also have a sufficient lien on the vault to cover the delegation.
 And the vault must have sufficient funds to cover the lien.
 
 This means we must maintain invariants over at least two contracts - the `external-staking` contract
-and the `vault`. It includes possible conflicts with non-IBC transactions, like a user to withdrawing 
+and the `vault`. It includes possible conflicts with non-IBC transactions, like a user withdrawing 
 collateral from the vault that would be needed to cover the lien for an in-flight delegation.
 
 Let us start analysing the protocol, but viewing all the state transitions that must be made on proper

@@ -95,7 +95,7 @@ let new_state: State = match (old_state, op) {
     (Some(State::Tombstoned), _) => State::Tombstoned,
     (None, A(_, p)) => Some(State::Active(p)),
     // Ignore A if we have received state already
-    (Some(State::Active(p)), A(_, _)) => Some(State::Active(p)),
+    (Some(State::Active(p)), A(_, _)) => State::Active(p),
 };
 ```
 
@@ -109,7 +109,7 @@ guarantee of commutability.
 
 In addition to the basic operations described above, there is another operations we would like
 to support. This protocol is designed to handle Tendermint key rotation, such that a validator
-address may be associated with multiple public keys over the course of it's existence.
+address may be associated with multiple public keys over the course of its existence.
 
 This feature is not implemented in Cosmos SDK yet, but long-requested and the Mesh Security
 protocol should be future proof. (Note: we do not handle changing the `valoper` address as
@@ -126,13 +126,15 @@ We wish to maintain a validator set `V` on the Provider with the following prope
     (We may represent this as a sorted list without duplicates, but that is a mathematically
     equivalent optimization)
 
-To ensure we can perform all this with the commutivity property, we look for a mapping
+### Proof of correctness
+
+To ensure we can perform all this with the commutativity property, we look for a mapping
 of our concepts to proven CRDT types. The top level set is, as in the last section,
 a [`2P-Set`](<https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#2P-Set_(Two-Phase_Set)>).
 
-Inside each element that has not been removed, we store the set of pubkeys
+Inside each element that has not been removed, we store the set of (pubkeys, added height)
 as a [`G-Set`](<https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#G-Set_(Grow-only_Set)>),
-which grows when each pubkey is added.
+which grows on each rotation.
 
 ### Rotation Implementation
 
@@ -148,10 +150,8 @@ type Validator = Option<State>
 enum State {
     /// The first entry is the most recent pubkey seen.
     ///
-    /// The second entry is a list of past keys, with their last active time.
-    /// This list is sorted in descending order, with the most recent key first.
-    /// (We can consider this a serializable form of a set)
-    Active(Vec<(Pubkey, Timestamp)>),
+    /// In Practice, we can use a sorted Vec here for serialization, but whatever we use should be mathematically equivalent to a set.
+    Active(Set<(Pubkey, Timestamp)>),
     Tombstoned,
 }
 
@@ -175,31 +175,11 @@ let new_state: State = match (old_state, op) {
     (Some(State::Tombstoned), _) => State::Tombstoned,
 
     // Joining active set for the first time
-    (None, A(_, p, h)) => Some(State::Active([(p, h)])),
+    (None, A(_, p, h)) => State::Active([(p, h)]),
     // Rotating the pubkey, adds to the set
-    (Some(State::Active(mut v)), A(_, p, h)) => {
-        // Add this transition
-        v.push((po, h));
-        // We sort the array from largest to smallest for quick compares on slashing
-        v.sort_by(|a, b| a.cmp(b).reverse());
-        // Remove all duplicates (handle if `K` was seen before)
-        v.dedup();
-        // Assert invariant violation if there are now multiple items same height
-        debug_assert_eq!(v.iter().filter(|(_, hx)| hx == &h).count(), 1);
-        Some(State::Active(updated, v)),
+    (Some(State::Active(mut s)), A(_, p, h)) => {
+        s.insert((p, h));
+        State::Active(updated, s),
     }
-
 };
 ```
-
-### Proof of correctness
-
-Since the CRDTs have already been proven, we just need to prove that our algorithm of
-adding `A` to an existing `State::Present` is equivalent to adding to a set.
-
-`v.push()` and `v.sort()` will add to a list and guarantee it has the same ordering
-regardless of the order of operations. `v.dedup()` will remove duplicates,
-keeping the property of a set that each element is only present once.
-
-With this, we have proven that our algorithm is equivalent to a CRDT, and thus
-fully commutative and maintains the desired properties regardless of packet ordering.
