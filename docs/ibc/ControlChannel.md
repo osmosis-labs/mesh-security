@@ -1,6 +1,6 @@
 # Control Channel
 
-sThis document describes the "control channel", which is a direct IBC channel between the
+This document describes the "control channel", which is a direct IBC channel between the
 `external-staking` contract on the provider side and the `converter` contract
 on the consumer side. This is used to send messages about bonding and unbonding,
 and any other metadata about the protocol (like validators).
@@ -12,7 +12,7 @@ It is also **not** used to [handle slashing](./Slashing.md), as there are concer
 a malicious state machine would lie, so we demand original evidence of Tendermint
 misbehavior on the provider chain.
 
-This channel encompasses to sub-protocols, which are described in their own documents.
+This channel encompasses two sub-protocols, which are described in their own documents.
 The establishment of the channel (including handshake and version negotiation)
 [is described further below](#establishing-a-channel).
 
@@ -58,7 +58,7 @@ it maintains correctness in face of arbitrary packet reordering and dropping (vi
 Before creating that channel, you must have created the `external-staking` and
 `converter` contracts. The `external-staking` contract must be initialized with
 the valid (connection, port) from which the converter will connect, which means that
-the converter contract must be established before the `external-staking` contract.
+the converter contract must be instantiated before the `external-staking` contract.
 
 The channel is initiated by a relayer, with party A being the appropriate `converter`
 contract on the consumer chain, and party B being the `external-staking` contract.

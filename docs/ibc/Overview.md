@@ -16,10 +16,8 @@ and discuss cross-chain slashing in another section.
 ```mermaid
 flowchart RL
   %%{init: {'theme': 'forest'}}%%
-
   A[Provider] -- Staking --> B[Consumer];
   B -- Rewards --> A;
-
   C{{Observer}} -. Slashing Evidence .-> A;
 ```
 
@@ -76,7 +74,7 @@ they are fungible with the native staking token currently sent
 between the chains (it will have the same denom as what's listed on the DEX).
 Besides moving the rewards, we need to inform the _External Staker_ that
 it has received rewards so it can distribute them to validators.
-We will do via ICA, or by making use of the ICS20 memo field to pass this info.
+We will do that via ICA, or by making use of the ICS20 memo field to pass this info.
 Read more about the [Cross-Chain Rewards Protocol](./Rewards.md)
 in more depth.
 
