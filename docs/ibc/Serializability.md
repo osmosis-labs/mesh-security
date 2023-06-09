@@ -2,7 +2,7 @@
 
 **Serializability** is a key property of blockchains, and a well-defined property in
 standard databases that can be accepted when certain guarantees are more important
-than raw throughput. The process of consensus and creating and ordered block of
+than raw throughput. The process of consensus and creating an ordered block of
 transactions provides the basis for this guarantee. If the state machine then
 executes them sequentially, we have the _serializable_ property, because we actually
 execute them serially.
@@ -17,7 +17,7 @@ of _serializability_ very well to avoid unexpected behavior.
 ## In ACID Databases
 
 Let's start with a more practical definition, as a user of a system that supports this.
-The **I** in ACID-complaint database stands for **Isolation**. PostgreSQL has a solid
+The **I** in ACID-compliant database stands for **Isolation**. PostgreSQL has a solid
 implementation of this, and defines the concept of "Transaction Isolation", which you
 may well have encountered and used:
 
@@ -44,7 +44,7 @@ if the other fails.
 
 ## General Approaches
 
-In distributed systems, we need to be more careful, and go back to the general defintion of
+In distributed systems, we need to be more careful, and go back to the general definition of
 Serialiazable systems, to determine which primitives we need to implement it. And from there
 determine which technique will be most effective in our system. Let's start with
 [Wikipedia (which has quite good references in computer science)](https://en.m.wikipedia.org/wiki/Serializability#View_and_conflict_serializability). (All quotes below are from this page, unless otherwise noted)
@@ -54,12 +54,12 @@ determine which technique will be most effective in our system. Let's start with
 > Operations upon data are _read_ or _write_ (a write: insert, update, or delete). Two operations are conflicting if they are of different transactions, upon the same datum (data item), and at least one of them is write. Each such pair of conflicting operations has a conflict type: it is either a read–write, or write–read, or a write–write conflict. The transaction of the second operation in the pair is said to be in conflict with the transaction of the first operation.
 
 So far, we can start thinking of Read-Write Locks to avoid said conflicts.
-[Two-Phase Locking](https://en.m.wikipedia.org/wiki/Two-phase_locking) explains how to handle these
+[Two-Phase Locking](https://en.m.wikipedia.org/wiki/Two-phase_locking) explains how to handle
 this approach without deadlocks, and would be the first approach we could consider. In fact,
 I would consider it the simplest general-case solution to the problem, without understanding
 the details of the actual transactions being executed.
 
-### Commumtative Operations
+### Commutative Operations
 
 > A more general definition of conflicting operations (also for complex operations, which may each consist of several "simple" read/write operations) requires that they are noncommutative (changing their order also changes their combined result). Each such operation needs to be atomic by itself (using proper system support) in order to be considered an operation for a commutativity check. For example, read–read operations are commutative (unlike read–write and the other possibilities) and thus read–read is not a conflict. Another more complex example: the operations increment and decrement of a counter are both write operations (both modify the counter), but do not need to be considered conflicting (write-write conflict type) since they are commutative (thus increment–decrement is not a conflict; e.g., already has been supported in the old IBM's IMS "fast path").
 
@@ -104,7 +104,7 @@ process of committing.
 
 A [Two-Phase Commit](https://en.m.wikipedia.org/wiki/Two-phase_commit_protocol) requires
 significant communication between the nodes, and is not suitable for an IBC system.
-For our purposed, we can look at the basic requirements of
+For our purpose, we can look at the basic requirements of
 [Atomic Commits](https://en.m.wikipedia.org/wiki/Atomic_commit):
 
 > In the field of computer science, an atomic commit is an operation that applies a set of distinct changes as a single operation. If the changes are applied, then the atomic commit is said to have succeeded. If there is a failure before the atomic commit can be completed, then all of the changes completed in the atomic commit are reversed. This ensures that the system is always left in a consistent state
@@ -134,25 +134,25 @@ without any more concerns about data consistency.
 (From [Wikipedia - CRDT](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#Known_CRDTs))
 
 The key point here is every operation is commutative. This works great for a counter (increment and decrement) **over all integer values**.
-However, if we could ever hit a limit (`i64::MAX` or simply `0`), then one of the the operations would fail. And the particular operation
+However, if we could ever hit a limit (`i64::MAX` or simply `0`), then one of the operations would fail. And the particular operation
 that fails depends on the ordering of the operations, thus rendering it no longer commutative. If the limits are `i128::MAX` and `i128::MIN`
-and there is a limit to the value of the counter (not used defined), then we can prove we will never hit the said limits and this
+and there is a limit to the value of the counter (not user defined), then we can prove we will never hit the said limits and this
 would be commutative. However, since we usually enforce `value > 0` on blockchains, this would rarely work.
 
 Other types that are well defined and may be useful to IBC protocols are "grow-only set", "two-phase-set" (once removed, it can never enter),
 "last write wins" (based on some trusted timestamp). These are mathematical definitions and can be implemented in a variety of ways.
 For example "grow-only set" could be an "append-only vector" where we keep it sorted and remove duplicates.
 
-You can read more on some [standard defined CRDT types](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#Known_CRDTs)
+You can read more on some [standard defined CRDT types](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#Known_CRDTs).
 
 ## Locking
 
 CRDTs are extremelely flexible and resillient, but it is very difficult to map most business logic to such types.
 On the opposite extreme, we can use locking to ensure that only one transaction is processed at a time. This is very limiting,
-but it provably correct over any business logic.
+but it is provably correct over any business logic.
 
-Note that is **requires ordered channels**, as commit ordering is essential here. If we start transaction A, B, C on the sending chain
-in that order, then A', B', C' must be process on the receiving chain in that order, and the commit/rollback order (based on getting
+Note that it **requires ordered channels**, as commit ordering is essential here. If we start transaction A, B, C on the sending chain
+in that order, then A', B', C' must be processed on the receiving chain in that order, and the commit/rollback order (based on getting
 acks on the sending chain must be also be A, B, C). This is exactly the guarantee that ordered channels provide.
 
 On top of this, we have to ensure that no other transactions conflict with any open IBC transactions. Transaction A is "open" from the
@@ -161,14 +161,14 @@ the sending chain. This will span several blocks, possibly hours in the case of 
 
 We can model this with [Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking#Two-phase_locking_and_its_special_cases)
 , which defines a "growing phase" of acquiring locks, followed by a "shrinking phase" of releasing locks. This is done to be
-resistent to deadlock. We would do the following:s
+resistent to deadlock. We would do the following:
 
 1. Start Tx on Sending Chain: Acquire all read/write locks on all data that will be touched. This is the "growing" phase of the lock.
 2. Process Packet on Receiving Chain: Aquire all read/write locks on all data, process data, release all locks. This goes from the "growing" phase to the "shrinking" phase.
 3. Process Ack on the Sending Chain: Process ack, and release all locks. This is the "shrinking" phase.
 
 If we guarantee that we never read any data that is not under a write lock, we can release the read locks at end of "start tx", as they are not needed.
-Furthermore, the "process packet" phase just defines the normal sematics of blockchain processing. With that, we can simplify to:
+Furthermore, the "process packet" phase just defines the normal semantics of blockchain processing. With that, we can simplify to:
 
 1. Start Tx on Sending Chain: Acquire all write locks on all data that will be committed or rolled-back.
 2. Process Packet on Receiving Chain: Process data, and return success or error ack.
@@ -198,7 +198,7 @@ Note that is this not a general approach in most distributed systems, where we h
 some global invariants before initiating a transaction. However, since all changes to the given data is initiated in the provider
 blockchain, and we have a complete view of currently in-flight transactions, this approach could work for IBC protocols.
 
-We can say that ICS20 implementation does something like this. As the only invairant is that the value never goes below zero,
+We can say that ICS20 implementation does something like this. As the only invariant is that the value never goes below zero,
 it pre-emptively moves the tokens out of the users account to an escrow. This doesn't require any further lock on the user's account,
 but ensures no other transaction will be possible to execute that would render the user's balance below 0 if this was committed.
 Thus, any other transaction that would be commutative with this (commit or rollback) can be executed concurrently, but any other
@@ -206,7 +206,7 @@ transaction that would conflict with this (eg. spend the same tokens, and only b
 will immediately fail.
 
 ICS20 is an extremely simple case and you don't need such theory to describe decrementing one counter. However, assume there was not
-only a min token balance (0) but some max, say 1 million. Then ICS20 would not work, as you could excrow 500k tokens, then receive
+only a min token balance (0) but some max, say 1 million. Then ICS20 would not work, as you could escrow 500k tokens, then receive
 600k tokens, and if the ICS20 received an error ACK, it would be impossible to validly roll this back (another example of non-commutative,
 or conflicting, operations).
 
@@ -218,7 +218,7 @@ one violated some invariant (too high or too low). When an IBC transaction is in
 attempt to decrease the min by 200 but leave the max unchanged (requiring this range to remain valid). When the IBC ack is received,
 we would either `Commit(200)` or `Rollback(200)`, which would once again bring min and max to the same value (which one depends on Commit or Rollback).
 
-This approach would only work by values not used by complex forumulas, such as balances of an AMM (we can't calculate prices off ranges),
+This approach would only work by values not used by complex formulas, such as balances of an AMM (we can't calculate prices of ranges),
 or paying out staking rewards (the value received by all other users depends on your stake, and we can't propogate this to all those accounts,
 as it would be prohibitively expensive to collapse them all when the transaction is committed or rolled-back).
 
@@ -230,5 +230,5 @@ With some clever reasoning, we could possibly enforce such value ranges without 
 ## Next Steps
 
 With this understanding, we can now start to design IBC applications that are safe and correct.
-I will reference these theoretical concpets while defining a safe implementation of the Mesh Security control
-protocol in face of unordered channels.
+I will reference these theoretical concepts while defining a safe implementation of the Mesh Security control
+protocol under the assumption of unordered channels.
