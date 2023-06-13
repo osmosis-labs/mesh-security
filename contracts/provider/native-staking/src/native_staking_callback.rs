@@ -10,6 +10,9 @@ use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCall
 use crate::contract::NativeStakingContract;
 use crate::error::ContractError;
 
+// FIXME: Move to sylvia contract macro
+use crate::contract::BoundQuerier;
+
 #[contract]
 #[messages(native_staking_callback as NativeStakingCallback)]
 impl NativeStakingCallback for NativeStakingContract<'_> {
