@@ -10,6 +10,9 @@ use crate::contract::{NativeStakingContract, MAX_SLASH_PERCENTAGE, REPLY_ID_INST
 use crate::error::ContractError;
 use crate::msg::StakeMsg;
 
+// FIXME: Move to sylvia contract macro
+use crate::contract::BoundQuerier;
+
 #[contract]
 #[messages(local_staking_api as LocalStakingApi)]
 impl LocalStakingApi for NativeStakingContract<'_> {
