@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Order, Reply, Response, SubMsg,
-    SubMsgResponse, Uint128, WasmMsg,
+    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Order, Reply, Response, StdResult,
+    Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -20,6 +20,7 @@ use crate::msg::{
     ConfigResponse, LienInfo, StakingInitInfo,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
+use crate::txs::{Tx, TxType, Txs};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -50,6 +51,9 @@ pub struct VaultContract<'a> {
     pub liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
     /// Per-user information
     pub users: Map<'a, &'a Addr, UserInfo>,
+    /// Pending txs information
+    pub tx_count: Item<'a, u64>,
+    pub pending: Txs<'a>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -57,13 +61,21 @@ pub struct VaultContract<'a> {
 #[error(ContractError)]
 #[messages(vault_api as VaultApi)]
 impl VaultContract<'_> {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             config: Item::new("config"),
             local_staking: Item::new("local_staking"),
             liens: Map::new("liens"),
             users: Map::new("users"),
+            pending: Txs::new("pending_txs", "users"),
+            tx_count: Item::new("tx_count"),
         }
+    }
+
+    pub fn next_tx_id(&self, store: &mut dyn Storage) -> StdResult<u64> {
+        let id: u64 = self.tx_count.may_load(store)?.unwrap_or_default() + 1;
+        self.tx_count.save(store, &id)?;
+        Ok(id)
     }
 
     #[msg(instantiate)]
@@ -168,7 +180,7 @@ impl VaultContract<'_> {
         let contract = CrossStakingApiHelper(contract);
         let slashable = contract.max_slash(ctx.deps.as_ref())?;
 
-        self.stake(
+        let tx_id = self.maybe_stake(
             &mut ctx,
             &config,
             &contract.0,
@@ -179,6 +191,7 @@ impl VaultContract<'_> {
         let stake_msg = contract.receive_virtual_stake(
             ctx.info.sender.to_string(),
             amount.clone(),
+            // tx_id, TODO: Pass it along
             msg,
             vec![],
         )?;
@@ -187,7 +200,8 @@ impl VaultContract<'_> {
             .add_message(stake_msg)
             .add_attribute("action", "stake_remote")
             .add_attribute("sender", ctx.info.sender)
-            .add_attribute("amount", amount.amount.to_string());
+            .add_attribute("amount", amount.amount.to_string())
+            .add_attribute("tx_id", tx_id.to_string());
 
         Ok(resp)
     }
@@ -437,6 +451,146 @@ impl VaultContract<'_> {
         Ok(())
     }
 
+    /// Updates the pending txs for remote staking on any contract
+    ///
+    /// Stake (remote) is always called by the tokens owner, so the `sender` is
+    /// used as an owner address.
+    ///
+    /// Config is taken in argument as it sometimes is used outside of this function, so
+    /// we want to avoid double-fetching it
+    fn maybe_stake(
+        &self,
+        ctx: &mut ExecCtx,
+        config: &Config,
+        lienholder: &Addr,
+        slashable: Decimal,
+        amount: Coin,
+    ) -> Result<u64, ContractError> {
+        ensure!(
+            amount.denom == config.denom,
+            ContractError::UnexpectedDenom(config.denom.clone())
+        );
+
+        let amount = amount.amount;
+        // Tx starts here
+        // Verify that the user has enough collateral to stake this and the currently pending txs
+        let pending_amount = amount
+            + self
+                .pending
+                .txs
+                .idx
+                .users
+                .prefix(ctx.info.sender.clone())
+                .range(ctx.deps.storage, None, None, Order::Ascending)
+                .fold(Ok(Uint128::zero()), |acc, pending| {
+                    let acc = acc?;
+                    pending.map(|(_, tx)| {
+                        acc + match tx.ty {
+                            // Value range max
+                            TxType::Stake => tx.amount,
+                            _ => Uint128::zero(),
+                        }
+                    })
+                })?;
+
+        // Load lien and update (but do not save) user info and lien holder
+        let lien = self
+            .liens
+            .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
+            .unwrap_or(Lien {
+                amount: Uint128::zero(),
+                slashable,
+            });
+        // Load user and update (but do not save) max lien and total slashable
+        let mut user = self
+            .users
+            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .unwrap_or_default();
+        user.max_lien = user.max_lien.max(lien.amount);
+        user.total_slashable += pending_amount * lien.slashable;
+
+        ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
+
+        // Passed. Create new tx
+        let tx_id = self.next_tx_id(ctx.deps.storage)?;
+
+        let new_tx = Tx {
+            ty: TxType::Stake,
+            amount,
+            slashable,
+            user: ctx.info.sender.clone(),
+            lienholder: lienholder.clone(),
+        };
+        self.pending.txs.save(ctx.deps.storage, tx_id, &new_tx)?;
+
+        Ok(tx_id)
+    }
+
+    /// Commits a pending tx
+    // TODO: Add callback handler
+    #[allow(unused)]
+    fn commit_tx(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
+        // TODO: Properly handle tx type
+        assert!(tx.ty == TxType::Stake);
+        // Verify tx comes from the right contract
+        ensure!(
+            tx.lienholder == ctx.info.sender,
+            ContractError::WrongContractTx(tx_id, ctx.info.sender.clone())
+        );
+
+        // Load lien
+        let mut lien = self
+            .liens
+            .may_load(ctx.deps.storage, (&tx.user, &tx.lienholder))?
+            .unwrap_or(Lien {
+                amount: Uint128::zero(),
+                slashable: tx.slashable,
+            });
+        lien.amount += tx.amount;
+
+        let mut user = self
+            .users
+            .may_load(ctx.deps.storage, &tx.user)?
+            .unwrap_or_default();
+        user.max_lien = user.max_lien.max(lien.amount);
+        user.total_slashable += tx.amount * lien.slashable;
+
+        // FIXME: Remove, as it's a redundant check
+        ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
+
+        self.liens
+            .save(ctx.deps.storage, (&ctx.info.sender, &tx.lienholder), &lien)?;
+
+        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+
+        // And remove tx
+        self.pending.txs.remove(ctx.deps.storage, tx_id)?;
+
+        Ok(())
+    }
+
+    /// Rollbacks a pending tx
+    // TODO: Add callback handler
+    #[allow(unused)]
+    fn rollback_tx(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
+        // TODO: Properly handle tx type
+        assert!(tx.ty == TxType::Stake);
+        // Verify tx comes from the right contract
+        ensure!(
+            tx.lienholder == ctx.info.sender,
+            ContractError::WrongContractTx(tx_id, ctx.info.sender.clone())
+        );
+
+        // Just remove tx
+        self.pending.txs.remove(ctx.deps.storage, tx_id)?;
+
+        Ok(())
+    }
+
     /// Updates the local stake for unstaking from any contract
     ///
     /// The unstake (both local and remote) is always called by the staking contract
@@ -474,6 +628,12 @@ impl VaultContract<'_> {
         self.users.save(ctx.deps.storage, &owner, &user)?;
 
         Ok(())
+    }
+}
+
+impl Default for VaultContract<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
