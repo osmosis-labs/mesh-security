@@ -1,4 +1,4 @@
-use cosmwasm_std::{StdError, Uint128};
+use cosmwasm_std::{Addr, StdError, Uint128};
 use cw_utils::{ParseReplyError, PaymentError};
 use thiserror::Error;
 
@@ -33,4 +33,7 @@ pub enum ContractError {
 
     #[error("Invalid reply id: {0}")]
     InvalidReplyId(u64),
+
+    #[error("The tx {0} exists but comes from the wrong address: {1}")]
+    WrongContractTx(u64, Addr),
 }
