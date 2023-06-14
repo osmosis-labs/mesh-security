@@ -548,6 +548,7 @@ impl VaultContract<'_> {
                 amount: Uint128::zero(),
                 slashable: tx.slashable,
             });
+        // Process tx
         lien.amount += tx.amount;
 
         let mut user = self
@@ -556,9 +557,6 @@ impl VaultContract<'_> {
             .unwrap_or_default();
         user.max_lien = user.max_lien.max(lien.amount);
         user.total_slashable += tx.amount * lien.slashable;
-
-        // FIXME: Remove, as it's a redundant check
-        ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
         self.liens
             .save(ctx.deps.storage, (&ctx.info.sender, &tx.lienholder), &lien)?;
