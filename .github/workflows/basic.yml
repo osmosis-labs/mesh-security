@@ -16,7 +16,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.65.0
+          toolchain: 1.70.0
           target: wasm32-unknown-unknown
           override: true
 
@@ -28,7 +28,7 @@ jobs:
       - name: Run build
         uses: actions-rs/cargo@v1
         with:
-          toolchain: 1.65.0
+          toolchain: 1.70.0
           command: build
           args: --workspace
         env:
@@ -37,7 +37,7 @@ jobs:
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
-          toolchain: 1.65.0
+          toolchain: 1.70.0
           command: test
           args: --workspace
         env:
@@ -46,7 +46,7 @@ jobs:
       - name: Compile WASM contract
         uses: actions-rs/cargo@v1
         with:
-          toolchain: 1.65.0
+          toolchain: 1.70.0
           command: wasm
         env:
           RUSTFLAGS: "-C link-arg=-s"
@@ -62,7 +62,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.65.0
+          toolchain: 1.70.0
           override: true
           components: rustfmt, clippy
 
@@ -74,13 +74,13 @@ jobs:
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1
         with:
-          toolchain: 1.65.0
+          toolchain: 1.70.0
           command: fmt
           args: --all -- --check
 
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
-          toolchain: 1.65.0
+          toolchain: 1.70.0
           command: clippy
           args: --all-targets -- -D warnings
