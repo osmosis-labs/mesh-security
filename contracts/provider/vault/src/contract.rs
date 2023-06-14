@@ -506,6 +506,7 @@ impl VaultContract<'_> {
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
+        // TODO: Prove / check correctness
         user.max_lien = user.max_lien.max(pending_amount);
         user.total_slashable += pending_amount * lien.slashable;
 
