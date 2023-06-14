@@ -493,7 +493,7 @@ impl VaultContract<'_> {
                     })
                 })?;
 
-        // Load lien and update (but do not save) user info and lien holder
+        // Load lien (to get slashable), and update (but do not save) user info for collateral check
         let lien = self
             .liens
             .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
@@ -506,7 +506,7 @@ impl VaultContract<'_> {
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
-        user.max_lien = user.max_lien.max(lien.amount);
+        user.max_lien = user.max_lien.max(pending_amount);
         user.total_slashable += pending_amount * lien.slashable;
 
         ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
