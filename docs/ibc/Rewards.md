@@ -62,3 +62,22 @@ call fails for whatever reason, the reward tokens will be effectively lost.
 
 This is a good solution for the MVP, but we should consider moving to a more robust
 solution when one exists. Hopefully this will spur deployment of such methods.
+
+### ICS20 with Custom IBC Middleware
+
+With the consumer chain including the mesh-security-sdk, we have the opportunity to add a custom IBC-middleware
+to the IBC-stack for ICS-20. This middleware can be used to do callbacks to contracts on packet ack/timeout. 
+The process would be:
+* Contract sends ICS-20 message and register for a callback on the IBC packet ID (via custom message)
+* All metadata is stored on chain only and not relayed
+* When the packet is acked/timeout, the contract receives the callback from the middleware (after the ICS-20 module) with the ack/timeout data
+* When there is confidence that the ICS-20 operation succeeded, the contract can trigger the reward distribution work with the callback
+
+Note: the callback execution must not fail to not interfere with the ack/timeout process
+
+The benefit of this solution is that it is not depending on other technology. IBC-middleware and callback registration would 
+be provided and maintained by the mesh-security-sdk project. 
+We also have a [vertical spike](https://github.com/CosmWasm/wasmd/pull/1368) for this use case.
+
+
+
