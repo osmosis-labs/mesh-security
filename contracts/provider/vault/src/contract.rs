@@ -582,8 +582,6 @@ impl VaultContract<'_> {
         lien_lock.unlock_write()?;
         let lien = lien_lock.write()?;
         lien.amount -= tx.amount;
-        // Unlock lien
-        lien_lock.unlock_write()?;
         // Save it unlocked
         self.liens.save(
             ctx.deps.storage,
