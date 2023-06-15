@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, Uint128};
+use cosmwasm_std::{Addr, Decimal, Order, StdResult, Storage, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, MultiIndex};
 
 #[cw_serde]
@@ -12,6 +12,8 @@ pub enum TxType {
 
 #[cw_serde]
 pub struct Tx {
+    /// Transaction id
+    pub id: u64,
     /// Transaction type
     pub ty: TxType,
     /// Associated amount
@@ -48,5 +50,18 @@ impl<'a> Txs<'a> {
         let txs = IndexedMap::new(storage_key, indexes);
 
         Self { txs }
+    }
+
+    pub fn txs_by_user(&self, storage: &dyn Storage, user: &Addr) -> StdResult<Vec<Tx>> {
+        self.txs
+            .idx
+            .users
+            .prefix(user.clone())
+            .range(storage, None, None, Order::Ascending)
+            .map(|item| {
+                let (_, tx) = item?;
+                Ok(tx)
+            })
+            .collect::<StdResult<Vec<Tx>>>()
     }
 }

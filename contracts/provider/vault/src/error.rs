@@ -34,6 +34,9 @@ pub enum ContractError {
     #[error("Invalid reply id: {0}")]
     InvalidReplyId(u64),
 
+    #[error("Transaction {0} is still pending")]
+    PendingTx(u64),
+
     #[error("The tx {0} exists but comes from the wrong address: {1}")]
     WrongContractTx(u64, Addr),
 }

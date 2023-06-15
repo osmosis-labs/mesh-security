@@ -471,43 +471,30 @@ impl VaultContract<'_> {
             ContractError::UnexpectedDenom(config.denom.clone())
         );
 
-        let amount = amount.amount;
-        // Tx starts here
-        // Verify that the user has enough collateral to stake this and the currently pending txs
-        let pending_amount = amount
-            + self
-                .pending
-                .txs
-                .idx
-                .users
-                .prefix(ctx.info.sender.clone())
-                .range(ctx.deps.storage, None, None, Order::Ascending)
-                .fold(Ok(Uint128::zero()), |acc, pending| {
-                    let acc = acc?;
-                    pending.map(|(_, tx)| {
-                        acc + match tx.ty {
-                            // Value range max
-                            TxType::Stake => tx.amount,
-                            _ => Uint128::zero(),
-                        }
-                    })
-                })?;
+        // Check that there are no pending txs for this user
+        let txs = self
+            .pending
+            .txs_by_user(ctx.deps.storage, &ctx.info.sender)?;
+        ensure!(txs.is_empty(), ContractError::PendingTx(txs[0].id));
 
-        // Load lien and update (but do not save) user info and lien holder
-        let lien = self
+        // Tx starts here
+        let amount = amount.amount;
+        // Load user and update (but do not save) max lien and total slashable
+        let mut lien = self
             .liens
             .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
             .unwrap_or(Lien {
                 amount: Uint128::zero(),
                 slashable,
             });
-        // Load user and update (but do not save) max lien and total slashable
+        lien.amount += amount;
+
         let mut user = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
         user.max_lien = user.max_lien.max(lien.amount);
-        user.total_slashable += pending_amount * lien.slashable;
+        user.total_slashable += amount * lien.slashable;
 
         ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
@@ -515,6 +502,7 @@ impl VaultContract<'_> {
         let tx_id = self.next_tx_id(ctx.deps.storage)?;
 
         let new_tx = Tx {
+            id: tx_id,
             ty: TxType::Stake,
             amount,
             slashable,
@@ -556,9 +544,6 @@ impl VaultContract<'_> {
             .unwrap_or_default();
         user.max_lien = user.max_lien.max(lien.amount);
         user.total_slashable += tx.amount * lien.slashable;
-
-        // FIXME: Remove, as it's a redundant check
-        ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
         self.liens
             .save(ctx.deps.storage, (&ctx.info.sender, &tx.lienholder), &lien)?;
