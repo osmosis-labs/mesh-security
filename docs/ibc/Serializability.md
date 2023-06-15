@@ -147,32 +147,41 @@ You can read more on some [standard defined CRDT types](https://en.wikipedia.org
 
 ## Locking
 
-CRDTs are extremelely flexible and resillient, but it is very difficult to map most business logic to such types.
-On the opposite extreme, we can use locking to ensure that only one transaction is processed at a time. This is very limiting,
+CRDTs are extremely flexible and resilient, but it is very difficult to map most business logic to such types.
+On the opposite extreme, we can use locking to ensure that only one transaction is processed at a time. This is limiting,
 but it is provably correct over any business logic.
 
-Note that it **requires ordered channels**, as commit ordering is essential here. If we start transaction A, B, C on the sending chain
-in that order, then A', B', C' must be processed on the receiving chain in that order, and the commit/rollback order (based on getting
-acks on the sending chain must be also be A, B, C). This is exactly the guarantee that ordered channels provide.
+Note that commit ordering is essential here. If we start transaction A, B, C on the sending chain
+concurrently, we still want to treat them as if they were committed in order. That all of A's processing is done
+before B starts. If they are completely independent and don't touch the same data, then they can safely run concurrently.
+If they depend on (or would interfere with) each other, then we must fail the later transactions before sending an IBC packet.
+It can be retried after A is committed and we can safely determine the result.
 
-On top of this, we have to ensure that no other transactions conflict with any open IBC transactions. Transaction A is "open" from the
-time the first logic is run on the sending chain (which will send the IBC message) until the ack is fully process and committed on
-the sending chain. This will span several blocks, possibly hours in the case of timeouts.
+Note this extends both to the order of processing of A', B', C' on the receiving chain, as well as the order of ACKs
+arriving on the sending chain.  On top of this, we have to ensure that no other transactions conflict with any open 
+IBC transactions. Transaction A is "open" from the time the first logic is run on the sending chain (which will send
+the IBC message) until the ACK is fully processed and committed on the sending chain. This will span several blocks,
+possibly hours in the case of timeouts.
 
 We can model this with [Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking#Two-phase_locking_and_its_special_cases)
 , which defines a "growing phase" of acquiring locks, followed by a "shrinking phase" of releasing locks. This is done to be
 resistent to deadlock. We would do the following:
 
 1. Start Tx on Sending Chain: Acquire all read/write locks on all data that will be touched. This is the "growing" phase of the lock.
-2. Process Packet on Receiving Chain: Aquire all read/write locks on all data, process data, release all locks. This goes from the "growing" phase to the "shrinking" phase.
+2. Process Packet on Receiving Chain: Acquire all read/write locks on all data, process data, release all locks. This goes from the "growing" phase to the "shrinking" phase.
 3. Process Ack on the Sending Chain: Process ack, and release all locks. This is the "shrinking" phase.
 
-If we guarantee that we never read any data that is not under a write lock, we can release the read locks at end of "start tx", as they are not needed.
-Furthermore, the "process packet" phase just defines the normal semantics of blockchain processing. With that, we can simplify to:
+Note that blockchains actually process all transactions sequentially (this is one of their main purposes), so we can simplify this
+by considering any non-IBC transaction to get and release locks on all data it touches during its execution.
+Furthermore, if we read all data in phase 1, and don't read it later, there is no possibility that a later transaction can
+cause a conflict, so we can release all read locks at the end of the "growing" phase. However, 
+*data read during Phase 3 will need a read lock from Phase 1*
 
-1. Start Tx on Sending Chain: Acquire all write locks on all data that will be committed or rolled-back.
+With that, we can simplify to:
+
+1. Start Tx on Sending Chain: Acquire all locks on all data that may be touched in Phase 3, but don't write anything.
 2. Process Packet on Receiving Chain: Process data, and return success or error ack.
-3. Process Ack on the Sending Chain: Commit or rollback based on ack. Only can read/write data held under write lock from step 1
+3. Process Ack on the Sending Chain: Commit or rollback based on ack. Only can read/write data held under lock from step 1
 
 If we modelled ICS20 like this, it would require us to hold a lock on the account balance of the sender (at least the keys holding the
 denom being sent) from the original send until the ack. This would not interfere with any other processes,
@@ -191,7 +200,7 @@ The basic concept is that to avoid conflicts, we do not need to make all possibl
 **all concurrent operations** are commutative. This is a much weaker requirement, and can be achieved in many cases not by modifying the
 data structures, but by aborting any transaction in the first phase (before IBC packet send), if it is not fully commutative with
 all operations that are currently in-flight. That means, other operations that have previously sent an IBC packet and not yet received an ACK.
-Furthermore, if the state transitions involded are local to one or two contracts, we only have to provide checks on those contracts,
+Furthermore, if the state transitions involved are local to one or two contracts, we only have to provide checks on those contracts,
 which makes this a manageable task.
 
 Note that is this not a general approach in most distributed systems, where we have a multi-writer scenario, and no ability to enforce
@@ -199,7 +208,7 @@ some global invariants before initiating a transaction. However, since all chang
 blockchain, and we have a complete view of currently in-flight transactions, this approach could work for IBC protocols.
 
 We can say that ICS20 implementation does something like this. As the only invariant is that the value never goes below zero,
-it pre-emptively moves the tokens out of the users account to an escrow. This doesn't require any further lock on the user's account,
+it preemptively moves the tokens out of the users account to an escrow. This doesn't require any further lock on the user's account,
 but ensures no other transaction will be possible to execute that would render the user's balance below 0 if this was committed.
 Thus, any other transaction that would be commutative with this (commit or rollback) can be executed concurrently, but any other
 transaction that would conflict with this (eg. spend the same tokens, and only be valid if the ICS20 transfer gets an error ack),
@@ -219,13 +228,22 @@ attempt to decrease the min by 200 but leave the max unchanged (requiring this r
 we would either `Commit(200)` or `Rollback(200)`, which would once again bring min and max to the same value (which one depends on Commit or Rollback).
 
 This approach would only work by values not used by complex formulas, such as balances of an AMM (we can't calculate prices of ranges),
-or paying out staking rewards (the value received by all other users depends on your stake, and we can't propogate this to all those accounts,
+or paying out staking rewards (the value received by all other users depends on your stake, and we can't propagate this to all those accounts,
 as it would be prohibitively expensive to collapse them all when the transaction is committed or rolled-back).
 
 But for counters with comparisons, increments, and decrements, it could work well. Even enforcing logic like
 "total amount of collateral is greater than the max lien amount" could be enforced if collateral and lien amounts
 were value ranges. In this case, the max of (`lien.max`) would be compared against `collateral.min`.
 With some clever reasoning, we could possibly enforce such value ranges without actually storing multiple fields.
+
+After discussions with other developers, we feel that Value Ranges could be a very valuable approach, offering the same
+guarantees of commutativity as locking, but with much less impact on the user's experience. It doesn't require developers
+to reason about every workflow, but rather, like the locking approach, enforces constraints in the data structures themselves.
+This is much less error prone, and the same data structures that would be affected by locking are the same ones that would
+be affected by value ranges.
+
+We will focus on Locking for MVP and look forward to develop this further for the V1 release, with plenty of time to discuss the
+various UX implications, as well as the best way to implement this.
 
 ## Next Steps
 
