@@ -129,6 +129,8 @@ impl MockVaultContract<'_> {
         contract: String,
         // amount to stake on that contract
         amount: Coin,
+        // associated transaction id
+        tx_id: u64,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, VaultError> {
@@ -139,6 +141,7 @@ impl MockVaultContract<'_> {
         let wasm_msg = cross_staking.receive_virtual_stake(
             ctx.info.sender.into_string(),
             amount,
+            tx_id,
             msg,
             vec![],
         )?;

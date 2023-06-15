@@ -391,6 +391,7 @@ pub mod cross_staking {
             ctx: ExecCtx,
             owner: String,
             amount: Coin,
+            _tx_id: u64,
             msg: Binary,
         ) -> Result<Response, Self::Error> {
             let config = self.config.load(ctx.deps.storage)?;

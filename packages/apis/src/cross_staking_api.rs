@@ -24,6 +24,7 @@ pub trait CrossStakingApi {
         ctx: ExecCtx,
         owner: String,
         amount: Coin,
+        tx_id: u64,
         msg: Binary,
     ) -> Result<Response, Self::Error>;
 
@@ -44,10 +45,16 @@ impl CrossStakingApiHelper {
         &self,
         owner: String,
         amount: Coin,
+        tx_id: u64,
         msg: Binary,
         funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {
-        let msg = CrossStakingApiExecMsg::ReceiveVirtualStake { owner, msg, amount };
+        let msg = CrossStakingApiExecMsg::ReceiveVirtualStake {
+            owner,
+            msg,
+            amount,
+            tx_id,
+        };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,

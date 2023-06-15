@@ -101,6 +101,7 @@ impl CrossStakingApi for MockCrossStakingContract<'_> {
         ctx: ExecCtx,
         owner: String,
         amount: Coin,
+        tx_id: u64,
         msg: Binary,
     ) -> Result<Response, Self::Error> {
         nonpayable(&ctx.info)?;
@@ -120,7 +121,7 @@ impl CrossStakingApi for MockCrossStakingContract<'_> {
         );
 
         // ignore args
-        let _ = (owner, msg, amount);
+        let _ = (owner, msg, amount, tx_id);
         Ok(Response::new())
     }
 

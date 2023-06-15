@@ -192,7 +192,7 @@ impl VaultContract<'_> {
         let stake_msg = contract.receive_virtual_stake(
             ctx.info.sender.to_string(),
             amount.clone(),
-            // tx_id, TODO: Pass it along
+            tx_id,
             msg,
             vec![],
         )?;

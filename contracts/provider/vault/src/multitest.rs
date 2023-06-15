@@ -511,7 +511,7 @@ fn stake_cross() {
         coin(0, OSMO)
     );
 
-    // Staking localy
+    // Staking remotely
 
     vault
         .stake_remote(

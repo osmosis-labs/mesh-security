@@ -120,6 +120,7 @@ fn staking() {
             contract.contract_addr.to_string(),
             coin(100, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 1,
                 validator: validators[0].to_string(),
             })
             .unwrap(),
@@ -132,6 +133,7 @@ fn staking() {
             contract.contract_addr.to_string(),
             coin(100, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 2,
                 validator: validators[1].to_string(),
             })
             .unwrap(),
@@ -144,6 +146,7 @@ fn staking() {
             contract.contract_addr.to_string(),
             coin(100, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 3,
                 validator: validators[0].to_string(),
             })
             .unwrap(),
@@ -156,6 +159,7 @@ fn staking() {
             contract.contract_addr.to_string(),
             coin(200, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 4,
                 validator: validators[1].to_string(),
             })
             .unwrap(),
@@ -168,6 +172,7 @@ fn staking() {
             contract.contract_addr.to_string(),
             coin(100, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 5,
                 validator: validators[0].to_string(),
             })
             .unwrap(),
@@ -294,6 +299,7 @@ fn unstaking() {
             contract.contract_addr.to_string(),
             coin(200, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 1,
                 validator: validators[0].to_string(),
             })
             .unwrap(),
@@ -306,6 +312,7 @@ fn unstaking() {
             contract.contract_addr.to_string(),
             coin(100, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 2,
                 validator: validators[1].to_string(),
             })
             .unwrap(),
@@ -318,6 +325,7 @@ fn unstaking() {
             contract.contract_addr.to_string(),
             coin(300, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 3,
                 validator: validators[0].to_string(),
             })
             .unwrap(),
@@ -577,6 +585,7 @@ fn distribution() {
             contract.contract_addr.to_string(),
             coin(200, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 1,
                 validator: validators[0].to_string(),
             })
             .unwrap(),
@@ -589,6 +598,7 @@ fn distribution() {
             contract.contract_addr.to_string(),
             coin(100, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 2,
                 validator: validators[1].to_string(),
             })
             .unwrap(),
@@ -601,6 +611,7 @@ fn distribution() {
             contract.contract_addr.to_string(),
             coin(300, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 3,
                 validator: validators[0].to_string(),
             })
             .unwrap(),
@@ -818,6 +829,7 @@ fn distribution() {
             contract.contract_addr.to_string(),
             coin(300, OSMO),
             to_binary(&ReceiveVirtualStake {
+                tx: 2,
                 validator: validators[1].to_string(),
             })
             .unwrap(),
