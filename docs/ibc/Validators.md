@@ -13,7 +13,7 @@ to ensure dropped packets are eventually received.
 All validator change messages are initiated from the consumer side. The provider is
 responsible for guaranteeing any packet with a success ACK is written to state.
 Given all successful acks have been committed, the consumer maintains enough
-information to sync otustanding changes and guarantee the Provider will eventually
+information to sync outstanding changes and guarantee the Provider will eventually
 have a proper view of the dynamic validator set.
 
 We make use of two messages. `AddValidators` and `RemoveValidators`. These are batch messages

@@ -80,13 +80,13 @@ An unstaking operation would have the following steps and checks:
 
 Possible keys with conflicts are:
 
-- In `vault` - `collateral(user)` and `lein(user, external-staking)`
+- In `vault` - `collateral(user)` and `lien(user, external-staking)`
 - In `external-staking` - `stake(user, validator)`, `total-stake(validator)`, `reward-shares(user)`, `pending-unbonding(user, validator)`
 
 ### Identifying Potential Commutatibility
 
 The general design should be to write all changes only on a successful ACK, but hold any locks needed to ensure those
-write will not fail in any condition. Using the apporach of [Value Ranges](./Serializability.md#value-ranges), let us analyze
+writes will not fail in any condition. Using the approach of [Value Ranges](./Serializability.md#value-ranges), let us analyze
 what needs to be minimally enforced here.
 
 For staking, we update:
@@ -97,7 +97,7 @@ For staking, we update:
 - `external-staking::reward-shares(validator, user)` => `Maybe(+X)`
 
 The lower three have no upper limit and thus can never fail, so those operations are always commutative with others valid operations.
-`vault::lein` has an upper value, and thus applying `Commit(+X)` could have a conflict with another transaction, so we must "lock" that
+`vault::lien` has an upper value, and thus applying `Commit(+X)` could have a conflict with another transaction, so we must "lock" that
 value.
 
 For unstaking, we update:
@@ -159,8 +159,8 @@ The principle questions we need to answer to prove this is safe is:
 - Can we guarantee that the rollback will never fail?
 - Is there any transaction that would be valid after the preparing phase, but not after the rollback?
 
-For the first one, since the increment is held by our the `external-staking` contract, by correct rules of not releasing until the IBC Ack,
-we can guarantee that lien is still held and able to be decremented.
+For the first one, since the increment is held by our `external-staking` contract, by correct rules of not releasing until the IBC Ack,
+we can guarantee that the lien is still held and able to be decremented.
 
 For the second one, the case is some transition that would be effectively using a "Phantom Read" to be valid. I will review the possible
 transactions on the vault:
@@ -217,10 +217,10 @@ match op {
 
 ### Provider-Side Staking
 
-This is more complex logic over multiple contracts, so I will only give a high-level overview here rather the Rust psuedo-code:
+This is more complex logic over multiple contracts, so I will only give a high-level overview here rather than the Rust psuedo-code:
 
 **TODO**
-See [open question above](#idea-approximating-locks) for discussion of how to possibly avoid locking on staking.
+See [open question above](#idea-approximating-locks) for a discussion on how to possibly avoid locking on staking.
 I would like feedback there before defining the actual implementation (which has two possible routes).
 
 ### Provider-Side Unstaking
@@ -231,7 +231,7 @@ Preparation Phase:
 let mut stake = STAKE.load(store, validator, user)?;
 /// write_lock method marks a key as locked, and returns an error if it is already locked
 let view = stake.write_lock()?;
-/// Enforce the invairant, so we know we can commit later
+/// Enforce the invariant, so we know we can commit later
 if view.staked < amount.amount {
     return Err(IbcError::InsufficientFunds);
 }
