@@ -1,5 +1,6 @@
 use cosmwasm_std::{Addr, StdError, Uint128};
 use cw_utils::{ParseReplyError, PaymentError};
+use mesh_sync::LockError;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -12,6 +13,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     ParseReply(#[from] ParseReplyError),
+
+    #[error("{0}")]
+    Lock(#[from] LockError),
 
     #[error("Unauthorized")]
     Unauthorized {},
@@ -33,9 +37,6 @@ pub enum ContractError {
 
     #[error("Invalid reply id: {0}")]
     InvalidReplyId(u64),
-
-    #[error("Transaction {0} is still pending")]
-    PendingTx(u64),
 
     #[error("The tx {0} exists but comes from the wrong address: {1}")]
     WrongContractTx(u64, Addr),

@@ -20,6 +20,7 @@ mt = ["library", "sylvia/mt"]
 
 [dependencies]
 mesh-apis        = { workspace = true }
+mesh-sync        = { workspace = true }
 
 sylvia = { workspace = true }
 cosmwasm-schema  = { workspace = true }
