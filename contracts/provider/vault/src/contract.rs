@@ -370,7 +370,7 @@ impl VaultContract<'_> {
                             // FIXME: This skips write-locked accounts
                             match account_lock.read() {
                                 Ok(account) => account.collateral.is_zero(),
-                                Err(_) => false,
+                                Err(_) => true,
                             }
                         })
                         .unwrap_or(false))
