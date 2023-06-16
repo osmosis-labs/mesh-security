@@ -391,6 +391,7 @@ impl VaultContract<'_> {
     }
 
     /// Queries for all pending txs.
+    /// Reports txs in descending order (newest first).
     /// `start_after` is the last tx id included in previous page
     #[msg(query)]
     fn all_pending_txs(
@@ -405,7 +406,7 @@ impl VaultContract<'_> {
         let txs = self
             .pending
             .txs
-            .range(ctx.deps.storage, bound, None, Order::Ascending)
+            .range(ctx.deps.storage, bound, None, Order::Descending)
             .map(|item| {
                 let (_id, tx) = item?;
                 Ok::<AllTxsResponseItem, ContractError>(tx)
