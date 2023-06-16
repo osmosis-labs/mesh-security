@@ -77,9 +77,29 @@ impl<T> ValueRange<T>
 where
     T: Add<Output = T> + Sub<Output = T> + Ord + Copy,
 {
-    /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) an addition
+    /// This is a check for calling code if it wishes to change the (externally defined) maximum for the range.
+    /// Usage is eg modifying collateral while the range is total liens on the collateral
+    pub fn valid_max(&self, new_max: T) -> bool {
+        self.1 <= new_max
+    }
+
+    /// This is a check for calling code if it wishes to change the (externally defined) minimum for the range.
+    pub fn valid_min(&self, new_min: T) -> bool {
+        self.0 >= new_min
+    }
+
+    /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) an addition.
+    /// It doesn't enforce any maximum value. Use `prepare_add_max` for that.
     pub fn prepare_add(&mut self, value: T) -> Result<(), RangeError> {
-        // FIXME: assert some max?
+        self.1 = self.1 + value;
+        Ok(())
+    }
+
+    /// This should be used instead of prepare_add if we wish to enforce a maximum value
+    pub fn prepare_add_max(&mut self, value: T, max: T) -> Result<(), RangeError> {
+        if self.1 + value > max {
+            return Err(RangeError::Overflow);
+        }
         self.1 = self.1 + value;
         Ok(())
     }
@@ -98,10 +118,29 @@ where
         self.assert_valid_range();
     }
 
-    /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) a subtraction
+    /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) a subtraction.
+    /// It assumes we are enforcing a minimum value of 0. If you want a different minimum, use `prepare_sub_min`
     pub fn prepare_sub(&mut self, value: T) -> Result<(), RangeError> {
         if self.0 < value {
             return Err(RangeError::Underflow);
+        }
+        self.0 = self.0 - value;
+        Ok(())
+    }
+
+    /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) a subtraction.
+    /// You can specify a minimum value that the range must never go below. If you pass `None`, it will not even enforce
+    /// a minimum of 0.
+    pub fn prepare_sub_min(
+        &mut self,
+        value: T,
+        min: impl Into<Option<T>>,
+    ) -> Result<(), RangeError> {
+        if let Some(min) = min.into() {
+            // use plus not minus here, as we are much more likely to have underflow on u64 or Uint128 than overflow
+            if self.0 < min + value {
+                return Err(RangeError::Underflow);
+            }
         }
         self.0 = self.0 - value;
         Ok(())
@@ -124,26 +163,6 @@ where
     #[inline]
     fn assert_valid_range(&self) {
         assert!(self.0 <= self.1);
-    }
-}
-
-impl<T: PartialOrd> PartialEq<T> for ValueRange<T> {
-    fn eq(&self, other: &T) -> bool {
-        self.0 == self.1 && self.0 == *other
-    }
-}
-
-impl<T: PartialOrd> PartialOrd<T> for ValueRange<T> {
-    fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
-        if other < &self.0 {
-            Some(std::cmp::Ordering::Greater)
-        } else if other > &self.1 {
-            Some(std::cmp::Ordering::Less)
-        } else if self.eq(other) {
-            Some(std::cmp::Ordering::Equal)
-        } else {
-            None
-        }
     }
 }
 
@@ -171,19 +190,26 @@ mod tests {
     fn comparisons() {
         // check for one point - it behaves like an integer
         let mut range = ValueRange::new(50);
-        assert!(range == 50);
-        assert!(range > 49);
-        assert!(range < 51);
+        // valid_min + valid_max is like equals
+        assert!(range.valid_max(50));
+        assert!(range.valid_min(50));
+        // valid_max + !valid_min is >=
+        assert!(range.valid_max(51));
+        assert!(!range.valid_min(51));
+        // valid_min + !valid_max is <=
+        assert!(!range.valid_max(49));
+        assert!(range.valid_min(49));
 
-        // make a range (50, 80), it should compare normally to those outside the range
+        // make a range (50, 80), it should compare properly to those outside the range
         range.prepare_add(30).unwrap();
-        assert!(range > 49);
-        assert!(range < 81);
+        assert!(!range.valid_max(49));
+        assert!(range.valid_min(49));
+        assert!(range.valid_max(81));
+        assert!(!range.valid_min(81));
 
         // all comparisons inside the range lead to false
-        assert!(!(range < 60));
-        assert!(!(range > 60));
-        assert!(range != 60);
+        assert!(!range.valid_max(60));
+        assert!(!range.valid_min(60));
     }
 
     #[test]
@@ -233,20 +259,57 @@ mod tests {
     // most tests will use i32 for simplicity - just ensure APIs work properly with Uint128
     #[test]
     fn works_with_uint128() {
-        // check for one point - it behaves like an integer
-        let mut range = ValueRange::new(Uint128::new(500));
-        assert!(range == Uint128::new(500));
-        assert!(range > Uint128::new(499));
-        assert!(range < Uint128::new(501));
+        // (80, 120)
+        let mut range = ValueRange::new(Uint128::new(80));
+        range.prepare_add(Uint128::new(40)).unwrap();
 
-        // make a range (50, 80), it should compare normally to those outside the range
-        range.prepare_add(Uint128::new(250)).unwrap();
-        assert!(range > Uint128::new(499));
-        assert!(range < Uint128::new(751));
+        // (100, 200)
+        let mut other = ValueRange::new(Uint128::new(200));
+        other.prepare_sub(Uint128::new(100)).unwrap();
 
-        // all comparisons inside the range lead to false
-        assert!(!(range < Uint128::new(600)));
-        assert!(!(range > Uint128::new(600)));
-        assert!(range != Uint128::new(600));
+        let total = range + other;
+        assert_eq!(total, ValueRange(Uint128::new(180), Uint128::new(320)));
+    }
+
+    // This test attempts to use the API in a realistic scenario.
+    // A user has X collateral and makes some liens on this collateral, which execute asynchronously.
+    // That is, we want to process other transactions while the liens are being executed, while ensuring there
+    // will not be a conflict on rollback or commit.
+    //
+    // using u64 not Uint128 here as less verbose
+    #[test]
+    fn real_world_usage() {
+        let mut collateral = 10_000u64;
+        let mut lien = ValueRange::new(0u64);
+
+        // prepare some lien
+        lien.prepare_add_max(2_000, collateral).unwrap();
+        lien.prepare_add_max(5_000, collateral).unwrap();
+
+        // cannot add too much
+        let err = lien.prepare_add_max(3_500, collateral).unwrap_err();
+        assert_eq!(err, RangeError::Overflow);
+
+        // let's commit the second pending lien (only 2000 left)
+        // QUESTION: should we enforce the min/max on commit/rollback explicitly and pass them in?
+        lien.commit_add(5_000);
+        assert_eq!(lien, ValueRange(5_000, 7_000));
+
+        // See we cannot reduce this by 4_000
+        assert!(!lien.valid_max(collateral - 4_000));
+        // See we can reduce this by 2_000
+        assert!(lien.valid_max(collateral - 2_000));
+        collateral -= 2_000;
+
+        // start unbonding 3_000
+        lien.prepare_sub(3_000).unwrap();
+        // still; cannot increase max (7_000) over the new cap of 8_000
+        let err = lien.prepare_add_max(1_500, collateral).unwrap_err();
+        assert_eq!(err, RangeError::Overflow);
+
+        // if we rollback the other pending lien, this works
+        lien.rollback_add(2_000);
+        assert_eq!(lien, ValueRange(2_000, 5_000));
+        lien.prepare_add_max(1_500, collateral).unwrap();
     }
 }
