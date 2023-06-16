@@ -1,6 +1,6 @@
 use std::{
     iter::Sum,
-    ops::{Add, Sub},
+    ops::{Add, Mul, Sub},
 };
 use thiserror::Error;
 
@@ -36,40 +36,79 @@ where
     }
 }
 
-pub fn max_val<'a, I, T>(iter: I) -> T
+/// Problem: We have a list of ValueRanges, and we want to know the maximum value.
+/// This is not one clear value, as we consider the maximum if all commit and maximum if all rollback.
+/// The result is the range of possible maximum values (different than spread)  
+pub fn max_range<'a, I, T>(iter: I) -> ValueRange<T>
 where
     I: Iterator<Item = &'a ValueRange<T>> + 'a,
     T: Ord + Copy + Default + 'a,
 {
-    iter.map(|r| r.max()).max().unwrap_or_default()
+    iter.copied()
+        .reduce(|acc, x| {
+            ValueRange(
+                std::cmp::max(acc.min(), x.min()),
+                std::cmp::max(acc.max(), x.max()),
+            )
+        })
+        .unwrap_or_default()
 }
 
-pub fn min_val<'a, I, T>(iter: I) -> T
+/// Problem: We have a list of ValueRanges, and we want to know the minimum value.
+/// This is not one clear value, as we consider the minimum if all commit and minimum if all rollback.
+/// The result is the range of possible minimum values (different than spread)  
+pub fn min_range<'a, I, T>(iter: I) -> ValueRange<T>
 where
     I: Iterator<Item = &'a ValueRange<T>> + 'a,
     T: Ord + Copy + Default + 'a,
 {
-    iter.map(|r| r.min()).min().unwrap_or_default()
+    iter.copied()
+        .reduce(|acc, x| {
+            ValueRange(
+                std::cmp::min(acc.min(), x.min()),
+                std::cmp::min(acc.max(), x.max()),
+            )
+        })
+        .unwrap_or_default()
 }
 
 /// Captures the spread from the lowest low to the highest high
-pub fn spread<I, T>(iter: I) -> ValueRange<T>
+pub fn spread<'a, I, T>(iter: I) -> ValueRange<T>
 where
-    I: Iterator<Item = ValueRange<T>>,
-    T: Ord + Copy + Default,
+    I: Iterator<Item = &'a ValueRange<T>> + 'a,
+    T: Ord + Copy + Default + 'a,
 {
-    iter.reduce(|acc, x| {
-        ValueRange(
-            std::cmp::min(acc.min(), x.min()),
-            std::cmp::max(acc.max(), x.max()),
-        )
-    })
-    .unwrap_or_default()
+    iter.copied()
+        .reduce(|acc, x| {
+            ValueRange(
+                std::cmp::min(acc.min(), x.min()),
+                std::cmp::max(acc.max(), x.max()),
+            )
+        })
+        .unwrap_or_default()
 }
 
-impl<T: Ord> ValueRange<T> {
-    pub fn contains(&self, value: T) -> bool {
-        self.0 <= value && value <= self.1
+impl<T, U> Mul<U> for ValueRange<T>
+where
+    T: Mul<U, Output = T>,
+    U: Copy,
+{
+    type Output = ValueRange<T>;
+
+    fn mul(self, rhs: U) -> Self::Output {
+        ValueRange(self.0 * rhs, self.1 * rhs)
+    }
+}
+
+impl<T, U> Mul<U> for &ValueRange<T>
+where
+    T: Mul<U, Output = T> + Copy,
+    U: Copy,
+{
+    type Output = ValueRange<T>;
+
+    fn mul(self, rhs: U) -> Self::Output {
+        ValueRange(self.0 * rhs, self.1 * rhs)
     }
 }
 
@@ -182,7 +221,7 @@ impl<T: Add<Output = T> + Default> Sum for ValueRange<T> {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::Uint128;
+    use cosmwasm_std::{Decimal, Uint128};
 
     use super::*;
 
@@ -246,13 +285,17 @@ mod tests {
             ValueRange::new(200),
             ValueRange(170, 380),
         ];
-        let max = max_val(ranges.iter());
-        assert_eq!(max, 380);
 
-        let min = min_val(ranges.iter());
-        assert_eq!(min, 40);
+        // (max value if all rollback, max value if all commit)
+        let max = max_range(ranges.iter());
+        assert_eq!(max, ValueRange(200, 380));
 
-        let all = spread(ranges.into_iter());
+        // (min value if all rollback, min value if all commit)
+        let min = min_range(ranges.iter());
+        assert_eq!(min, ValueRange(40, 100));
+
+        // (min value if all rollback, max value if all commit)
+        let all = spread(ranges.iter());
         assert_eq!(all, ValueRange(40, 380));
     }
 
@@ -311,5 +354,46 @@ mod tests {
         lien.rollback_add(2_000);
         assert_eq!(lien, ValueRange(2_000, 5_000));
         lien.prepare_add_max(1_500, collateral).unwrap();
+    }
+
+    // idea here is to model the liens as in vault, and ensure we can calculate aggregates over them properly
+    // we want to track max lien (which will be a range) and maximum slashable.
+    #[test]
+    fn invariants_over_set_of_liens() {
+        // some existing outstanding liens
+        let liens = vec![
+            ValueRange(Uint128::new(5000), Uint128::new(7000)),
+            ValueRange(Uint128::new(2000), Uint128::new(8000)),
+            ValueRange(Uint128::new(3000), Uint128::new(12000)),
+        ];
+        // for simplicity, assume all slash rates are the same, easier for writing tests, but ensures operations are allowed
+        let slash_rate = Decimal::percent(10);
+
+        // the max lien is actually a range of (max if all rollback, max if all commit)
+        let max_lien = max_range(liens.iter());
+        assert_eq!(
+            max_lien,
+            ValueRange(Uint128::new(5000), Uint128::new(12000))
+        );
+        // test if this is less than some collateral
+        assert!(max_lien.valid_max(Uint128::new(15000)));
+        assert!(!max_lien.valid_max(Uint128::new(11000)));
+
+        // max slashable is a sum of all liens * slash_rate
+        let max_slashable: ValueRange<Uint128> = liens.iter().map(|l| l * slash_rate).sum();
+        assert_eq!(
+            max_slashable,
+            ValueRange(Uint128::new(1000), Uint128::new(2700))
+        );
+        // test if this is less than some collateral
+        assert!(max_slashable.valid_max(Uint128::new(5000)));
+        assert!(!max_slashable.valid_max(Uint128::new(2000)));
+
+        // we can also see the aggregate range (not needed here, but let's check anyway)
+        let lien_spread = spread(liens.iter());
+        assert_eq!(
+            lien_spread,
+            ValueRange(Uint128::new(2000), Uint128::new(12000))
+        );
     }
 }
