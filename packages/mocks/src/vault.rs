@@ -229,4 +229,20 @@ impl VaultApi for MockVaultContract<'_> {
         // we don't track liens so no-op
         Ok(Response::new())
     }
+
+    /// This must be called by the remote staking contract to commit the remote staking call on success.
+    /// Transaction ID is used to identify the original (vault contract originated) transaction.
+    #[msg(exec)]
+    fn commit_tx(&self, _ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error> {
+        let _ = tx_id;
+        Ok(Response::new())
+    }
+
+    /// This must be called by the remote staking contract to rollback the remote staking call on failure.
+    /// Transaction ID is used to identify the original (vault contract originated) transaction.
+    #[msg(exec)]
+    fn rollback_tx(&self, _ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error> {
+        let _ = tx_id;
+        Ok(Response::new())
+    }
 }
