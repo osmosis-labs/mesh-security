@@ -520,6 +520,12 @@ impl VaultContract<'_> {
             (&ctx.info.sender, &tx.lienholder),
             &lien_lock,
         )?;
+        // Load user
+        let mut user_lock = self.users.load(ctx.deps.storage, &tx.user)?;
+        // Unlock it
+        user_lock.unlock_write()?;
+        // Save it
+        self.users.save(ctx.deps.storage, &tx.user, &user_lock)?;
 
         // Remove tx
         self.pending.txs.remove(ctx.deps.storage, tx_id)?;
