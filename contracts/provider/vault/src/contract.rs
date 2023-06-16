@@ -450,10 +450,12 @@ impl VaultContract<'_> {
         let mut lien_lock = self
             .liens
             .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
-            .unwrap_or(Lockable::new(Lien {
-                amount: Uint128::zero(),
-                slashable,
-            }));
+            .unwrap_or_else(|| {
+                Lockable::new(Lien {
+                    amount: Uint128::zero(),
+                    slashable,
+                })
+            });
         let lien = lien_lock.write()?;
         lien.amount += amount;
 
