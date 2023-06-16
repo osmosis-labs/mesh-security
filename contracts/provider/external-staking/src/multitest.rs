@@ -129,6 +129,7 @@ fn staking() {
         .unwrap();
 
     let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    // Hardcoded commit_tx call (lack of IBC support yet)
     vault
         .vault_api_proxy()
         .commit_tx(last_tx)
@@ -337,6 +338,13 @@ fn unstaking() {
         )
         .call(users[0])
         .unwrap();
+    let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    // Hardcoded commit_tx call (lack of IBC support yet)
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(contract.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -349,6 +357,11 @@ fn unstaking() {
         )
         .call(users[0])
         .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -360,6 +373,11 @@ fn unstaking() {
             .unwrap(),
         )
         .call(users[1])
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
         .unwrap();
 
     // Properly unstake some tokens
