@@ -586,7 +586,7 @@ impl VaultContract<'_> {
         // Load user
         let mut user_lock = self.users.load(ctx.deps.storage, &tx.user)?;
         // Rollback user's max_lien (need to unlock it first)
-        lien_lock.unlock_write()?;
+        user_lock.unlock_write()?;
         let mut user = user_lock.write()?;
 
         // Max lien has to be recalculated from scratch; the just rolled back lien
