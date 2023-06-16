@@ -181,12 +181,13 @@ impl VaultContract<'_> {
         let contract = CrossStakingApiHelper(contract);
         let slashable = contract.max_slash(ctx.deps.as_ref())?;
 
-        let tx_id = self.stake_tx(
+        let tx_id = self.stake(
             &mut ctx,
             &config,
             &contract.0,
             slashable.max_slash,
             amount.clone(),
+            true,
         )?;
 
         let stake_msg = contract.receive_virtual_stake(
@@ -228,6 +229,7 @@ impl VaultContract<'_> {
             &local_staking.contract.0,
             local_staking.max_slash,
             amount.clone(),
+            false,
         )?;
 
         let stake_msg = local_staking.contract.receive_stake(
@@ -423,67 +425,14 @@ impl VaultContract<'_> {
         lienholder: &Addr,
         slashable: Decimal,
         amount: Coin,
-    ) -> Result<(), ContractError> {
-        ensure!(
-            amount.denom == config.denom,
-            ContractError::UnexpectedDenom(config.denom.clone())
-        );
-
-        let amount = amount.amount;
-        let mut lien = self
-            .liens
-            .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
-            .unwrap_or(Lockable::new(Lien {
-                amount: Uint128::zero(),
-                slashable,
-            }));
-        let lien = lien.write()?;
-        lien.amount += amount;
-
-        let mut user = self
-            .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
-            .unwrap_or_default();
-        user.max_lien = user.max_lien.max(lien.amount);
-        user.total_slashable += amount * lien.slashable;
-
-        ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
-
-        self.liens.save(
-            ctx.deps.storage,
-            (&ctx.info.sender, lienholder),
-            &Lockable::new(lien.clone()),
-        )?;
-
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
-
-        Ok(())
-    }
-
-    /// Updates the pending txs for remote staking on any contract
-    ///
-    /// Stake (remote) is always called by the tokens owner, so the `sender` is
-    /// used as an owner address.
-    ///
-    /// Config is taken in argument as it sometimes is used outside of this function, so
-    /// we want to avoid double-fetching it
-    fn stake_tx(
-        &self,
-        ctx: &mut ExecCtx,
-        config: &Config,
-        lienholder: &Addr,
-        slashable: Decimal,
-        amount: Coin,
+        remote: bool,
     ) -> Result<u64, ContractError> {
         ensure!(
             amount.denom == config.denom,
             ContractError::UnexpectedDenom(config.denom.clone())
         );
 
-        // Tx starts here
         let amount = amount.amount;
-        // Load user and update max lien and total slashable
-        // Write lock lien
         let mut lien_lock = self
             .liens
             .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
@@ -494,7 +443,7 @@ impl VaultContract<'_> {
         let lien = lien_lock.write()?;
         lien.amount += amount;
 
-        // TODO?: Lockable
+        // TODO: Lockable
         let mut user = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
@@ -504,26 +453,51 @@ impl VaultContract<'_> {
 
         ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
-        // Write lock it
-        lien_lock.lock_write()?;
+        // Write lock it if remote stake
+        if remote {
+            lien_lock.lock_write()?;
+        }
         self.liens
             .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien_lock)?;
 
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
-        // Create new tx
-        let tx_id = self.next_tx_id(ctx.deps.storage)?;
+        if remote {
+            // Create new tx
+            let tx_id = self.new_tx(
+                ctx.deps.storage,
+                TxType::Stake,
+                amount,
+                &ctx.info.sender,
+                lienholder,
+                slashable,
+            )?;
+            Ok(tx_id)
+        } else {
+            Ok(0)
+        }
+    }
+
+    fn new_tx(
+        &self,
+        storage: &mut dyn Storage,
+        ty: TxType,
+        amount: Uint128,
+        owner: &Addr,
+        holder: &Addr,
+        slashable: Decimal,
+    ) -> Result<u64, ContractError> {
+        let tx_id = self.next_tx_id(storage)?;
 
         let new_tx = Tx {
             id: tx_id,
-            ty: TxType::Stake,
+            ty,
             amount,
             slashable,
-            user: ctx.info.sender.clone(),
-            lienholder: lienholder.clone(),
+            user: owner.clone(),
+            lienholder: holder.clone(),
         };
-        self.pending.txs.save(ctx.deps.storage, tx_id, &new_tx)?;
-
+        self.pending.txs.save(storage, tx_id, &new_tx)?;
         Ok(tx_id)
     }
 
@@ -533,8 +507,7 @@ impl VaultContract<'_> {
     fn commit_tx(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
-        // TODO: Properly handle tx type
-        assert!(tx.ty == TxType::Stake);
+
         // Verify tx comes from the right contract
         ensure!(
             tx.lienholder == ctx.info.sender,
@@ -566,8 +539,6 @@ impl VaultContract<'_> {
     fn rollback_tx(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
-        // TODO: Properly handle tx type
-        assert!(tx.ty == TxType::Stake);
         // Verify tx comes from the right contract
         ensure!(
             tx.lienholder == ctx.info.sender,
@@ -610,7 +581,6 @@ impl VaultContract<'_> {
 
         // Remove tx
         self.pending.txs.remove(ctx.deps.storage, tx_id)?;
-
         Ok(())
     }
 
@@ -648,7 +618,6 @@ impl VaultContract<'_> {
             .range(ctx.deps.storage, None, None, Order::Ascending)
             .try_fold(Uint128::zero(), |max_lien, item| {
                 let (_, lien_lock) = item?;
-                // FIXME: Fails as write locked
                 let lien = lien_lock.read().map_err(Into::<ContractError>::into);
                 lien.map(|lien| max_lien.max(lien.amount))
             })?;
