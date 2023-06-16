@@ -484,7 +484,7 @@ impl VaultContract<'_> {
 
             let new_tx = Tx {
                 id: tx_id,
-                ty: TxType::Stake,
+                ty: TxType::InFlightStaking,
                 amount,
                 slashable,
                 user: ctx.info.sender.clone(),
@@ -497,10 +497,8 @@ impl VaultContract<'_> {
         }
     }
 
-    /// Commits a pending tx
-    // TODO: Add callback handler
-    #[allow(unused)]
-    fn commit_tx(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+    /// Commits a pending stake
+    fn commit_stake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
 
@@ -530,9 +528,7 @@ impl VaultContract<'_> {
     }
 
     /// Rollbacks a pending tx
-    // TODO: Add callback handler
-    #[allow(unused)]
-    fn rollback_tx(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+    fn rollback_stake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
         // Verify tx comes from the right contract
@@ -683,6 +679,29 @@ impl VaultApi for VaultContract<'_> {
             .add_attribute("owner", owner)
             .add_attribute("amount", amount.to_string());
 
+        Ok(resp)
+    }
+
+    #[msg(exec)]
+    fn commit_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
+        self.commit_stake(&mut ctx, tx_id)?;
+
+        let resp = Response::new()
+            .add_attribute("action", "commit_tx")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("tx_id", tx_id.to_string());
+
+        Ok(resp)
+    }
+
+    #[msg(exec)]
+    fn rollback_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
+        self.rollback_stake(&mut ctx, tx_id)?;
+
+        let resp = Response::new()
+            .add_attribute("action", "rollback_tx")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("tx_id", tx_id.to_string());
         Ok(resp)
     }
 }

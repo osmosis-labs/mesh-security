@@ -4,8 +4,7 @@ use cw_storage_plus::{Index, IndexList, IndexedMap, MultiIndex};
 
 #[cw_serde]
 pub enum TxType {
-    Stake,
-    Unstake,
+    InFlightStaking,
     // TODO
     // Slash,
 }
