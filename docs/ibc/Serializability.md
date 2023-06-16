@@ -120,6 +120,13 @@ This can be implemented in a two-chain IBC protocol with the following approach:
 This builds on the existing IBC infrastructure and is the reason why ACKs were introduced
 into the IBC protocol in the first place.
 
+**Important**: The key item we must guarantee is **processing an ACK must never fail**.
+That also means, no conflicts and no possibility of violating invariants.
+Whatever approach we take to enforce this, we must prove that for any possible set of transactions that occurs
+between the sending of the IBC packet and receiving the ACK or Timeout, that the ACK will
+always be processed successfully. Any transaction that *may* cause this condition to be violated *must* 
+be rejected (return an error).
+
 ## CRDTs
 
 CRDTs are "magical" beasts. Since they are fully commutative, there is no more concern about ordering or conflicts.
@@ -189,6 +196,10 @@ but that user could not send tokens locally, stake those tokens, receive local t
 
 In some cases where the business logic is very complex and hard to model commutatively, and the keys under lock are only used by this one
 sub-system (nothing universal like bank), this may be the best approach. However, it is very limiting and should be avoided if possible.
+
+**Note** Unlike a typical DB, we cannot wait on a lock, as a transaction must be processed sequentially (and quickly).
+Instead we return an error on any transaction that cannot acquire a lock, pushing the responsibility to the client to retry later.
+This also ensures we can never get deadlock (just very poor performance if we lock too much).
 
 ## Forcing Commutativity
 
