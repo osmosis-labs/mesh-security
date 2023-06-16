@@ -3,6 +3,7 @@ use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeI
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::contract::multitest_utils::CodeId as NativeStakingProxyCodeId;
 use mesh_vault::contract::multitest_utils::{CodeId as VaultCodeId, VaultContractProxy};
+use mesh_vault::contract::test_utils::VaultApi;
 use mesh_vault::msg::StakingInitInfo;
 
 use cw_multi_test::App as MtApp;
@@ -127,7 +128,14 @@ fn staking() {
         .call(users[0])
         .unwrap();
 
-    // Need to process / commit IBC tx here
+    // Hardcoded commit tx call
+    // TODO: get last tx helper
+    let mut last_tx = 1;
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(contract.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -141,6 +149,13 @@ fn staking() {
         .call(users[0])
         .unwrap();
 
+    last_tx += 1;
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(contract.contract_addr.as_str())
+        .unwrap();
+
     vault
         .stake_remote(
             contract.contract_addr.to_string(),
@@ -151,6 +166,13 @@ fn staking() {
             .unwrap(),
         )
         .call(users[0])
+        .unwrap();
+
+    last_tx += 1;
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(contract.contract_addr.as_str())
         .unwrap();
 
     vault
@@ -165,6 +187,13 @@ fn staking() {
         .call(users[1])
         .unwrap();
 
+    last_tx += 1;
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(contract.contract_addr.as_str())
+        .unwrap();
+
     vault
         .stake_remote(
             contract.contract_addr.to_string(),
@@ -175,6 +204,13 @@ fn staking() {
             .unwrap(),
         )
         .call(users[1])
+        .unwrap();
+
+    last_tx += 1;
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(contract.contract_addr.as_str())
         .unwrap();
 
     // All tokens should be only on the vault contract
