@@ -51,7 +51,7 @@ pub struct VaultContract<'a> {
     /// Liens are indexed with (user, creditor), as this pair has to be unique
     pub liens: Map<'a, (&'a Addr, &'a Addr), Lockable<Lien>>,
     /// Per-user information
-    pub users: Map<'a, &'a Addr, UserInfo>,
+    pub users: Map<'a, &'a Addr, Lockable<UserInfo>>,
     /// Pending txs information
     pub tx_count: Item<'a, u64>,
     pub pending: Txs<'a>,
@@ -111,12 +111,14 @@ impl VaultContract<'_> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let amount = must_pay(&ctx.info, &denom)?;
 
-        let mut user = self
+        let mut user_lock = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
+        let user = user_lock.write()?;
         user.collateral += amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users
+            .save(ctx.deps.storage, &ctx.info.sender, &user_lock)?;
 
         let resp = Response::new()
             .add_attribute("action", "bond")
@@ -134,10 +136,11 @@ impl VaultContract<'_> {
 
         ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
 
-        let mut user = self
+        let mut user_lock = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
+        let user = user_lock.read()?;
 
         let free_collateral = user.free_collateral();
         ensure!(
@@ -145,8 +148,10 @@ impl VaultContract<'_> {
             ContractError::ClaimsLocked(free_collateral)
         );
 
+        let user = user_lock.write()?;
         user.collateral -= amount.amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users
+            .save(ctx.deps.storage, &ctx.info.sender, &user_lock)?;
 
         let msg = BankMsg::Send {
             to_address: ctx.info.sender.to_string(),
@@ -252,10 +257,11 @@ impl VaultContract<'_> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let account = ctx.deps.api.addr_validate(&account)?;
 
-        let user = self
+        let user_lock = self
             .users
             .may_load(ctx.deps.storage, &account)?
             .unwrap_or_default();
+        let user = user_lock.read()?;
 
         let resp = AccountResponse {
             denom,
@@ -360,11 +366,19 @@ impl VaultContract<'_> {
                 !(with_collateral
                     && account
                         .as_ref()
-                        .map(|(_, account)| account.collateral.is_zero())
+                        .map(|(_, account_lock)| {
+                            // FIXME: This skips write-locked accounts
+                            match account_lock.read() {
+                                Ok(account) => account.collateral.is_zero(),
+                                Err(_) => false,
+                            }
+                        })
                         .unwrap_or(false))
             })
             .map(|account| {
-                account.map(|(addr, account)| AllAccountsResponseItem {
+                let (addr, account_lock) = account?;
+                let account = account_lock.read()?;
+                Ok::<AllAccountsResponseItem, ContractError>(AllAccountsResponseItem {
                     account: addr.into(),
                     denom: denom.clone(),
                     bonded: account.collateral,
@@ -443,11 +457,11 @@ impl VaultContract<'_> {
         let lien = lien_lock.write()?;
         lien.amount += amount;
 
-        // TODO: Lockable
-        let mut user = self
+        let mut user_lock = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
+        let mut user = user_lock.write()?;
         user.max_lien = user.max_lien.max(lien.amount);
         user.total_slashable += amount * lien.slashable;
 
@@ -456,49 +470,31 @@ impl VaultContract<'_> {
         // Write lock it if remote stake
         if remote {
             lien_lock.lock_write()?;
+            user_lock.lock_write()?;
         }
         self.liens
             .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien_lock)?;
 
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users
+            .save(ctx.deps.storage, &ctx.info.sender, &user_lock)?;
 
         if remote {
             // Create new tx
-            let tx_id = self.new_tx(
-                ctx.deps.storage,
-                TxType::Stake,
+            let tx_id = self.next_tx_id(ctx.deps.storage)?;
+
+            let new_tx = Tx {
+                id: tx_id,
+                ty: TxType::Stake,
                 amount,
-                &ctx.info.sender,
-                lienholder,
                 slashable,
-            )?;
+                user: ctx.info.sender.clone(),
+                lienholder: lienholder.clone(),
+            };
+            self.pending.txs.save(ctx.deps.storage, tx_id, &new_tx)?;
             Ok(tx_id)
         } else {
             Ok(0)
         }
-    }
-
-    fn new_tx(
-        &self,
-        storage: &mut dyn Storage,
-        ty: TxType,
-        amount: Uint128,
-        owner: &Addr,
-        holder: &Addr,
-        slashable: Decimal,
-    ) -> Result<u64, ContractError> {
-        let tx_id = self.next_tx_id(storage)?;
-
-        let new_tx = Tx {
-            id: tx_id,
-            ty,
-            amount,
-            slashable,
-            user: owner.clone(),
-            lienholder: holder.clone(),
-        };
-        self.pending.txs.save(storage, tx_id, &new_tx)?;
-        Ok(tx_id)
     }
 
     /// Commits a pending tx
@@ -560,8 +556,11 @@ impl VaultContract<'_> {
             &lien_lock,
         )?;
 
-        // Rollback user's max_lien
-        let mut user = self.users.load(ctx.deps.storage, &tx.user)?;
+        // Load user
+        let mut user_lock = self.users.load(ctx.deps.storage, &tx.user)?;
+        // Rollback user's max_lien (need to unlock it first)
+        lien_lock.unlock_write()?;
+        let mut user = user_lock.write()?;
 
         // Max lien has to be recalculated from scratch; the just rolled back lien
         // is already written to storage
@@ -577,7 +576,7 @@ impl VaultContract<'_> {
             })?;
 
         user.total_slashable -= tx.amount * tx.slashable;
-        self.users.save(ctx.deps.storage, &tx.user, &user)?;
+        self.users.save(ctx.deps.storage, &tx.user, &user_lock)?;
 
         // Remove tx
         self.pending.txs.remove(ctx.deps.storage, tx_id)?;
@@ -594,21 +593,22 @@ impl VaultContract<'_> {
         let amount = amount.amount;
 
         let owner = Addr::unchecked(owner);
-        // TODO: Txs
         let mut lien_lock = self
             .liens
             .may_load(ctx.deps.storage, (&owner, &ctx.info.sender))?
             .ok_or(ContractError::UnknownLienholder)?;
-        let lien = lien_lock.write()?;
+        let lien = lien_lock.read()?;
 
         ensure!(lien.amount >= amount, ContractError::InsufficientLien);
         let slashable = lien.slashable;
+        let lien = lien_lock.write()?;
         lien.amount -= amount;
 
         self.liens
             .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien_lock)?;
 
-        let mut user = self.users.load(ctx.deps.storage, &owner)?;
+        let mut user_lock = self.users.load(ctx.deps.storage, &owner)?;
+        let mut user = user_lock.write()?;
 
         // Max lien has to be recalculated from scratch; the just saved lien
         // is already written to storage
@@ -623,7 +623,7 @@ impl VaultContract<'_> {
             })?;
 
         user.total_slashable -= amount * slashable;
-        self.users.save(ctx.deps.storage, &owner, &user)?;
+        self.users.save(ctx.deps.storage, &owner, &user_lock)?;
 
         Ok(())
     }
