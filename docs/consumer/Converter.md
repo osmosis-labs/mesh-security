@@ -9,8 +9,8 @@ The converter is connected to the Provider chain via IBC and handles the various
 
 ## Setup
 
-When we [deploy the contracts](../ibc/Overview.md#deployment), we connect the Stake Converter on the consumer 
-chain with an [External Staking](../provider/ExternalStaking.md) contract on the Provider. Once this 
+When we [deploy the contracts](../ibc/Overview.md#deployment), we connect the Stake Converter on the consumer
+chain with an [External Staking](../provider/ExternalStaking.md) contract on the Provider. Once this
 connection is established, Consumer governance can authorize this Stake Converter with some ability to mint
 on the ["Virtual Staking" contract](./VirtualStaking.md).
 
@@ -27,14 +27,14 @@ packets are sent via a dedicated channel between the provider chain and the cons
 there are no other security assumptions (3rd party modules) involved in sending this critical staking
 info.
 
-By itself, a Converter cannot impact the local staking system.  It must connect to the [Virtual Staking system](./VirtualStaking.md),
+By itself, a Converter cannot impact the local staking system. It must connect to the [Virtual Staking system](./VirtualStaking.md),
 which will convert the "virtual stake" into actual stake in the dPoS system, and return the rewards as well. This
 document focuses on the flow from IBC packets to the virtual stake.
 
 ### Price normalization
 
 When we receive a "virtual stake" message for 1 provider token, we need to perform a few steps to normalize it to the
-local staking tokens. 
+local staking tokens.
 
 The first step is simply doing a price conversion. This is done via a [Price Feed](#price-feeds), which is
 defined on setup and can call into arbitrary logic depending on the chain. (For example,
@@ -43,7 +43,7 @@ if we are sent 1000 JUNO, we convert to 1200 OSMO based on some price feed)
 The second step is to apply a discount. This discount reduces the value of the cross-stake to a value below what we would get from the pure
 currency conversion above. This has two purposes: the first is to provide a margin of error when the price deviates far from the TWAP, so
 the cross-stake is not overvalued above native staking; the second is to encourage local staking over remote staking. Looking at the
-asset's historical volatility can provide a good estimate for the first step, as a floor for minimum discount. Beyond that, consumer 
+asset's historical volatility can provide a good estimate for the first step, as a floor for minimum discount. Beyond that, consumer
 chain tokenomics and governance design is free to increase the discount as they feel beneficial.
 
 In this case, let's assume a discount of 40%. A user on the provider chain cross-stakes 100 PROV. We end up with a weight of
@@ -61,7 +61,7 @@ can never be withdrawn and slashing is managed remotely on the Provider chain.
 
 ### Price Feeds
 
-In order to perform the conversion of remote stake into local units, the Converter needs a 
+In order to perform the conversion of remote stake into local units, the Converter needs a
 trustable price feed. Since this logic may be chain dependent, we don't want to define it in the Converter
 contract, but rather allow chains to plug in their custom price feed without modifying any of
 the complex logic required to properly stake.
@@ -70,20 +70,20 @@ There are many possible price feed implementations, a few of the main ones we co
 
 **Gov-defined feed.** This is a simple contract that stores a constant price value, which is always
 returns when asked for the price. On-chain governance can send a vote to update this price
-value when needed. __This is good for mocks, or new chaina with no solid price feed and wanting a stable peg__
+value when needed. **This is good for mocks, or new chaina with no solid price feed and wanting a stable peg**
 
 **Local Oracle** If there is a DEX on the consumer chain with sufficient liquidity and volume
 on this asset pair (local staking - remote staking), then we can use that for a price feed.
 Assuming it keeps a proper TWAP oracle on the pair, we sample this every day and can get the average
 price over the last day, which is quite hard to manipulate for such a long time.
-__This is good for an established chain with solid DEX infrastructure, like Osmosis or Juno__
+**This is good for an established chain with solid DEX infrastructure, like Osmosis or Juno**
 
 **Remote Oracle** More dynamic than the gov-defined feed, but less secure than the local Oracle,
-we can do an IBC query on a DEX on another chain to find the price feed. This works like the 
+we can do an IBC query on a DEX on another chain to find the price feed. This works like the
 Local Oracle, except the DEX being queries lives on eg. Osmosis. Note that it introduces another
 security dependency, as if the DEX chain goes Byzantine, it could impact the security of the consumer
-chain. __This is a better option if the local staking token has a liquid market, but there is
-no established DEX on the chain itself (like Stargaze).__ 
+chain. **This is a better option if the local staking token has a liquid market, but there is
+no established DEX on the chain itself (like Stargaze).**
 
 The actual logic giving the price feed is located in an Oracle contract (configured upon init).
 We recommend using an (eg daily) TWAP on a DEX with good liquidity - ideally on the consumer chain, but this implementation is left up
@@ -96,26 +96,26 @@ manages the stake and has limited permissions to [call into a native SDK module]
 to mint "virtual tokens" and stake them, as well as immediately unbonding them. The contract
 ensures the delegations are properly distributed.
 
-The Converter simply tells the virtual staking contract it wishes to bond/unbond N tokens 
+The Converter simply tells the virtual staking contract it wishes to bond/unbond N tokens
 and that contract manages all minting of tokens and distribution among multiple validators.
 We dig more into the mechanics of the virtual staking contract in the
 [Virtual Staking](./VirtualStaking.md) document.
 
 ## Rewards Flow
 
-Once per epoch, the virtual staking module will trigger rewards. This will send a number of 
+Once per epoch, the virtual staking module will trigger rewards. This will send a number of
 messages to the Converter, specifying which validators the rewards belong to, along with the
-native reward tokens themselves. 
+native reward tokens themselves.
 
-The Converter will then [transfer all these tokens via ICS20](../ibc/Overview.md) to the 
+The Converter will then [transfer all these tokens via ICS20](../ibc/Overview.md) to the
 corresponding `External Staking` contract on the Provider chain, and send a message over the
 standard IBC channel to inform the `External Staking` contract how to distribute them.
-(If we get callbacks on ics20, we send the metadata only after tokens have arrived. Until then 
+(If we get callbacks on ics20, we send the metadata only after tokens have arrived. Until then
 (for MVP), we send them concurrently and hope)
 
 ## Unstaking Flow
 
 The Converter can also unstake some tokens. These will be held in escrow on the Provider and
-are susceptible to slashing upon proper evidence submission. Since the virtual stake is, well, 
+are susceptible to slashing upon proper evidence submission. Since the virtual stake is, well,
 "virtual" and slashing has no impact, the delegation numbers can be immediately reduced
 on the consumer's native staking module.

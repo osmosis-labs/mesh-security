@@ -78,10 +78,10 @@ pub struct RewardInfo {
 Virtual Staking is primarily defined by the interface exposed to the Convert contract, so we can use wildly
 different implementations of it on different chains. Some possible implementations:
 
-* A CosmWasm contract with much of the logic, calling into a few custom SDK functions.
-* A CosmWasm contract that just calls into a native module for all logic.
-* An entry point to a precompile (eg. Composable uses "magic addresses" to call into the system, rather than `CustomMsg`)
-* A mock contract that doesn't even stake (for testing)
+- A CosmWasm contract with much of the logic, calling into a few custom SDK functions.
+- A CosmWasm contract that just calls into a native module for all logic.
+- An entry point to a precompile (eg. Composable uses "magic addresses" to call into the system, rather than `CustomMsg`)
+- A mock contract that doesn't even stake (for testing)
 
 All these implementations would require a Virtual Staking contract that fulfills the interface above and is informed by the
 specific design discussed here, but it can by creative in the implementation.
@@ -93,7 +93,7 @@ We can add other implementations later as needed.
 
 ## Standard Implementation
 
-Virtual Staking will be a mix of a Cosmos SDK module and a CosmWasm contract. 
+Virtual Staking will be a mix of a Cosmos SDK module and a CosmWasm contract.
 We need to expose some special functionality through the SDK Module and `CustomMsg` type.
 The module will contain a list of which contract has what limit, which can only be updated
 by the native governance. The interface is limited and can best be described as Rust types:
@@ -101,12 +101,12 @@ by the native governance. The interface is limited and can best be described as 
 ```rust
 #[cw_serde]
 pub enum CustomMsg {
-  /// Embed one level here, so we are independent of other custom messages (like TokenFactory, etc) 
+  /// Embed one level here, so we are independent of other custom messages (like TokenFactory, etc)
   VirtualStake(VirtualStakeMsg),
 }
 
 #[cw_serde]
-/// These are the functionality 
+/// These are the functionality
 pub enum VirtualStakeMsg {
   /// This mints "virtual stake" if possible and bonds to this validator.
   Bond {
@@ -121,18 +121,18 @@ pub enum VirtualStakeMsg {
 }
 ```
 
-It will also need a query to get its max cap limit.  Note that it can use standard `StakingQuery` types to query it's existing delegations
+It will also need a query to get its max cap limit. Note that it can use standard `StakingQuery` types to query it's existing delegations
 as they will appear as normal in the `x/staking` system.
 
 ```rust
 #[cw_serde]
 pub enum CustomQuery {
-  /// Embed one level here, so we are independent of other custom messages (like TokenFactory, etc) 
+  /// Embed one level here, so we are independent of other custom messages (like TokenFactory, etc)
   VirtualStake(VirtualStakeQuery),
 }
 
 #[cw_serde]
-/// These are the functionality 
+/// These are the functionality
 pub enum VirtualStakeQuery {
   #[returns(MaxCapResponse)]
   MaxCap { },
@@ -149,9 +149,9 @@ Each Virtual Staking contract is deployed with a Converter contract and is tied 
 It only accepts messages from that Converter and sends all rewards to that Converter.
 The general flows it provides are:
 
-* Accept Stake message from Converter and execute custom Bond message
-* Accept Unstake message from Converter and execute custom Unbond message
-* Trigger Reward Withdrawals periodically and send to the Converter
+- Accept Stake message from Converter and execute custom Bond message
+- Accept Unstake message from Converter and execute custom Unbond message
+- Trigger Reward Withdrawals periodically and send to the Converter
 
 It should keep track on how much it has delegated to each validator, and the total amount of delegations,
 along with the max cap. It should not try to bond anything beyond the max cap, as that will error.
@@ -159,17 +159,17 @@ But then silently adjust internal bookkeeping, ignoring everything over max cap.
 
 The simplest solution is:
 
-* If total delegated is less than max cap, but new delegation will exceed it, just delegate the difference
-* If total delegated is less than max cap and we try to stake more, update accounting, but don't send virtual stake messages
-* If we unbond, but total delegated remains greater than max cap, update accounting, but don't send virtual stake messages
+- If total delegated is less than max cap, but new delegation will exceed it, just delegate the difference
+- If total delegated is less than max cap and we try to stake more, update accounting, but don't send virtual stake messages
+- If we unbond, but total delegated remains greater than max cap, update accounting, but don't send virtual stake messages
 
 However, there is an issue here, as we are staking on different validators. Imagine I have a cap of 100. 80 is bonded to A.
 I request to bond 120 more to B, which turns into 20 bond to B. There is an actual ration of 4:1 A:B bonded, but the remote
 stakers have delegated at a ratio of 2:3. This gets worse if eg. someone unbonds all A. We end up with 120 requested for B,
 but 80 delegated to A and 20 delegated to B.
 
-To properly handle this, we should use Redelegations to rebalance when the amounts are updated. 
-This may be quite some messages (if we have 50 validators, each time we stake one more, we need to 
+To properly handle this, we should use Redelegations to rebalance when the amounts are updated.
+This may be quite some messages (if we have 50 validators, each time we stake one more, we need to
 add a bit to that one and decrease the other 50). We describe a solution to this in the next section.
 
 ### Epochs
@@ -239,7 +239,7 @@ type StakePermission struct {
 
 Beyond MVP, we wish to add the following functionality:
 
-* Provide configuration for optional governance multiplier (eg 1 virtual stake leads to 1 tendermint power, but may be 0 or 1 or even 0.5 gov voting power)
+- Provide configuration for optional governance multiplier (eg 1 virtual stake leads to 1 tendermint power, but may be 0 or 1 or even 0.5 gov voting power)
 
 ### Reward Withdrawals
 

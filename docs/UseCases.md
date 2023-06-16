@@ -65,11 +65,10 @@ flowchart TD
   Juno -- 99%, gov --> Eve;
 ```
 
-
 ## Credibly Neutral Common Good
 
 There are some items that should be neutral or independent of multiple chains,
-like a shared name service. In this case, we allow multiple controlling chains to 
+like a shared name service. In this case, we allow multiple controlling chains to
 control the staking and governance, even without any native staking power.
 
 ```mermaid
@@ -80,4 +79,3 @@ flowchart TD
   C(Stargaze) -- 25% --> N;
   D(Cosmos Hub) -- 25% --> N;
 ```
-

@@ -34,13 +34,13 @@ Not all providers are treated equally. (And this is a good thing)
 Each Converter accepts messages from exactly one provider and is
 the point where we establish trust. The Converter is responsible for
 converting the staking messages into local units. It does two transformations.
-This first is convert the token based on a price oracle. The second step is to apply a discount, 
+This first is convert the token based on a price oracle. The second step is to apply a discount,
 which captures both the volatility of the remote asset, as well as
 a general preference for local/native staking.
 
 This is described [more in depth under Converter](./Converter.md#staking-flow).
 
-##  Virtual Staking
+## Virtual Staking
 
 Once the Converter has normalized the foreign stake into the native staking units,
 it calls into the associated ["Virtual Staking" contract](./VirtualStaking.md) in order
@@ -48,8 +48,7 @@ to convert this into real stake without owning actual tokens. This contract must
 authorized to have extra power in a native Cosmos SDK module to do this impact, and has
 a total limit of tokens it can stake. It performs 3 high level tasks:
 
-* Staking "virtual tokens" as requested by the Converter (up to a limit)
-* Periodically withdrawing rewards and sending them to the Converter
-* Unstaking "virtual tokens" as requested by the Converter. This must be immediate and
-avoid the "7 concurrent unbonding" limit on the `x/staking` module to be properly usable.
-
+- Staking "virtual tokens" as requested by the Converter (up to a limit)
+- Periodically withdrawing rewards and sending them to the Converter
+- Unstaking "virtual tokens" as requested by the Converter. This must be immediate and
+  avoid the "7 concurrent unbonding" limit on the `x/staking` module to be properly usable.

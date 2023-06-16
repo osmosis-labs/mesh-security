@@ -9,9 +9,9 @@ is fully unbonded.
 
 The user should be able to do the following as if they were staking normally:
 
-* re-stake
-* withdraw rewards
-* vote
-* vote weighted
+- re-stake
+- withdraw rewards
+- vote
+- vote weighted
 
 The staking process is triggered by the vault sending tokens to the native-staking contract that sends them to this one.
