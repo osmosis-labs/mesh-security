@@ -16,10 +16,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::msg::{
-    AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
-    ConfigResponse, LienInfo, StakingInitInfo,
-};
+use crate::msg::{AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem, AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, StakingInitInfo};
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::{Tx, TxType, Txs};
 
@@ -389,6 +386,34 @@ impl VaultContract<'_> {
             .collect::<Result<_, _>>()?;
 
         let resp = AllAccountsResponse { accounts };
+
+        Ok(resp)
+    }
+
+    /// Queries for all pending txs.
+    /// `start_after` is the last tx id included in previous page
+    #[msg(query)]
+    fn all_pending_txs(
+        &self,
+        ctx: QueryCtx,
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    ) -> Result<AllTxsResponse, ContractError> {
+        let limit = clamp_page_limit(limit);
+        let bound = start_after.and_then(Bounder::exclusive_bound);
+
+        let txs = self
+            .pending
+            .txs
+            .range(ctx.deps.storage, bound, None, Order::Ascending)
+            .map(|item| {
+                let (_id, tx) = item?;
+                Ok::<AllTxsResponseItem, ContractError>(tx)
+            })
+            .take(limit)
+            .collect::<Result<_, _>>()?;
+
+        let resp = AllTxsResponse { txs };
 
         Ok(resp)
     }

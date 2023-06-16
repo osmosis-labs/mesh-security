@@ -52,3 +52,10 @@ pub struct ConfigResponse {
     pub denom: String,
     pub local_staking: String,
 }
+
+pub type AllTxsResponseItem = crate::txs::Tx;
+
+#[cw_serde]
+pub struct AllTxsResponse {
+    pub txs: Vec<AllTxsResponseItem>,
+}
