@@ -1,6 +1,8 @@
 mod cross_staking;
 mod local_staking;
 
+use crate::contract::multitest_utils::VaultContractProxy;
+use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
 use crate::msg::{AllAccountsResponseItem, LienInfo, StakingInitInfo};
 use crate::{contract, msg::AccountResponse};
@@ -441,6 +443,12 @@ fn stake_local() {
         .unwrap_err();
 }
 
+#[track_caller]
+fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
+    let txs = vault.all_pending_txs(None, None).unwrap().txs;
+    txs.first().map(|tx| tx.id)
+}
+
 #[test]
 fn stake_cross() {
     let owner = "owner";
@@ -522,6 +530,14 @@ fn stake_cross() {
         .call(user)
         .unwrap();
 
+    let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    // Hardcoded commit_tx call (lack of IBC support yet)
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(cross_staking.contract_addr.as_str())
+        .unwrap();
+
     let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
         acc,
@@ -561,6 +577,11 @@ fn stake_cross() {
             Binary::default(),
         )
         .call(user)
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking.contract_addr.as_str())
         .unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
@@ -783,6 +804,11 @@ fn multiple_stakes() {
         )
         .call(user)
         .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking1.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -791,6 +817,11 @@ fn multiple_stakes() {
             Binary::default(),
         )
         .call(user)
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking2.contract_addr.as_str())
         .unwrap();
 
     assert_eq!(
@@ -834,6 +865,11 @@ fn multiple_stakes() {
         )
         .call(user)
         .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking1.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -842,6 +878,11 @@ fn multiple_stakes() {
             Binary::default(),
         )
         .call(user)
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking2.contract_addr.as_str())
         .unwrap();
 
     assert_eq!(
@@ -882,6 +923,11 @@ fn multiple_stakes() {
             Binary::default(),
         )
         .call(user)
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking1.contract_addr.as_str())
         .unwrap();
 
     let err = vault

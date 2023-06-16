@@ -63,18 +63,13 @@ impl CrossStakingApi for CrossStaking<'_> {
     #[msg(exec)]
     fn receive_virtual_stake(
         &self,
-        ctx: ExecCtx,
+        _ctx: ExecCtx,
         _owner: String,
         _amount: Coin,
-        tx: u64,
+        _tx: u64,
         _msg: Binary,
     ) -> Result<Response, ContractError> {
-        let vault = ctx.info.sender;
-        let vault_api_helper = vault_api::VaultApiHelper(vault);
-        // TODO: Fail / rollback tx support
-        // FIXME: Shouldn't be sync
-        let msg = vault_api_helper.commit_tx(tx)?;
-        Ok(Response::new().add_message(msg))
+        Ok(Response::new())
     }
 
     #[msg(query)]
