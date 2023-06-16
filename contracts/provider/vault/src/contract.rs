@@ -342,9 +342,9 @@ impl VaultContract<'_> {
     /// Queries for all users ever performing action in the system, paginating over
     /// them.
     ///
-    /// `start_after` is the last accoutn inlcuded in previous page
+    /// `start_after` is the last account included in previous page
     ///
-    /// `with_collateral` flag filters out users with no collateral, defualted to false
+    /// `with_collateral` flag filters out users with no collateral, defaulted to false
     #[msg(query)]
     fn all_accounts(
         &self,
