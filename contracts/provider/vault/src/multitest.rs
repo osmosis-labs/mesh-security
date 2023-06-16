@@ -885,6 +885,14 @@ fn stake_cross_txs() {
     // Cannot query claims while pending
     assert!(matches!(vault.account_claims(user.to_owned(), None, None).unwrap_err(),
                ContractError::Std(GenericErr {..}))); // write locked
+    // Can query vault's balance while pending
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(&vault.contract_addr, OSMO)
+            .unwrap(),
+        coin(800, OSMO)
+    );
 
     // Can query the other account
     let acc = vault.account(user2.to_owned()).unwrap();
