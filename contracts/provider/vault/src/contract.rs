@@ -406,7 +406,7 @@ impl VaultContract<'_> {
         let txs = self
             .pending
             .txs
-            .range(ctx.deps.storage, bound, None, Order::Descending)
+            .range(ctx.deps.storage, None, bound, Order::Descending)
             .map(|item| {
                 let (_id, tx) = item?;
                 Ok::<AllTxsResponseItem, ContractError>(tx)
