@@ -515,11 +515,8 @@ impl VaultContract<'_> {
         // Unlock it
         lien_lock.unlock_write()?;
         // Save it
-        self.liens.save(
-            ctx.deps.storage,
-            (&ctx.info.sender, &tx.lienholder),
-            &lien_lock,
-        )?;
+        self.liens
+            .save(ctx.deps.storage, (&tx.user, &tx.lienholder), &lien_lock)?;
         // Load user
         let mut user_lock = self.users.load(ctx.deps.storage, &tx.user)?;
         // Unlock it
@@ -552,11 +549,8 @@ impl VaultContract<'_> {
         let lien = lien_lock.write()?;
         lien.amount -= tx.amount;
         // Save it unlocked
-        self.liens.save(
-            ctx.deps.storage,
-            (&ctx.info.sender, &tx.lienholder),
-            &lien_lock,
-        )?;
+        self.liens
+            .save(ctx.deps.storage, (&tx.user, &tx.lienholder), &lien_lock)?;
 
         // Load user
         let mut user_lock = self.users.load(ctx.deps.storage, &tx.user)?;
