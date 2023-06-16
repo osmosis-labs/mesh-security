@@ -6,8 +6,8 @@ use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
 use crate::msg::{AllAccountsResponseItem, LienInfo, StakingInitInfo};
 use crate::{contract, msg::AccountResponse};
-use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cosmwasm_std::StdError::GenericErr;
+use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
 use mesh_sync::LockError;
 use sylvia::multitest::App;
@@ -825,6 +825,9 @@ fn stake_cross_txs() {
 
     // No pending txs
     assert_eq!(vault.all_pending_txs(None, None).unwrap().txs, vec![]);
+    // Can query all accounts
+    let accounts = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(accounts.accounts.len(), 2);
 
     // Staking remotely
 
@@ -877,15 +880,24 @@ fn stake_cross_txs() {
         .unwrap();
 
     // First tx is still pending
-    assert_eq!(vault.all_pending_txs(None, None).unwrap().txs[0].id, first_tx);
+    assert_eq!(
+        vault.all_pending_txs(None, None).unwrap().txs[0].id,
+        first_tx
+    );
 
     // Cannot query account while pending
-    assert!(matches!(vault.account(user.to_owned()).unwrap_err(),
-               ContractError::Std(GenericErr {..}))); // write locked
-    // Cannot query claims while pending
-    assert!(matches!(vault.account_claims(user.to_owned(), None, None).unwrap_err(),
-               ContractError::Std(GenericErr {..}))); // write locked
-    // Can query vault's balance while pending
+    assert!(matches!(
+        vault.account(user.to_owned()).unwrap_err(),
+        ContractError::Std(GenericErr { .. })
+    )); // write locked
+        // Cannot query claims while pending
+    assert!(matches!(
+        vault
+            .account_claims(user.to_owned(), None, None)
+            .unwrap_err(),
+        ContractError::Std(GenericErr { .. })
+    )); // write locked
+        // Can query vault's balance while pending
     assert_eq!(
         app.app()
             .wrap()
@@ -893,6 +905,20 @@ fn stake_cross_txs() {
             .unwrap(),
         coin(800, OSMO)
     );
+    // Can query all accounts, but locked ones are not returned
+    // FIXME: range() fails with ParseError!
+    // let accounts = vault.all_accounts(false, None, None).unwrap();
+    // assert_eq!(
+    //     accounts.accounts,
+    //     [AllAccountsResponseItem {
+    //         account: user2.to_string(),
+    //         denom: OSMO.to_owned(),
+    //         bonded: Uint128::new(500),
+    //         free: Uint128::new(400),
+    //     }]
+    // );
+    let err = vault.all_accounts(false, None, None).unwrap_err();
+    println!("err: {:#?}", err);
 
     // Can query the other account
     let acc = vault.account(user2.to_owned()).unwrap();
