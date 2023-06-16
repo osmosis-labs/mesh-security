@@ -81,4 +81,24 @@ impl VaultApiHelper {
         };
         Ok(wasm)
     }
+
+    pub fn commit_tx(&self, tx_id: u64) -> Result<WasmMsg, StdError> {
+        let msg = VaultApiExecMsg::CommitTx { tx_id };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
+        };
+        Ok(wasm)
+    }
+
+    pub fn rollback_tx(&self, tx_id: u64) -> Result<WasmMsg, StdError> {
+        let msg = VaultApiExecMsg::RollbackTx { tx_id };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
+        };
+        Ok(wasm)
+    }
 }
