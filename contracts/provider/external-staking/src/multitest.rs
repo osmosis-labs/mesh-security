@@ -128,9 +128,7 @@ fn staking() {
         .call(users[0])
         .unwrap();
 
-    // Hardcoded commit tx call
-    // TODO: get last tx helper
-    let mut last_tx = 1;
+    let last_tx = get_last_pending_tx_id(&vault).unwrap();
     vault
         .vault_api_proxy()
         .commit_tx(last_tx)
@@ -149,10 +147,9 @@ fn staking() {
         .call(users[0])
         .unwrap();
 
-    last_tx += 1;
     vault
         .vault_api_proxy()
-        .commit_tx(last_tx)
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
         .call(contract.contract_addr.as_str())
         .unwrap();
 
@@ -168,10 +165,9 @@ fn staking() {
         .call(users[0])
         .unwrap();
 
-    last_tx += 1;
     vault
         .vault_api_proxy()
-        .commit_tx(last_tx)
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
         .call(contract.contract_addr.as_str())
         .unwrap();
 
@@ -187,10 +183,9 @@ fn staking() {
         .call(users[1])
         .unwrap();
 
-    last_tx += 1;
     vault
         .vault_api_proxy()
-        .commit_tx(last_tx)
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
         .call(contract.contract_addr.as_str())
         .unwrap();
 
@@ -205,11 +200,9 @@ fn staking() {
         )
         .call(users[1])
         .unwrap();
-
-    last_tx += 1;
     vault
         .vault_api_proxy()
-        .commit_tx(last_tx)
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
         .call(contract.contract_addr.as_str())
         .unwrap();
 
@@ -286,6 +279,12 @@ fn staking() {
             },
         ]
     );
+}
+
+#[track_caller]
+fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
+    let txs = vault.all_pending_txs(None, None).unwrap().txs;
+    txs.last().map(|tx| tx.id)
 }
 
 #[test]
