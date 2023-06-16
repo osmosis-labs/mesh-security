@@ -638,6 +638,12 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
+    // Hardcoded commit_tx call (lack of IBC support yet)
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -650,6 +656,11 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -661,6 +672,11 @@ fn distribution() {
             .unwrap(),
         )
         .call(users[1])
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
         .unwrap();
 
     // Start with equal distribution:
