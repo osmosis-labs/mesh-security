@@ -16,7 +16,10 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
-use crate::msg::{AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem, AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, StakingInitInfo};
+use crate::msg::{
+    AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
+    AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, StakingInitInfo,
+};
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::{Tx, TxType, Txs};
 
