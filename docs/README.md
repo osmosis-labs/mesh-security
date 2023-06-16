@@ -8,7 +8,7 @@ as footnotes in the documents.
 ```mermaid
 flowchart TD
   %%{init: {'theme': 'forest'}}%%
-  
+
   subgraph Osmosis
   A{{$OSMO}} -- User Deposit --> B(Vault);
   B -- $OSMO --> C(Local Staker);
@@ -16,7 +16,7 @@ flowchart TD
   B -- Lien --> E(External Staker Juno);
   B -- Lien --> G(External Staker Stars);
   end
-  
+
   E -. IBC .-> M;
   H -. IBC .-> N;
 
@@ -39,14 +39,14 @@ flowchart TD
 
 ```
 
-You can get a good overview of the whole system flow in the above diagram. 
+You can get a good overview of the whole system flow in the above diagram.
 The design should allow one chain to provide security to multiple chains, while
-at the same time receiving security from multiple chains. 
+at the same time receiving security from multiple chains.
 
-A key to understanding the design, is that the whole system is _delegator-centeric_ 
+A key to understanding the design, is that the whole system is _delegator-centeric_
 not _validator-centric_. This means that we don't try to match the same validators on
 multiple chains, or even subsets, but rather focus on leveraging the security
-provided by staking tokens to secure validators on multiple chains.  This provides a way to
+provided by staking tokens to secure validators on multiple chains. This provides a way to
 scale bidirectionally, while avoiding some sort of infinite-loop recursion, as
 chains can only provide security in their native token(s).
 
@@ -63,7 +63,7 @@ Addressing some common points people raise up, which are hidden in the docs.
 
 There are many questions if this isn't "fractional reserve banking" or such.
 This does use the same collateral to back multiple claims (staking), but
-the [final invariant in the vault](https://github.com/osmosis-labs/mesh-security/blob/main/contracts/vault/README.md#invariants) 
+the [final invariant in the vault](https://github.com/osmosis-labs/mesh-security/blob/main/contracts/vault/README.md#invariants)
 ensures there is sufficient collateral to cover the maximum loss
 (eg. if all local and cross-staked validators double-sign).
 If the double slash penalty is 5%, you can safely cross stake 20x.
@@ -76,9 +76,9 @@ not the total value of all property insured.
 Another common concern is whether there are effective limits in the power a remote
 chain can exert over one chain. Would it be possible for a higher cap chain (eg $ATOM)
 to take over more than one-third, or even two-thirds or the power of a smaller cap chain
-(eg $STARS) it is cross-staking on. 
+(eg $STARS) it is cross-staking on.
 
-Clearly the consumer chain wants to put some limits. The first limit is the 
+Clearly the consumer chain wants to put some limits. The first limit is the
 [discount applied during the conversion](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-normalization).
 This doesn't just provide margin for price fluctuations but also means that on average
 a remote token has less voting power (and rewards) per USD-value than a local token, favoring
@@ -98,9 +98,9 @@ keep them in reasonable limits.
 
 There are three main failure modes to consider:
 
-* Huge price swing (provider token rises/falls relative to consumer token).
-* Provider goes Byzantine and tries to mint arbitrary unbacked tokens.
-* Consumer goes Byzantine and tries to slash/lock tokens on the provider side.
+- Huge price swing (provider token rises/falls relative to consumer token).
+- Provider goes Byzantine and tries to mint arbitrary unbacked tokens.
+- Consumer goes Byzantine and tries to slash/lock tokens on the provider side.
 
 #### Huge Price Swing
 
@@ -149,13 +149,13 @@ perceived stability.
 If a Consumer Chain goes Byzantine (or starts some mob-rule governance proposals), it can
 try to damage stake on the Provider chain. There are several ways it can try to do so:
 
-* Withholding all rewards to said Provider
-* Removing all voting power from said Provider
-* Refusing to unlock the virtual stake of the Provider
-* Unfairly slashing virtual stake from the Provider
+- Withholding all rewards to said Provider
+- Removing all voting power from said Provider
+- Refusing to unlock the virtual stake of the Provider
+- Unfairly slashing virtual stake from the Provider
 
 The first two are temporary and can be seen in the case when the consumer no longer trusts the
-provider and sets "max cap" to zero. This is a temporary effect but must be acknowledged as 
+provider and sets "max cap" to zero. This is a temporary effect but must be acknowledged as
 a possible risk, which is loss of benefits, but not loss of collateral.
 
 The third point is impossible, as the unlock period is implemented between the external staking
@@ -176,56 +176,58 @@ generally consider this unlikely (it has never been observed in 4+ years of the 
 
 ## Definitions
 
-* **Pairing** - a trust relationship between two chains, such that one promises to lock up slashable
+- **Pairing** - a trust relationship between two chains, such that one promises to lock up slashable
   stake, while the other leverages this promise to issue validation power in the dPoS system.
   Notably, chain A and chain B may have two pairings in opposite directions at the same time.
-* **Provider** _(also "Provider Chain")_ - when looking at one pairing, this is the chain which 
-  locks up tokens and provides them as staking collateral to the other chain. 
-* **Consumer** _(also "Consumer Chain")_ - when looking at one pairing, this is the chain which
+- **Provider** _(also "Provider Chain")_ - when looking at one pairing, this is the chain which
+  locks up tokens and provides them as staking collateral to the other chain.
+- **Consumer** _(also "Consumer Chain")_ - when looking at one pairing, this is the chain which
   adjusts validator weights and provides rewards based on remote collateral.
-* **Collateral** - Tokens locked up on the provider chain, which are providing security
+- **Collateral** - Tokens locked up on the provider chain, which are providing security
   guarantees to one or more providers. These tokens may be slashed upon any slashing event
   in the consumers.
-* **Staking** _(also "Delegation")_ - The act of providing collateral for a validator, such that the
+- **Staking** _(also "Delegation")_ - The act of providing collateral for a validator, such that the
   staker receives a portion of the block rewards if they behave correctly, as well as the slashing risk
   if they misbehave.
-* **Unstaking** _(also "Unbonding")_ - The act of initialing the removal of stake from a system. During
+- **Unstaking** _(also "Unbonding")_ - The act of initialing the removal of stake from a system. During
   the "unbonding period", the collateral will not receive any rewards, but will be liable to slashing
   based on misbehavior of that validator.
-* **Unbonding period** - The time delay between initiating unbonding and having free access to the
+- **Unbonding period** - The time delay between initiating unbonding and having free access to the
   underlying collateral. Once this time has passed after unstaking, all claims on the underlying
-  collateral are released and 
-* **Rewards** - Block rewards are issued to validators in the native token of the consumer chain.
+  collateral are released and
+- **Rewards** - Block rewards are issued to validators in the native token of the consumer chain.
   A portion of these rewards goes to the stakers and is collected cross-chain.
-* **Slashing** - If a validator misbehaves, the tokens delegated to it, which provided the
+- **Slashing** - If a validator misbehaves, the tokens delegated to it, which provided the
   voting power, can be slashed. The percentage of slashing for each misbehavior depends on the chain.
   This slash must be reflected by stakers on the provider chain, but we may make some approximations
   as needed to implement this efficiently.
-* **Jailing** - If a validator misbehaves, it may be jailed, or removed from the validator set and
+- **Jailing** - If a validator misbehaves, it may be jailed, or removed from the validator set and
   prevented from returning. Tokens staked to it would be partially slashed and should be unstaked
   as soon as possible, as they will receive no more rewards. Stake to a jailed validator still must
   wait the unbonding period to be liquid.
-* **Latency** - Time delay from an action being initiated and the effects being reflected in
+- **Latency** - Time delay from an action being initiated and the effects being reflected in
   another contract or chain. This doesn't refer to the unbonding period, but rather the delay between
-  initiating bonding or unbonding on the provider and the equivalent action occurring on the consumer. 
+  initiating bonding or unbonding on the provider and the equivalent action occurring on the consumer.
 
 ## Sections
 
 Below are links to detailed documents on various sub-systems:
 
 [Provider](./provider/Provider.md):
-  * [Vault](./provider/Vault.md)
-  * [Local Staking](./provider/LocalStaking.md)
-  * [External Staking](./provider/ExternalStaking.md)
-  * TODO - Rust interfaces
+
+- [Vault](./provider/Vault.md)
+- [Local Staking](./provider/LocalStaking.md)
+- [External Staking](./provider/ExternalStaking.md)
+- TODO - Rust interfaces
 
 [Consumer](./consumer/Consumer.md):
-  * [Converter](./consumer/Converter.md)
-  * [Virtual Staking](./consumer/VirtualStaking.md)
-  * SDK Changes
+
+- [Converter](./consumer/Converter.md)
+- [Virtual Staking](./consumer/VirtualStaking.md)
+- SDK Changes
 
 [IBC Protocol](./ibc/Overview.md):
-  * [Cross-Chain Staking](./ibc/Staking.md)
-  * [Reward Flow](./ibc/Rewards.md)
-  * [Handling Slashing Evidence](./ibc/Slashing.md)
-  
+
+- [Cross-Chain Staking](./ibc/Staking.md)
+- [Reward Flow](./ibc/Rewards.md)
+- [Handling Slashing Evidence](./ibc/Slashing.md)

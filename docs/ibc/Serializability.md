@@ -124,7 +124,7 @@ into the IBC protocol in the first place.
 That also means, no conflicts and no possibility of violating invariants.
 Whatever approach we take to enforce this, we must prove that for any possible set of transactions that occurs
 between the sending of the IBC packet and receiving the ACK or Timeout, that the ACK will
-always be processed successfully. Any transaction that *may* cause this condition to be violated *must* 
+always be processed successfully. Any transaction that _may_ cause this condition to be violated _must_
 be rejected (return an error).
 
 ## CRDTs
@@ -165,7 +165,7 @@ If they depend on (or would interfere with) each other, then we must fail the la
 It can be retried after A is committed and we can safely determine the result.
 
 Note this extends both to the order of processing of A', B', C' on the receiving chain, as well as the order of ACKs
-arriving on the sending chain.  On top of this, we have to ensure that no other transactions conflict with any open 
+arriving on the sending chain. On top of this, we have to ensure that no other transactions conflict with any open
 IBC transactions. Transaction A is "open" from the time the first logic is run on the sending chain (which will send
 the IBC message) until the ACK is fully processed and committed on the sending chain. This will span several blocks,
 possibly hours in the case of timeouts.
@@ -181,8 +181,8 @@ resistent to deadlock. We would do the following:
 Note that blockchains actually process all transactions sequentially (this is one of their main purposes), so we can simplify this
 by considering any non-IBC transaction to get and release locks on all data it touches during its execution.
 Furthermore, if we read all data in phase 1, and don't read it later, there is no possibility that a later transaction can
-cause a conflict, so we can release all read locks at the end of the "growing" phase. However, 
-*data read during Phase 3 will need a read lock from Phase 1*
+cause a conflict, so we can release all read locks at the end of the "growing" phase. However,
+_data read during Phase 3 will need a read lock from Phase 1_
 
 With that, we can simplify to:
 

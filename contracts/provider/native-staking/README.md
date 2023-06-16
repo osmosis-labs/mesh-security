@@ -36,7 +36,7 @@ the vault to release the claim.
 
 This means when `native-staking` receives stake on behalf of a user, it looks up to see if there exists a proxy account for that user already.
 If so, it will simply pass the funds to that contract along with the message of which validator to stake to. If not, it will instantiate
-a new `native-staking-proxy` for that user and pass it the funds along with validator information. 
+a new `native-staking-proxy` for that user and pass it the funds along with validator information.
 
 The user then interacts directly with the proxy up to the point of a complete unbonding, when they can send the now-liquid tokens
 to `native-staking`, which will immediately release those on the vault. This makes `native-staking` more of a pass-through node and

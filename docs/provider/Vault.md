@@ -8,7 +8,7 @@ Connected to the _Vault_ contract, is exactly one [local Staking contract](./Loc
 which can delegate the actual token to the native staking module. It also can connect to an
 arbitrary number of [external staking contracts](./ExternalStaking.md) which can make use
 of said collateral as "virtual stake" to use in an external staking system (that doesn't
-use the vault token as collateral). 
+use the vault token as collateral).
 
 The key here is that we can safely use the
 same collateral for multiple protocols, as the maximum slashing penalty is significantly
@@ -29,11 +29,11 @@ We define this interface as a _Creditor_ (as it accepts liens).
 
 TODO: refine this
 
-* **Native Token** - The native staking token of this blockchain. More specifically,
+- **Native Token** - The native staking token of this blockchain. More specifically,
   the token in which all collateral is measured.
-* **Slashable Collateral** - `Liens(user).map(|x| x.amount * x.slashable).sum()`
-* **Maximum Lien** - `Liens(user).map(|x| x.amount).max()`
-* **Free Collateral** - `Collateral(user) - max(SlashableCollateral(user), MaximumLien(user))`
+- **Slashable Collateral** - `Liens(user).map(|x| x.amount * x.slashable).sum()`
+- **Maximum Lien** - `Liens(user).map(|x| x.amount).max()`
+- **Free Collateral** - `Collateral(user) - max(SlashableCollateral(user), MaximumLien(user))`
 
 ## Design Decisions
 
@@ -56,7 +56,7 @@ The _vault_ contract ensures the user's collateral is sufficient to service all 
 made on said collateral.
 
 The _vault_ contract may have a parameter to limit slashable collateral or maximum lien to less than
-100% of the size of the collateral. This makes handling a small slash condition much simpler. 
+100% of the size of the collateral. This makes handling a small slash condition much simpler.
 
 The _creditor_ is informed of a new lien and may reject it by returning an error
 (eg if the slashing percentage is too small, or if the total credit would be too high).
@@ -72,15 +72,15 @@ it is much less clear than the corresponding code.
 
 ### State
 
-* Collateral: `User -> Amount`
-* Liens: `User -> {Creditor, Amount, Slashable}[]`
-* Credit `Creditor -> Amount`
+- Collateral: `User -> Amount`
+- Liens: `User -> {Creditor, Amount, Slashable}[]`
+- Credit `Creditor -> Amount`
 
 ### Invariants
 
-* `SlashableCollateral(user) <= Collateral(user)` - for all users
-* `MaximumLien(user) <= Collateral(user)` - for all users
-* `Liens(user).map(|x| x.creditor).isUnique()` - for all users
+- `SlashableCollateral(user) <= Collateral(user)` - for all users
+- `MaximumLien(user) <= Collateral(user)` - for all users
+- `Liens(user).map(|x| x.creditor).isUnique()` - for all users
 
 ### Transitions
 
@@ -98,7 +98,7 @@ immediately transferred to their account.
 **Provide Lien**
 
 TODO. Promise collateral as slashable to some creditor.
-Args `(creditor, amount, slashable)`. 
+Args `(creditor, amount, slashable)`.
 This is updated locally
 
 **Release Lien**
@@ -109,7 +109,7 @@ TODO
 
 TODO
 
-* Increase Slashing(user, creditor)?
+- Increase Slashing(user, creditor)?
 
 ## Footnotes
 

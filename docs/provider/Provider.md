@@ -31,9 +31,9 @@ the native staking token into the vault. This must be liquid
 which they can withdraw assuming there are no outstanding liens on that amount.
 [Read more about the vault](./Vault.md).
 
-Each vault contains *exactly one* denom and has *exactly one* local staking
-module.  This local staker can stake the vault token with the
-native staking module.  It actually accepts the original token, which makes
+Each vault contains _exactly one_ denom and has _exactly one_ local staking
+module. This local staker can stake the vault token with the
+native staking module. It actually accepts the original token, which makes
 it different than external stakers, which accept liens. By depositing in the vault
 and staking in the local staker, I will have achieved the same effect
 (and get the same rewards) as directly staking... but I can now use my balance
@@ -73,7 +73,7 @@ same governance rights as if they had staked directly and can override
 the validator's voice if they request. However, this is relatively complex when
 one local staking contract hold delegations from many staker to the same validator,
 and takes careful design with weighted votes and probably something
-like cron cat to trigger this. 
+like cron cat to trigger this.
 
 **We aim to have full participation in local votes by v2**
 
@@ -93,7 +93,7 @@ There are [use cases](../UseCases.md) for each configuration.
 
 ## DAO DAO Extension
 
-After discussing this general diagram, we realized there is some value in 
+After discussing this general diagram, we realized there is some value in
 a simplified version of this, which may also be a great starting place to
 testing out UX without the complications of IBC. DAOs have their own
 token, governance, staking, and reward contracts. We can compare them to
@@ -102,6 +102,7 @@ low-cap chains embedded in a host chain. Let's look at two ways of using DAOs lo
 ### Bootstrapping DAOs
 
 When a new DAO launches, it often wants to accomplish two things:
+
 1. Ensure a reasonable security for the DAO (regardless of low market cap)
 2. Airdrop some tokens to native stakers.
 
@@ -124,7 +125,7 @@ flowchart LR
 
 Note that this requires the exact same Vault and Local Staker
 as the real use case, and uses the same External Staker interface.
-The "Neta Staking" contract is already built and by building out 
+The "Neta Staking" contract is already built and by building out
 this "External Staker Neta" adapter contract, we can work through
 all the design issues in a local environment (where we can easy get
 coverage with `cw-multi-test`), as well as start building out a
@@ -138,11 +139,11 @@ about governance power and such, which may be easier to prototype
 in DAO contracts than modifying the Cosmos SDK staking module.
 
 **Recommendation** Once the MVP Vault is built, it would be good to assign
-one contract dev to work out this External Staker implementation to 
+one contract dev to work out this External Staker implementation to
 some standard DAO DAO staking contract (can be a "hacked" version that
 just holds a lot of the DAO token, like we did in HackWasm Medellin).
 This will unblock frontend developers and allow us to get much quicker
-feedback on UX issues in such a system, while the backend engineers 
+feedback on UX issues in such a system, while the backend engineers
 are working with the complexities of IBC and staking virtual tokens in
 the native SDK staking module.
 
@@ -156,7 +157,7 @@ what to do about governance power.
 If a DAO has a market cap approaching the TVL staked in the native token, this
 becomes a dangerous situation for the DAO as the security provisioned by the chain
 is insufficient to protect it from attacks. We could turn this model around and allow
-the DAO token to "externally stake" on the local staking contract. 
+the DAO token to "externally stake" on the local staking contract.
 
 ```mermaid
 flowchart LR
@@ -186,5 +187,5 @@ to the core Cosmos SDK modules, which makes them more risky and
 more difficult to port to other chains. But could be considered
 as chain-specific extensions.
 
-* Enable moving bonded tokens directly into the vault? (Custom SDK change)
-* Allow depositing vesting tokens to the vault? (deeper SDK change)
+- Enable moving bonded tokens directly into the vault? (Custom SDK change)
+- Allow depositing vesting tokens to the vault? (deeper SDK change)

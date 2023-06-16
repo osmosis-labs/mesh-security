@@ -7,7 +7,7 @@ as well as cross-stake.
 ## Definitions
 
 Vault Denom - The token we use as collateral. Generally the native staking token (but there might be
-cases for IBC assets, eg. ETH, BTC, or USDC). 
+cases for IBC assets, eg. ETH, BTC, or USDC).
 
 Collateral - Total amount of tokens deposited by an account.
 
@@ -46,7 +46,7 @@ for 60 still, then they can withdraw 40 tokens.
 
 ## Invariants
 
-There are tokens in the system to match the collateral (accounting amount). 
+There are tokens in the system to match the collateral (accounting amount).
 `sum(collateral) <= balance(vault) + balance(local staking)`, where balance includes delegations.
 This implies a slashing event on local staking must reduce collateral.
 

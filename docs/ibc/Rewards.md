@@ -92,17 +92,18 @@ solution when one exists. Hopefully this will spur deployment of such methods.
 ### ICS20 with Custom IBC Middleware
 
 With the consumer chain including the mesh-security-sdk, we have the opportunity to add a custom IBC-middleware
-to the IBC-stack for ICS-20. This middleware can be used to do callbacks to contracts on packet ack/timeout. 
+to the IBC-stack for ICS-20. This middleware can be used to do callbacks to contracts on packet ack/timeout.
 The process would be:
-* Contract sends ICS-20 message and register for a callback on the IBC packet ID (via custom message)
-* All metadata is stored on chain only and not relayed
-* When the packet is ACKed/timeout, the contract receives the callback from the middleware (after the ICS-20 module) with the ack/timeout data
-* When there is confidence that the ICS-20 operation succeeded, the contract can trigger the reward distribution work with the callback
+
+- Contract sends ICS-20 message and register for a callback on the IBC packet ID (via custom message)
+- All metadata is stored on chain only and not relayed
+- When the packet is ACKed/timeout, the contract receives the callback from the middleware (after the ICS-20 module) with the ack/timeout data
+- When there is confidence that the ICS-20 operation succeeded, the contract can trigger the reward distribution work with the callback
 
 Note: the callback execution must not fail to not interfere with the ack/timeout process
 
-The benefit of this solution is that it is not depending on other technology. IBC-middleware and callback registration would 
-be provided and maintained by the mesh-security-sdk project. 
+The benefit of this solution is that it is not depending on other technology. IBC-middleware and callback registration would
+be provided and maintained by the mesh-security-sdk project.
 We also have a [vertical spike](https://github.com/CosmWasm/wasmd/pull/1368) for this use case.
 
 This can be added to both of the above approaches in order to remove some of the issues.
@@ -127,7 +128,7 @@ it will send a packet to the consumer chain over the control channel to release 
 
 This approach is basically like an embedded ICS20 inside the mesh protocol, but it doesn't issue any tokens or provide fungibility
 on the provider chain. This reduces the complexity as we only have one channel and packet and don't need to orchestrate multiple
-packets over multiple channels. 
+packets over multiple channels.
 
 The biggest question is whether the functionality change is acceptable (or even desirable). Note that this will make restaking the
 reward tokens easier, while making selling them on the provider chain harder. This may be a good thing (in the eyes of the
