@@ -39,8 +39,6 @@ pub struct StakesResponse {
 /// Message to be send as `msg` field on `receive_virtual_staking`
 #[cw_serde]
 pub struct ReceiveVirtualStake {
-    /// Associated transaction id
-    pub tx: u64,
     pub validator: String,
 }
 
