@@ -264,11 +264,22 @@ mod tests_plus {
     }
 
     #[derive(Error, Debug, PartialEq)]
-    pub enum PersonError {
+    pub enum TestsError {
         #[error("{0}")]
         Std(#[from] StdError),
         #[error("{0}")]
         Lock(#[from] LockError),
+    }
+
+    #[cw_serde]
+    #[derive(Default)]
+    pub struct UserInfo {
+        // User collateral
+        pub collateral: Uint128,
+        // Highest user lien
+        pub max_lien: Uint128,
+        // Total slashable amount for user
+        pub total_slashable: Uint128,
     }
 
     #[test]
@@ -285,7 +296,7 @@ mod tests_plus {
         PERSON
             .update(&mut store, |mut p| {
                 p.write()?.age += 1;
-                Ok::<_, PersonError>(p)
+                Ok::<_, TestsError>(p)
             })
             .unwrap();
 
@@ -294,7 +305,7 @@ mod tests_plus {
             .update(&mut store, |mut p| {
                 assert_eq!(p.read()?.age, 33);
                 p.lock_read()?;
-                Ok::<_, PersonError>(p)
+                Ok::<_, TestsError>(p)
             })
             .unwrap();
 
@@ -312,7 +323,7 @@ mod tests_plus {
             .update(&mut store, |mut p| {
                 p.write()?.age += 1;
                 assert_eq!(p.read()?.age, 34);
-                Ok::<_, PersonError>(p)
+                Ok::<_, TestsError>(p)
             })
             .unwrap();
     }
@@ -332,7 +343,7 @@ mod tests_plus {
         AGES.update(&mut store, "John", |p| {
             let mut p = p.unwrap_or_default();
             *p.write()? += Uint128::new(1);
-            Ok::<_, PersonError>(p)
+            Ok::<_, TestsError>(p)
         })
         .unwrap();
 
@@ -340,7 +351,7 @@ mod tests_plus {
         AGES.update(&mut store, "Wilber", |p| {
             let mut p = p.unwrap_or_default();
             *p.write()? += Uint128::new(2);
-            Ok::<_, PersonError>(p)
+            Ok::<_, TestsError>(p)
         })
         .unwrap();
 
@@ -348,7 +359,7 @@ mod tests_plus {
         let total_age = AGES
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
             .fold(Ok(Uint128::zero()), |sum, item| {
-                Ok::<_, PersonError>(sum? + *item?.1.read()?)
+                Ok::<_, TestsError>(sum? + *item?.1.read()?)
             })
             .unwrap();
         assert_eq!(total_age, Uint128::new(33 + 47 + 2));
@@ -369,16 +380,16 @@ mod tests_plus {
             .update(&mut store, "John", |p| {
                 let mut p = p.unwrap_or_default();
                 *p.write()? += Uint128::new(1);
-                Ok::<_, PersonError>(p)
+                Ok::<_, TestsError>(p)
             })
             .unwrap_err();
-        assert_eq!(err, PersonError::Lock(LockError::ReadLocked));
+        assert_eq!(err, TestsError::Lock(LockError::ReadLocked));
 
         // We can still range over all
         let total_age = AGES
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
             .fold(Ok(Uint128::zero()), |sum, item| {
-                Ok::<_, PersonError>(sum? + *item?.1.read()?)
+                Ok::<_, TestsError>(sum? + *item?.1.read()?)
             })
             .unwrap();
         assert_eq!(total_age, Uint128::new(33 + 47 + 2));
@@ -398,15 +409,149 @@ mod tests_plus {
         let err = AGES
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
             .fold(Ok(Uint128::zero()), |sum, item| {
-                Ok::<_, PersonError>(sum? + *item?.1.read()?)
+                Ok::<_, TestsError>(sum? + *item?.1.read()?)
             })
             .unwrap_err();
-        assert_eq!(err, PersonError::Lock(LockError::WriteLocked));
+        assert_eq!(err, TestsError::Lock(LockError::WriteLocked));
 
         // We can get count (kind of edge case bug, but I don't think we can change this or it matters)
         let num_people = AGES
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
             .count();
         assert_eq!(num_people, 3);
+    }
+
+    #[test]
+    fn map_methods_with_locked_struct() {
+        let mut store = MockStorage::new();
+        const USERS: Map<&str, Lockable<UserInfo>> = Map::new("users");
+
+        // add a few people
+        USERS
+            .save(
+                &mut store,
+                "John",
+                &Lockable::new(UserInfo {
+                    collateral: Default::default(),
+                    max_lien: Default::default(),
+                    total_slashable: Default::default(),
+                }),
+            )
+            .unwrap();
+        USERS
+            .save(
+                &mut store,
+                "Maria",
+                &Lockable::new(UserInfo {
+                    collateral: Uint128::new(1),
+                    max_lien: Uint128::new(2),
+                    total_slashable: Uint128::new(3),
+                }),
+            )
+            .unwrap();
+
+        // Update works on new values, setting to unlocked by default
+        USERS
+            .update(&mut store, "Wilber", |p| {
+                let mut p = p.unwrap_or_default();
+                *p.write()? = UserInfo {
+                    collateral: Uint128::new(4),
+                    max_lien: Uint128::new(5),
+                    total_slashable: Uint128::new(6),
+                };
+                Ok::<_, TestsError>(p)
+            })
+            .unwrap();
+
+        // Read-lock John
+        let mut j = USERS.load(&store, "John").unwrap();
+        j.lock_read().unwrap();
+        USERS.save(&mut store, "John", &j).unwrap();
+
+        // We can still range over all
+        let total_collateral = USERS
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .fold(Ok(Uint128::zero()), |sum, item| {
+                Ok::<_, TestsError>(sum? + item?.1.read()?.collateral)
+            })
+            .unwrap();
+        assert_eq!(total_collateral, Uint128::new(1 + 4));
+
+        // We can get count
+        let num_users = USERS
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .count();
+        assert_eq!(num_users, 3);
+
+        // Write-lock Wilber
+        let mut w = USERS.load(&store, "Wilber").unwrap();
+        w.lock_write().unwrap();
+        USERS.save(&mut store, "Wilber", &w).unwrap();
+
+        // We cannot range over all
+        let err = USERS
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .fold(Ok(Uint128::zero()), |sum, item| {
+                Ok::<_, TestsError>(sum? + item?.1.read()?.max_lien)
+            })
+            .unwrap_err();
+        assert_eq!(err, TestsError::Lock(LockError::WriteLocked));
+
+        // We cannot range and map over all values either
+        let err = USERS
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .map(|item| {
+                let (_, user_lock) = item?;
+                let user = user_lock.read()?;
+                Ok(user.collateral)
+            })
+            .collect::<Result<Vec<_>, TestsError>>()
+            .unwrap_err();
+        assert_eq!(err, TestsError::Lock(LockError::WriteLocked));
+
+        // But we can re-map (perhaps not a good idea) the write-locked values
+        let collaterals = USERS
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .map(|item| {
+                let (_, user_lock) = item?;
+                let res = user_lock.read();
+                match res {
+                    Ok(user) => Ok(user.collateral),
+                    Err(LockError::WriteLocked) => Ok(Uint128::zero()),
+                    Err(e) => Err(e.into()),
+                }
+            })
+            .collect::<Result<Vec<_>, TestsError>>()
+            .unwrap();
+        assert_eq!(collaterals.len(), 3);
+
+        // Or we can skip (perhaps not a good idea either) the write-locked values
+        let collaterals = USERS
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .filter(|item| match item {
+                Ok((_, user_lock)) => {
+                    let res = user_lock.read();
+                    match res {
+                        Ok(_) => true,
+                        Err(LockError::WriteLocked) => false,
+                        Err(_) => true,
+                    }
+                }
+                Err(_) => true,
+            })
+            .map(|item| {
+                let (_, user_lock) = item?;
+                let user = user_lock.read()?;
+                Ok(user.collateral)
+            })
+            .collect::<Result<Vec<_>, TestsError>>()
+            .unwrap();
+        assert_eq!(collaterals.len(), 2);
+
+        // We can get count (kind of edge case bug, but I don't think we can change this or it matters)
+        let num_users = USERS
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .count();
+        assert_eq!(num_users, 3);
     }
 }
