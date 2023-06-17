@@ -510,32 +510,32 @@ mod tests_plus {
         assert_eq!(err, TestsError::Lock(LockError::WriteLocked));
 
         // But we can re-map (perhaps not a good idea) the write-locked values
-        let collaterals = USERS
+        let collaterals: Vec<_> = USERS
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
             .map(|item| {
                 item.map(|(_, user_lock)| {
                     user_lock
                         .read()
                         .map(|user| Ok(user.collateral))
-                        .unwrap_or(Ok(Uint128::zero()))
-                })?
+                        .unwrap_or(Ok(Uint128::zero())) // Re-map locked collateral
+                })? // Surface errors
             })
-            .collect::<Result<Vec<_>, TestsError>>()
+            .collect::<Result<_, TestsError>>()
             .unwrap();
         assert_eq!(collaterals.len(), 3);
 
         // Or we can skip (perhaps not a good idea either) the write-locked values
-        let collaterals = USERS
+        let collaterals: Vec<_> = USERS
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
             .filter(|item| {
                 item.as_ref()
-                    .map(|(_, user_lock)| user_lock.read().map(|_| true).unwrap_or(false))
-                    .unwrap_or(true)
+                    .map(|(_, user_lock)| user_lock.read().map(|_| true).unwrap_or(false)) // Filter locked values
+                    .unwrap_or(true) // Surface other errors
             })
             .map(|item| {
                 item.map(|(_, user_lock)| user_lock.read().map(|user| Ok(user.collateral))?)?
             })
-            .collect::<Result<Vec<_>, TestsError>>()
+            .collect::<Result<_, TestsError>>()
             .unwrap();
         assert_eq!(collaterals.len(), 2);
 
