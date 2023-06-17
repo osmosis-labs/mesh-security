@@ -513,13 +513,12 @@ mod tests_plus {
         let collaterals = USERS
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
             .map(|item| {
-                let (_, user_lock) = item?;
-                let res = user_lock.read();
-                match res {
-                    Ok(user) => Ok(user.collateral),
-                    Err(LockError::WriteLocked) => Ok(Uint128::zero()),
-                    Err(e) => Err(e.into()),
-                }
+                item.map(|(_, user_lock)| {
+                    user_lock
+                        .read()
+                        .map(|user| Ok(user.collateral))
+                        .unwrap_or(Ok(Uint128::zero()))
+                })?
             })
             .collect::<Result<Vec<_>, TestsError>>()
             .unwrap();
@@ -534,9 +533,7 @@ mod tests_plus {
                     .unwrap_or(true)
             })
             .map(|item| {
-                let (_, user_lock) = item?;
-                let user = user_lock.read()?;
-                Ok(user.collateral)
+                item.map(|(_, user_lock)| user_lock.read().map(|user| Ok(user.collateral))?)?
             })
             .collect::<Result<Vec<_>, TestsError>>()
             .unwrap();
