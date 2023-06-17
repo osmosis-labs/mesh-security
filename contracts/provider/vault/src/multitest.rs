@@ -906,19 +906,16 @@ fn stake_cross_txs() {
         coin(800, OSMO)
     );
     // Can query all accounts, but locked ones are not returned
-    // FIXME: range() fails with ParseError!
-    // let accounts = vault.all_accounts(false, None, None).unwrap();
-    // assert_eq!(
-    //     accounts.accounts,
-    //     [AllAccountsResponseItem {
-    //         account: user2.to_string(),
-    //         denom: OSMO.to_owned(),
-    //         bonded: Uint128::new(500),
-    //         free: Uint128::new(400),
-    //     }]
-    // );
-    let err = vault.all_accounts(false, None, None).unwrap_err();
-    println!("err: {:#?}", err);
+    let accounts = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [AllAccountsResponseItem {
+            account: user2.to_string(),
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(500),
+            free: Uint128::new(400),
+        }]
+    );
 
     // Can query the other account
     let acc = vault.account(user2.to_owned()).unwrap();

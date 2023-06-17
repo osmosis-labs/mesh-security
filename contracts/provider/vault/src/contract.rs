@@ -359,21 +359,19 @@ impl VaultContract<'_> {
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
 
-        let accounts = self
+        let accounts: Vec<_> = self
             .users
             .range(ctx.deps.storage, bound, None, Order::Ascending)
             .filter(|account| {
-                !(with_collateral
-                    && account
-                        .as_ref()
-                        .map(|(_, account_lock)| {
-                            // FIXME: This skips write-locked accounts
-                            match account_lock.read() {
-                                Ok(account) => account.collateral.is_zero(),
-                                Err(_) => true,
-                            }
-                        })
-                        .unwrap_or(false))
+                account
+                    .as_ref()
+                    .map(|(_, account_lock)| {
+                        match account_lock.read() {
+                            Ok(account) => !with_collateral || !account.collateral.is_zero(), // Skip zero collateral
+                            Err(_) => false, // Skip write-locked accounts
+                        }
+                    })
+                    .unwrap_or(false)
             })
             .map(|account| {
                 let (addr, account_lock) = account?;
@@ -386,7 +384,7 @@ impl VaultContract<'_> {
                 })
             })
             .take(limit)
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<_, ContractError>>()?;
 
         let resp = AllAccountsResponse { accounts };
 
