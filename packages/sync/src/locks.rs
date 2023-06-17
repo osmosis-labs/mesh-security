@@ -528,16 +528,10 @@ mod tests_plus {
         // Or we can skip (perhaps not a good idea either) the write-locked values
         let collaterals = USERS
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
-            .filter(|item| match item {
-                Ok((_, user_lock)) => {
-                    let res = user_lock.read();
-                    match res {
-                        Ok(_) => true,
-                        Err(LockError::WriteLocked) => false,
-                        Err(_) => true,
-                    }
-                }
-                Err(_) => true,
+            .filter(|item| {
+                item.as_ref()
+                    .map(|(_, user_lock)| user_lock.read().map(|_| true).unwrap_or(false))
+                    .unwrap_or(true)
             })
             .map(|item| {
                 let (_, user_lock) = item?;
