@@ -366,22 +366,24 @@ impl VaultContract<'_> {
                 account
                     .as_ref()
                     .map(|(_, account_lock)| {
-                        match account_lock.read() {
-                            Ok(account) => !with_collateral || !account.collateral.is_zero(), // Skip zero collateral
-                            Err(_) => false, // Skip write-locked accounts
-                        }
+                        account_lock
+                            .read()
+                            .map(|account| !with_collateral || !account.collateral.is_zero()) // Skip zero collateral
+                            .unwrap_or(false) // Skip write-locked accounts
                     })
-                    .unwrap_or(false)
+                    .unwrap_or(false) // Skip other errors
             })
             .map(|account| {
-                let (addr, account_lock) = account?;
-                let account = account_lock.read()?;
-                Ok::<AllAccountsResponseItem, ContractError>(AllAccountsResponseItem {
-                    account: addr.into(),
-                    denom: denom.clone(),
-                    bonded: account.collateral,
-                    free: account.free_collateral(),
-                })
+                account.map(|(addr, account_lock)| {
+                    account_lock.read().map(|account| {
+                        Ok(AllAccountsResponseItem {
+                            account: addr.into(),
+                            denom: denom.clone(),
+                            bonded: account.collateral,
+                            free: account.free_collateral(),
+                        })
+                    })?
+                })?
             })
             .take(limit)
             .collect::<Result<_, ContractError>>()?;
