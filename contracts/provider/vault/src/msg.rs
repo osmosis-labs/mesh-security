@@ -53,7 +53,8 @@ pub struct ConfigResponse {
     pub local_staking: String,
 }
 
-pub type AllTxsResponseItem = crate::txs::Tx;
+pub type TxResponse = crate::txs::Tx;
+pub type AllTxsResponseItem = TxResponse;
 
 #[cw_serde]
 pub struct AllTxsResponse {

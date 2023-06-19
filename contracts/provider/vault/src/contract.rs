@@ -18,7 +18,7 @@ use sylvia::{contract, schemars};
 use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
-    AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, StakingInitInfo,
+    AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, StakingInitInfo, TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::{Tx, TxType, Txs};
@@ -390,6 +390,13 @@ impl VaultContract<'_> {
 
         let resp = AllAccountsResponse { accounts };
 
+        Ok(resp)
+    }
+
+    /// Queries a pending tx.
+    #[msg(query)]
+    fn pending_tx(&self, ctx: QueryCtx, tx_id: u64) -> Result<TxResponse, ContractError> {
+        let resp = self.pending.txs.load(ctx.deps.storage, tx_id)?;
         Ok(resp)
     }
 
