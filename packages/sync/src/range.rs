@@ -129,16 +129,13 @@ where
     }
 
     /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) an addition.
-    /// It doesn't enforce any maximum value. Use `prepare_add_max` for that.
-    pub fn prepare_add(&mut self, value: T) -> Result<(), RangeError> {
-        self.1 = self.1 + value;
-        Ok(())
-    }
-
-    /// This should be used instead of prepare_add if we wish to enforce a maximum value
-    pub fn prepare_add_max(&mut self, value: T, max: T) -> Result<(), RangeError> {
-        if self.1 + value > max {
-            return Err(RangeError::Overflow);
+    /// If the last value is set, it enforces that the new maximum will remain under that limit.
+    /// Usage: `range.prepare_add(20, None)?;` or `range.prepare_add(20, 100)?;`
+    pub fn prepare_add(&mut self, value: T, max: impl Into<Option<T>>) -> Result<(), RangeError> {
+        if let Some(max) = max.into() {
+            if self.1 + value > max {
+                return Err(RangeError::Overflow);
+            }
         }
         self.1 = self.1 + value;
         Ok(())
@@ -158,24 +155,13 @@ where
         self.assert_valid_range();
     }
 
-    /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) a subtraction.
-    /// It assumes we are enforcing a minimum value of 0. If you want a different minimum, use `prepare_sub_min`
-    pub fn prepare_sub(&mut self, value: T) -> Result<(), RangeError> {
-        if self.0 < value {
-            return Err(RangeError::Underflow);
-        }
-        self.0 = self.0 - value;
-        Ok(())
-    }
-
-    /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) a subtraction.
-    /// You can specify a minimum value that the range must never go below. If you pass `None`, it will not even enforce
-    /// a minimum of 0.
-    pub fn prepare_sub_min(
-        &mut self,
-        value: T,
-        min: impl Into<Option<T>>,
-    ) -> Result<(), RangeError> {
+    /// This is to be called at the beginning of a transaction, to reserve the ability to commit
+    /// (or rollback) a subtraction.
+    /// You can specify a minimum value that the range must never go below, which is enforced here.
+    /// No minimum: `range.prepare_sub(20, None)?;`
+    /// Minimum of 0 (for uints): `range.prepare_sub(20, 0)?;`
+    /// Higher minimum :  `range.prepare_sub(20, 100)?;`
+    pub fn prepare_sub(&mut self, value: T, min: impl Into<Option<T>>) -> Result<(), RangeError> {
         if let Some(min) = min.into() {
             // use plus not minus here, as we are much more likely to have underflow on u64 or Uint128 than overflow
             if self.0 < min + value {
@@ -241,7 +227,7 @@ mod tests {
         assert!(range.is_over_min(49));
 
         // make a range (50, 80), it should compare properly to those outside the range
-        range.prepare_add(30).unwrap();
+        range.prepare_add(30, None).unwrap();
         assert!(!range.is_under_max(49));
         assert!(range.is_over_min(49));
         assert!(range.is_under_max(81));
@@ -256,11 +242,11 @@ mod tests {
     fn add_ranges() {
         // (80, 120)
         let mut range = ValueRange::new(80);
-        range.prepare_add(40).unwrap();
+        range.prepare_add(40, None).unwrap();
 
         // (100, 200)
         let mut other = ValueRange::new(200);
-        other.prepare_sub(100).unwrap();
+        other.prepare_sub(100, 0).unwrap();
 
         let total = range + other;
         assert_eq!(total, ValueRange(180, 320));
@@ -305,11 +291,13 @@ mod tests {
     fn works_with_uint128() {
         // (80, 120)
         let mut range = ValueRange::new(Uint128::new(80));
-        range.prepare_add(Uint128::new(40)).unwrap();
+        range.prepare_add(Uint128::new(40), None).unwrap();
 
         // (100, 200)
         let mut other = ValueRange::new(Uint128::new(200));
-        other.prepare_sub(Uint128::new(100)).unwrap();
+        other
+            .prepare_sub(Uint128::new(100), Uint128::zero())
+            .unwrap();
 
         let total = range + other;
         assert_eq!(total, ValueRange(Uint128::new(180), Uint128::new(320)));
@@ -327,11 +315,11 @@ mod tests {
         let mut lien = ValueRange::new(0u64);
 
         // prepare some lien
-        lien.prepare_add_max(2_000, collateral).unwrap();
-        lien.prepare_add_max(5_000, collateral).unwrap();
+        lien.prepare_add(2_000, collateral).unwrap();
+        lien.prepare_add(5_000, collateral).unwrap();
 
         // cannot add too much
-        let err = lien.prepare_add_max(3_500, collateral).unwrap_err();
+        let err = lien.prepare_add(3_500, collateral).unwrap_err();
         assert_eq!(err, RangeError::Overflow);
 
         // let's commit the second pending lien (only 2000 left)
@@ -346,15 +334,15 @@ mod tests {
         collateral -= 2_000;
 
         // start unbonding 3_000
-        lien.prepare_sub(3_000).unwrap();
+        lien.prepare_sub(3_000, 0).unwrap();
         // still; cannot increase max (7_000) over the new cap of 8_000
-        let err = lien.prepare_add_max(1_500, collateral).unwrap_err();
+        let err = lien.prepare_add(1_500, collateral).unwrap_err();
         assert_eq!(err, RangeError::Overflow);
 
         // if we rollback the other pending lien, this works
         lien.rollback_add(2_000);
         assert_eq!(lien, ValueRange(2_000, 5_000));
-        lien.prepare_add_max(1_500, collateral).unwrap();
+        lien.prepare_add(1_500, collateral).unwrap();
     }
 
     // idea here is to model the liens as in vault, and ensure we can calculate aggregates over them properly
