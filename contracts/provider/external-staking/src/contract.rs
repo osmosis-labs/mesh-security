@@ -39,7 +39,7 @@ pub struct ExternalStakingContract<'a> {
     // Stakes indexed by `(owner, validator)` pair
     pub stakes: Map<'a, (&'a Addr, &'a str), Lockable<Stake>>,
     // Per-validator distribution information
-    pub distribution: Map<'a, &'a str, Distribution>,
+    pub distribution: Map<'a, &'a str, Lockable<Distribution>>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -106,14 +106,16 @@ impl ExternalStakingContract<'_> {
             .stakes
             .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
             .unwrap_or_default();
-        let stake = stake_lock.write()?;
+        let stake = stake_lock.read()?;
 
-        let mut distribution = self.distribution.load(ctx.deps.storage, &validator)?;
+        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &validator)?;
+        let distribution = distribution_lock.write()?;
 
         ensure!(
             stake.stake >= amount.amount,
             ContractError::NotEnoughStake(stake.stake)
         );
+        let stake = stake_lock.write()?;
 
         stake.stake -= amount.amount;
 
@@ -138,7 +140,7 @@ impl ExternalStakingContract<'_> {
         )?;
 
         self.distribution
-            .save(ctx.deps.storage, &validator, &distribution)?;
+            .save(ctx.deps.storage, &validator, &distribution_lock)?;
 
         // TODO:
         //
@@ -216,10 +218,11 @@ impl ExternalStakingContract<'_> {
         let config = self.config.load(ctx.deps.storage)?;
         let amount = must_pay(&ctx.info, &config.rewards_denom)?;
 
-        let mut distribution = self
+        let mut distribution_lock = self
             .distribution
             .may_load(ctx.deps.storage, &validator)?
             .unwrap_or_default();
+        let mut distribution = distribution_lock.write()?;
 
         let total_stake = Uint256::from(distribution.total_stake);
         let points_distributed =
@@ -230,7 +233,7 @@ impl ExternalStakingContract<'_> {
         distribution.points_per_stake += points_per_stake;
 
         self.distribution
-            .save(ctx.deps.storage, &validator, &distribution)?;
+            .save(ctx.deps.storage, &validator, &distribution_lock)?;
 
         let resp = Response::new()
             .add_attribute("action", "distribute_rewards")
@@ -255,12 +258,13 @@ impl ExternalStakingContract<'_> {
 
         let stake = stake_lock.write()?;
 
-        let distribution = self
+        let mut distribution_lock = self
             .distribution
             .may_load(ctx.deps.storage, &validator)?
             .unwrap_or_default();
+        let distribution = distribution_lock.write()?;
 
-        let amount = Self::calculate_reward(stake, &distribution)?;
+        let amount = Self::calculate_reward(stake, distribution)?;
 
         let mut resp = Response::new()
             .add_attribute("action", "withdraw_rewards")
@@ -400,12 +404,13 @@ impl ExternalStakingContract<'_> {
             .unwrap_or_default();
         let stake = stake_lock.read()?;
 
-        let distribution = self
+        let distribution_lock = self
             .distribution
             .may_load(ctx.deps.storage, &validator)?
             .unwrap_or_default();
+        let distribution = distribution_lock.read()?;
 
-        let amount = Self::calculate_reward(stake, &distribution)?;
+        let amount = Self::calculate_reward(stake, distribution)?;
         let config = self.config.load(ctx.deps.storage)?;
 
         let resp = PendingRewards {
@@ -469,10 +474,11 @@ pub mod cross_staking {
                 .may_load(ctx.deps.storage, (&owner, &msg.validator))?
                 .unwrap_or_default();
 
-            let mut distribution = self
+            let mut distribution_lock = self
                 .distribution
                 .may_load(ctx.deps.storage, &msg.validator)?
                 .unwrap_or_default();
+            let distribution = distribution_lock.write()?;
 
             let stake = stake_lock.write()?;
 
@@ -488,7 +494,7 @@ pub mod cross_staking {
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake_lock)?;
 
             self.distribution
-                .save(ctx.deps.storage, &msg.validator, &distribution)?;
+                .save(ctx.deps.storage, &msg.validator, &distribution_lock)?;
 
             // TODO: Send proper IBC message to remote staking contract
 
