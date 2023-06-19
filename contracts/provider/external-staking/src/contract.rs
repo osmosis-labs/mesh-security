@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     coin, coins, ensure, ensure_eq, from_binary, Addr, BankMsg, Binary, Coin, Decimal, Order,
-    Response, StdResult, Uint128, Uint256,
+    Response, Uint128, Uint256,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -8,6 +8,7 @@ use cw_utils::must_pay;
 use mesh_apis::cross_staking_api::{self, CrossStakingApi};
 use mesh_apis::local_staking_api::MaxSlashResponse;
 use mesh_apis::vault_api::VaultApiHelper;
+use mesh_sync::Lockable;
 
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
@@ -36,7 +37,7 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
 pub struct ExternalStakingContract<'a> {
     pub config: Item<'a, Config>,
     // Stakes indexed by `(owner, validator)` pair
-    pub stakes: Map<'a, (&'a Addr, &'a str), Stake>,
+    pub stakes: Map<'a, (&'a Addr, &'a str), Lockable<Stake>>,
     // Per-validator distribution information
     pub distribution: Map<'a, &'a str, Distribution>,
 }
@@ -101,10 +102,11 @@ impl ExternalStakingContract<'_> {
             ContractError::InvalidDenom(config.denom)
         );
 
-        let mut stake = self
+        let mut stake_lock = self
             .stakes
             .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
             .unwrap_or_default();
+        let stake = stake_lock.write()?;
 
         let mut distribution = self.distribution.load(ctx.deps.storage, &validator)?;
 
@@ -128,8 +130,12 @@ impl ExternalStakingContract<'_> {
             .stake_decreased(amount.amount, distribution.points_per_stake);
         distribution.total_stake -= amount.amount;
 
-        self.stakes
-            .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?;
+        stake_lock.lock_write()?;
+        self.stakes.save(
+            ctx.deps.storage,
+            (&ctx.info.sender, &validator),
+            &stake_lock,
+        )?;
 
         self.distribution
             .save(ctx.deps.storage, &validator, &distribution)?;
@@ -154,20 +160,24 @@ impl ExternalStakingContract<'_> {
     pub fn withdraw_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
 
-        let stakes: Vec<_> = self
+        let stake_locks: Vec<_> = self
             .stakes
             .prefix(&ctx.info.sender)
             .range(ctx.deps.storage, None, None, Order::Ascending)
             .collect::<Result<_, _>>()?;
 
-        let released: Uint128 = stakes
+        let released: Uint128 = stake_locks
             .into_iter()
-            .map(|(validator, mut stake)| -> StdResult<_> {
+            .map(|(validator, mut stake_lock)| -> Result<_, ContractError> {
+                let stake = stake_lock.write()?;
                 let released = stake.release_pending(&ctx.env.block);
 
                 if !released.is_zero() {
-                    self.stakes
-                        .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?
+                    self.stakes.save(
+                        ctx.deps.storage,
+                        (&ctx.info.sender, &validator),
+                        &stake_lock,
+                    )?
                 }
 
                 Ok(released)
@@ -238,17 +248,19 @@ impl ExternalStakingContract<'_> {
         ctx: ExecCtx,
         validator: String,
     ) -> Result<Response, ContractError> {
-        let mut stake = self
+        let mut stake_lock = self
             .stakes
             .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
             .unwrap_or_default();
+
+        let stake = stake_lock.write()?;
 
         let distribution = self
             .distribution
             .may_load(ctx.deps.storage, &validator)?
             .unwrap_or_default();
 
-        let amount = Self::calculate_reward(&stake, &distribution)?;
+        let amount = Self::calculate_reward(stake, &distribution)?;
 
         let mut resp = Response::new()
             .add_attribute("action", "withdraw_rewards")
@@ -259,8 +271,11 @@ impl ExternalStakingContract<'_> {
         if !amount.is_zero() {
             stake.withdrawn_funds += amount;
 
-            self.stakes
-                .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?;
+            self.stakes.save(
+                ctx.deps.storage,
+                (&ctx.info.sender, &validator),
+                &stake_lock,
+            )?;
 
             let config = self.config.load(ctx.deps.storage)?;
             let send_msg = BankMsg::Send {
@@ -323,11 +338,12 @@ impl ExternalStakingContract<'_> {
         validator: String,
     ) -> Result<Stake, ContractError> {
         let user = ctx.deps.api.addr_validate(&user)?;
-        let stake = self
+        let stake_lock = self
             .stakes
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
-        Ok(stake)
+        let stake = stake_lock.read()?;
+        Ok(stake.clone())
     }
 
     /// Paginated list of user stakes.
@@ -351,11 +367,13 @@ impl ExternalStakingContract<'_> {
             .prefix(&user)
             .range(ctx.deps.storage, bound, None, Order::Ascending)
             .map(|item| {
-                item.map(|(validator, stake)| StakeInfo {
-                    owner: user.to_string(),
-                    validator,
-                    stake: stake.stake,
-                })
+                item.map(|(validator, stake_lock)| {
+                    Ok::<StakeInfo, ContractError>(StakeInfo {
+                        owner: user.to_string(),
+                        validator,
+                        stake: stake_lock.read()?.stake,
+                    })
+                })?
             })
             .take(limit)
             .collect::<Result<_, _>>()?;
@@ -376,17 +394,18 @@ impl ExternalStakingContract<'_> {
     ) -> Result<PendingRewards, ContractError> {
         let user = ctx.deps.api.addr_validate(&user)?;
 
-        let stake = self
+        let stake_lock = self
             .stakes
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
+        let stake = stake_lock.read()?;
 
         let distribution = self
             .distribution
             .may_load(ctx.deps.storage, &validator)?
             .unwrap_or_default();
 
-        let amount = Self::calculate_reward(&stake, &distribution)?;
+        let amount = Self::calculate_reward(stake, &distribution)?;
         let config = self.config.load(ctx.deps.storage)?;
 
         let resp = PendingRewards {
@@ -445,7 +464,7 @@ pub mod cross_staking {
             let owner = ctx.deps.api.addr_validate(&owner)?;
 
             let msg: ReceiveVirtualStake = from_binary(&msg)?;
-            let mut stake = self
+            let mut stake_lock = self
                 .stakes
                 .may_load(ctx.deps.storage, (&owner, &msg.validator))?
                 .unwrap_or_default();
@@ -454,6 +473,8 @@ pub mod cross_staking {
                 .distribution
                 .may_load(ctx.deps.storage, &msg.validator)?
                 .unwrap_or_default();
+
+            let stake = stake_lock.write()?;
 
             stake.stake += amount.amount;
 
@@ -464,12 +485,14 @@ pub mod cross_staking {
             distribution.total_stake += amount.amount;
 
             self.stakes
-                .save(ctx.deps.storage, (&owner, &msg.validator), &stake)?;
+                .save(ctx.deps.storage, (&owner, &msg.validator), &stake_lock)?;
 
             self.distribution
                 .save(ctx.deps.storage, &msg.validator, &distribution)?;
 
             // TODO: Send proper IBC message to remote staking contract
+
+            // TODO? Update tx state in vault
 
             let resp = Response::new()
                 .add_attribute("action", "receive_virtual_stake")
