@@ -116,15 +116,16 @@ impl<T> ValueRange<T>
 where
     T: Add<Output = T> + Sub<Output = T> + Ord + Copy,
 {
-    /// This is a check for calling code if it wishes to change the (externally defined) maximum for the range.
-    /// Usage is eg modifying collateral while the range is total liens on the collateral
-    pub fn valid_max(&self, new_max: T) -> bool {
-        self.1 <= new_max
+    /// Returns true iff all values of the range are <= max.
+    /// This can be used to assert invariants
+    pub fn is_under_max(&self, max: T) -> bool {
+        self.1 <= max
     }
 
-    /// This is a check for calling code if it wishes to change the (externally defined) minimum for the range.
-    pub fn valid_min(&self, new_min: T) -> bool {
-        self.0 >= new_min
+    /// Returns true iff all values of the range are >= min.
+    /// This can be used to assert invariants
+    pub fn is_over_min(&self, min: T) -> bool {
+        self.0 >= min
     }
 
     /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) an addition.
@@ -230,25 +231,25 @@ mod tests {
         // check for one point - it behaves like an integer
         let mut range = ValueRange::new(50);
         // valid_min + valid_max is like equals
-        assert!(range.valid_max(50));
-        assert!(range.valid_min(50));
-        // valid_max + !valid_min is >=
-        assert!(range.valid_max(51));
-        assert!(!range.valid_min(51));
-        // valid_min + !valid_max is <=
-        assert!(!range.valid_max(49));
-        assert!(range.valid_min(49));
+        assert!(range.is_under_max(50));
+        assert!(range.is_over_min(50));
+        // is_under_max + !is_over_min is >=
+        assert!(range.is_under_max(51));
+        assert!(!range.is_over_min(51));
+        // is_over_min + !is_under_max is <=
+        assert!(!range.is_under_max(49));
+        assert!(range.is_over_min(49));
 
         // make a range (50, 80), it should compare properly to those outside the range
         range.prepare_add(30).unwrap();
-        assert!(!range.valid_max(49));
-        assert!(range.valid_min(49));
-        assert!(range.valid_max(81));
-        assert!(!range.valid_min(81));
+        assert!(!range.is_under_max(49));
+        assert!(range.is_over_min(49));
+        assert!(range.is_under_max(81));
+        assert!(!range.is_over_min(81));
 
         // all comparisons inside the range lead to false
-        assert!(!range.valid_max(60));
-        assert!(!range.valid_min(60));
+        assert!(!range.is_under_max(60));
+        assert!(!range.is_over_min(60));
     }
 
     #[test]
@@ -339,9 +340,9 @@ mod tests {
         assert_eq!(lien, ValueRange(5_000, 7_000));
 
         // See we cannot reduce this by 4_000
-        assert!(!lien.valid_max(collateral - 4_000));
+        assert!(!lien.is_under_max(collateral - 4_000));
         // See we can reduce this by 2_000
-        assert!(lien.valid_max(collateral - 2_000));
+        assert!(lien.is_under_max(collateral - 2_000));
         collateral -= 2_000;
 
         // start unbonding 3_000
@@ -375,9 +376,10 @@ mod tests {
             max_lien,
             ValueRange(Uint128::new(5000), Uint128::new(12000))
         );
-        // test if this is less than some collateral
-        assert!(max_lien.valid_max(Uint128::new(15000)));
-        assert!(!max_lien.valid_max(Uint128::new(11000)));
+        // check if this is less than some collateral
+        assert!(max_lien.is_under_max(Uint128::new(15000)));
+        assert!(max_lien.is_under_max(Uint128::new(12000)));
+        assert!(!max_lien.is_under_max(Uint128::new(11900)));
 
         // max slashable is a sum of all liens * slash_rate
         let max_slashable: ValueRange<Uint128> = liens.iter().map(|l| l * slash_rate).sum();
@@ -385,9 +387,13 @@ mod tests {
             max_slashable,
             ValueRange(Uint128::new(1000), Uint128::new(2700))
         );
-        // test if this is less than some collateral
-        assert!(max_slashable.valid_max(Uint128::new(5000)));
-        assert!(!max_slashable.valid_max(Uint128::new(2000)));
+        // check if this is less than some collateral
+        assert!(max_slashable.is_under_max(Uint128::new(5000)));
+        assert!(!max_slashable.is_under_max(Uint128::new(2600)));
+
+        // check if this is over some limit or not
+        assert!(max_slashable.is_over_min(Uint128::new(1000)));
+        assert!(!max_slashable.is_over_min(Uint128::new(1100)));
 
         // we can also see the aggregate range (not needed here, but let's check anyway)
         let lien_spread = spread(liens.iter());
