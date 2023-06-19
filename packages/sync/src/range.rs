@@ -9,7 +9,11 @@ use cosmwasm_schema::cw_serde;
 /// This is designed to work with two numeric primitives that can be added, subtracted, and compared.
 #[cw_serde]
 #[derive(Default, Copy)]
-pub struct ValueRange<T>(T, T);
+// Note: this was (T, T) but (Uint128, Uint128) hit `serialize_tuple_struct` which is not supported by serde-json-wasm
+pub struct ValueRange<T> {
+    min: T,
+    max: T,
+}
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum RangeError {
@@ -19,57 +23,69 @@ pub enum RangeError {
     Overflow,
 }
 
+impl<T> ValueRange<T> {
+    /// Constructor as close to the old tuple
+    /// ValueRange(5, 10) => ValueRange::at(5, 10)
+    pub fn at(min: T, max: T) -> Self {
+        Self { min, max }
+    }
+}
+
 impl<T> ValueRange<T>
 where
     T: Copy,
 {
     pub fn new(value: T) -> Self {
-        Self(value, value)
+        Self {
+            min: value,
+            max: value,
+        }
     }
 
     pub fn min(&self) -> T {
-        self.0
+        self.min
     }
 
     pub fn max(&self) -> T {
-        self.1
+        self.max
     }
 }
 
+pub fn max_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRange<T> {
+    ValueRange {
+        min: std::cmp::max(a.min(), b.min()),
+        max: std::cmp::max(a.max(), b.max()),
+    }
+}
+
+// TODO: deprecate this?
 /// Problem: We have a list of ValueRanges, and we want to know the maximum value.
 /// This is not one clear value, as we consider the maximum if all commit and maximum if all rollback.
 /// The result is the range of possible maximum values (different than spread)  
-pub fn max_range<'a, I, T>(iter: I) -> ValueRange<T>
+pub fn reduce_max_range<'a, I, T>(iter: I) -> ValueRange<T>
 where
     I: Iterator<Item = &'a ValueRange<T>> + 'a,
     T: Ord + Copy + Default + 'a,
 {
-    iter.copied()
-        .reduce(|acc, x| {
-            ValueRange(
-                std::cmp::max(acc.min(), x.min()),
-                std::cmp::max(acc.max(), x.max()),
-            )
-        })
-        .unwrap_or_default()
+    iter.copied().reduce(max_range).unwrap_or_default()
+}
+
+pub fn min_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRange<T> {
+    ValueRange {
+        min: std::cmp::min(a.min(), b.min()),
+        max: std::cmp::min(a.max(), b.max()),
+    }
 }
 
 /// Problem: We have a list of ValueRanges, and we want to know the minimum value.
 /// This is not one clear value, as we consider the minimum if all commit and minimum if all rollback.
 /// The result is the range of possible minimum values (different than spread)  
-pub fn min_range<'a, I, T>(iter: I) -> ValueRange<T>
+pub fn reduce_min_range<'a, I, T>(iter: I) -> ValueRange<T>
 where
     I: Iterator<Item = &'a ValueRange<T>> + 'a,
     T: Ord + Copy + Default + 'a,
 {
-    iter.copied()
-        .reduce(|acc, x| {
-            ValueRange(
-                std::cmp::min(acc.min(), x.min()),
-                std::cmp::min(acc.max(), x.max()),
-            )
-        })
-        .unwrap_or_default()
+    iter.copied().reduce(min_range).unwrap_or_default()
 }
 
 /// Captures the spread from the lowest low to the highest high
@@ -79,11 +95,9 @@ where
     T: Ord + Copy + Default + 'a,
 {
     iter.copied()
-        .reduce(|acc, x| {
-            ValueRange(
-                std::cmp::min(acc.min(), x.min()),
-                std::cmp::max(acc.max(), x.max()),
-            )
+        .reduce(|a, b| ValueRange {
+            min: std::cmp::min(a.min(), b.min()),
+            max: std::cmp::max(a.max(), b.max()),
         })
         .unwrap_or_default()
 }
@@ -96,7 +110,7 @@ where
     type Output = ValueRange<T>;
 
     fn mul(self, rhs: U) -> Self::Output {
-        ValueRange(self.0 * rhs, self.1 * rhs)
+        ValueRange::at(self.min * rhs, self.max * rhs)
     }
 }
 
@@ -108,7 +122,7 @@ where
     type Output = ValueRange<T>;
 
     fn mul(self, rhs: U) -> Self::Output {
-        ValueRange(self.0 * rhs, self.1 * rhs)
+        ValueRange::at(self.min * rhs, self.max * rhs)
     }
 }
 
@@ -119,13 +133,13 @@ where
     /// Returns true iff all values of the range are <= max.
     /// This can be used to assert invariants
     pub fn is_under_max(&self, max: T) -> bool {
-        self.1 <= max
+        self.max <= max
     }
 
     /// Returns true iff all values of the range are >= min.
     /// This can be used to assert invariants
     pub fn is_over_min(&self, min: T) -> bool {
-        self.0 >= min
+        self.min >= min
     }
 
     /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) an addition.
@@ -133,25 +147,25 @@ where
     /// Usage: `range.prepare_add(20, None)?;` or `range.prepare_add(20, 100)?;`
     pub fn prepare_add(&mut self, value: T, max: impl Into<Option<T>>) -> Result<(), RangeError> {
         if let Some(max) = max.into() {
-            if self.1 + value > max {
+            if self.max + value > max {
                 return Err(RangeError::Overflow);
             }
         }
-        self.1 = self.1 + value;
+        self.max = self.max + value;
         Ok(())
     }
 
     /// The caller should limit these to only previous `prepare_add` calls.
     /// We will panic on mistake as this should never happen
     pub fn rollback_add(&mut self, value: T) {
-        self.1 = self.1 - value;
+        self.max = self.max - value;
         self.assert_valid_range();
     }
 
     /// The caller should limit these to only previous `prepare_add` calls.
     /// We will panic on mistake as this should never happen
     pub fn commit_add(&mut self, value: T) {
-        self.0 = self.0 + value;
+        self.min = self.min + value;
         self.assert_valid_range();
     }
 
@@ -164,31 +178,31 @@ where
     pub fn prepare_sub(&mut self, value: T, min: impl Into<Option<T>>) -> Result<(), RangeError> {
         if let Some(min) = min.into() {
             // use plus not minus here, as we are much more likely to have underflow on u64 or Uint128 than overflow
-            if self.0 < min + value {
+            if self.min < min + value {
                 return Err(RangeError::Underflow);
             }
         }
-        self.0 = self.0 - value;
+        self.min = self.min - value;
         Ok(())
     }
 
     /// The caller should limit these to only previous `prepare_sub` calls.
     /// We will panic on mistake as this should never happen
     pub fn rollback_sub(&mut self, value: T) {
-        self.0 = self.0 + value;
+        self.min = self.min + value;
         self.assert_valid_range();
     }
 
     /// The caller should limit these to only previous `prepare_sub` calls.
     /// We will panic on mistake as this should never happen
     pub fn commit_sub(&mut self, value: T) {
-        self.1 = self.1 - value;
+        self.max = self.max - value;
         self.assert_valid_range();
     }
 
     #[inline]
     fn assert_valid_range(&self) {
-        assert!(self.0 <= self.1);
+        assert!(self.min <= self.max);
     }
 }
 
@@ -196,7 +210,7 @@ impl<T: Add<Output = T>> Add for ValueRange<T> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        ValueRange(self.0 + rhs.0, self.1 + rhs.1)
+        ValueRange::at(self.min + rhs.min, self.max + rhs.max)
     }
 }
 
@@ -249,41 +263,41 @@ mod tests {
         other.prepare_sub(100, 0).unwrap();
 
         let total = range + other;
-        assert_eq!(total, ValueRange(180, 320));
+        assert_eq!(total, ValueRange::at(180, 320));
     }
 
     #[test]
     fn sums() {
         let ranges = [
             ValueRange::new(100),
-            ValueRange(0, 250),
+            ValueRange::at(0, 250),
             ValueRange::new(200),
-            ValueRange(170, 380),
+            ValueRange::at(170, 380),
         ];
         let total: ValueRange<u32> = ranges.into_iter().sum();
-        assert_eq!(total, ValueRange(470, 930));
+        assert_eq!(total, ValueRange::at(470, 930));
     }
 
     #[test]
     fn min_max() {
         let ranges = [
             ValueRange::new(100),
-            ValueRange(40, 250),
+            ValueRange::at(40, 250),
             ValueRange::new(200),
-            ValueRange(170, 380),
+            ValueRange::at(170, 380),
         ];
 
         // (max value if all rollback, max value if all commit)
-        let max = max_range(ranges.iter());
-        assert_eq!(max, ValueRange(200, 380));
+        let max = reduce_max_range(ranges.iter());
+        assert_eq!(max, ValueRange::at(200, 380));
 
         // (min value if all rollback, min value if all commit)
-        let min = min_range(ranges.iter());
-        assert_eq!(min, ValueRange(40, 100));
+        let min = reduce_min_range(ranges.iter());
+        assert_eq!(min, ValueRange::at(40, 100));
 
         // (min value if all rollback, max value if all commit)
         let all = spread(ranges.iter());
-        assert_eq!(all, ValueRange(40, 380));
+        assert_eq!(all, ValueRange::at(40, 380));
     }
 
     // most tests will use i32 for simplicity - just ensure APIs work properly with Uint128
@@ -300,7 +314,7 @@ mod tests {
             .unwrap();
 
         let total = range + other;
-        assert_eq!(total, ValueRange(Uint128::new(180), Uint128::new(320)));
+        assert_eq!(total, ValueRange::at(Uint128::new(180), Uint128::new(320)));
     }
 
     // This test attempts to use the API in a realistic scenario.
@@ -325,7 +339,7 @@ mod tests {
         // let's commit the second pending lien (only 2000 left)
         // QUESTION: should we enforce the min/max on commit/rollback explicitly and pass them in?
         lien.commit_add(5_000);
-        assert_eq!(lien, ValueRange(5_000, 7_000));
+        assert_eq!(lien, ValueRange::at(5_000, 7_000));
 
         // See we cannot reduce this by 4_000
         assert!(!lien.is_under_max(collateral - 4_000));
@@ -341,7 +355,7 @@ mod tests {
 
         // if we rollback the other pending lien, this works
         lien.rollback_add(2_000);
-        assert_eq!(lien, ValueRange(2_000, 5_000));
+        assert_eq!(lien, ValueRange::at(2_000, 5_000));
         lien.prepare_add(1_500, collateral).unwrap();
     }
 
@@ -351,18 +365,18 @@ mod tests {
     fn invariants_over_set_of_liens() {
         // some existing outstanding liens
         let liens = vec![
-            ValueRange(Uint128::new(5000), Uint128::new(7000)),
-            ValueRange(Uint128::new(2000), Uint128::new(8000)),
-            ValueRange(Uint128::new(3000), Uint128::new(12000)),
+            ValueRange::at(Uint128::new(5000), Uint128::new(7000)),
+            ValueRange::at(Uint128::new(2000), Uint128::new(8000)),
+            ValueRange::at(Uint128::new(3000), Uint128::new(12000)),
         ];
         // for simplicity, assume all slash rates are the same, easier for writing tests, but ensures operations are allowed
         let slash_rate = Decimal::percent(10);
 
         // the max lien is actually a range of (max if all rollback, max if all commit)
-        let max_lien = max_range(liens.iter());
+        let max_lien = reduce_max_range(liens.iter());
         assert_eq!(
             max_lien,
-            ValueRange(Uint128::new(5000), Uint128::new(12000))
+            ValueRange::at(Uint128::new(5000), Uint128::new(12000))
         );
         // check if this is less than some collateral
         assert!(max_lien.is_under_max(Uint128::new(15000)));
@@ -373,7 +387,7 @@ mod tests {
         let max_slashable: ValueRange<Uint128> = liens.iter().map(|l| l * slash_rate).sum();
         assert_eq!(
             max_slashable,
-            ValueRange(Uint128::new(1000), Uint128::new(2700))
+            ValueRange::at(Uint128::new(1000), Uint128::new(2700))
         );
         // check if this is less than some collateral
         assert!(max_slashable.is_under_max(Uint128::new(5000)));
@@ -387,7 +401,166 @@ mod tests {
         let lien_spread = spread(liens.iter());
         assert_eq!(
             lien_spread,
-            ValueRange(Uint128::new(2000), Uint128::new(12000))
+            ValueRange::at(Uint128::new(2000), Uint128::new(12000))
         );
+    }
+}
+
+#[cfg(test)]
+mod examples {
+    use cosmwasm_std::{testing::MockStorage, Decimal, Order, StdError, Storage, Uint128};
+    use cw_storage_plus::Map;
+
+    use super::*;
+
+    #[derive(Error, Debug, PartialEq)]
+    pub enum TestsError {
+        #[error("{0}")]
+        Std(#[from] StdError),
+        #[error("{0}")]
+        Range(#[from] RangeError),
+    }
+
+    #[cw_serde]
+    #[derive(Default)]
+    pub struct UserInfo {
+        // User collateral - this is set locally and never a range
+        pub collateral: Uint128,
+        // Highest user lien
+        pub max_lien: ValueRange<Uint128>,
+        // Total slashable amount for user
+        pub total_slashable: ValueRange<Uint128>,
+    }
+
+    impl UserInfo {
+        fn is_valid(&self) -> bool {
+            self.max_lien.is_under_max(self.collateral)
+                && self.total_slashable.is_under_max(self.collateral)
+        }
+    }
+
+    #[cw_serde]
+    pub struct Lien {
+        /// Credit amount (denom is in `Config::denom`)
+        pub amount: ValueRange<Uint128>,
+        /// Slashable part - restricted to [0; 1] range
+        pub slashable: Decimal,
+    }
+
+    const LIENS: Map<(&str, &str), Lien> = Map::new("liens");
+
+    const USERS: Map<&str, UserInfo> = Map::new("users");
+
+    // sum them up for each user - collateral info must be provided externally
+    fn sum_liens(
+        storage: &dyn Storage,
+        user: &str,
+        collateral: impl Into<Uint128>,
+    ) -> Result<UserInfo, TestsError> {
+        let (max_lien, total_slashable) = LIENS
+            .prefix(user)
+            .range(storage, None, None, Order::Ascending)
+            .map(|r| {
+                let (_, lien) = r?;
+                Ok((lien.amount, lien.amount * lien.slashable))
+            })
+            .reduce(|acc: Result<_, TestsError>, x| {
+                let (max_lien, total_slashable) = acc?;
+                let (amount, slashable) = x?;
+                Ok((max_range(max_lien, amount), total_slashable + slashable))
+            })
+            .transpose()?
+            .unwrap_or_default();
+        Ok(UserInfo {
+            collateral: collateral.into(),
+            max_lien,
+            total_slashable,
+        })
+    }
+
+    #[test]
+    fn map_methods_with_value_ranges() {
+        let mut store = MockStorage::new();
+
+        let alice = "Alice";
+        let bob = "Bob";
+        let carl = "Carl";
+        let stake1 = "Stake1";
+        let stake2 = "Stake2";
+
+        // no inflight transactions for Alice
+        LIENS
+            .save(
+                &mut store,
+                (alice, stake1),
+                &Lien {
+                    amount: ValueRange::at(Uint128::new(5000), Uint128::new(5000)),
+                    slashable: Decimal::percent(50),
+                },
+            )
+            .unwrap();
+        // one inflight transactions for Bob
+        LIENS
+            .save(
+                &mut store,
+                (bob, stake1),
+                &Lien {
+                    amount: ValueRange::at(Uint128::new(3000), Uint128::new(3000)),
+                    slashable: Decimal::percent(50),
+                },
+            )
+            .unwrap();
+        LIENS
+            .save(
+                &mut store,
+                (bob, stake2),
+                &Lien {
+                    amount: ValueRange::at(Uint128::new(0), Uint128::new(2000)),
+                    slashable: Decimal::percent(80),
+                },
+            )
+            .unwrap();
+        // add a few liens with inflight transactions
+        LIENS
+            .save(
+                &mut store,
+                (carl, stake1),
+                &Lien {
+                    amount: ValueRange::at(Uint128::new(1000), Uint128::new(2000)),
+                    slashable: Decimal::percent(50),
+                },
+            )
+            .unwrap();
+        LIENS
+            .save(
+                &mut store,
+                (carl, stake2),
+                &Lien {
+                    amount: ValueRange::at(Uint128::new(5000), Uint128::new(6000)),
+                    slashable: Decimal::percent(80),
+                },
+            )
+            .unwrap();
+
+        let alice_user = sum_liens(&store, alice, 6000u128).unwrap();
+        assert!(alice_user.is_valid());
+        USERS.save(&mut store, alice, &alice_user).unwrap();
+
+        let bob_user = sum_liens(&store, bob, 4000u128).unwrap();
+        assert!(bob_user.is_valid());
+        USERS.save(&mut store, bob, &bob_user).unwrap();
+
+        let carl_user = sum_liens(&store, carl, 10000u128).unwrap();
+        assert!(carl_user.is_valid());
+        USERS.save(&mut store, carl, &carl_user).unwrap();
+
+        // Note: below should be in a transactional context where we could roll back on error
+
+        // TODO: let's make an invalid change, which may go below min...
+
+        // TODO: let's make an invalid change, which may go above max...
+
+        // TODO: let's make a valid change...
+
     }
 }
