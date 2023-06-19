@@ -488,6 +488,10 @@ mod examples {
         let stake1 = "Stake1";
         let stake2 = "Stake2";
 
+        let alice_collateral = Uint128::new(6000);
+        let bob_collateral = Uint128::new(4000);
+        let carl_collateral = Uint128::new(7000);
+
         // no inflight transactions for Alice
         LIENS
             .save(
@@ -542,25 +546,56 @@ mod examples {
             )
             .unwrap();
 
-        let alice_user = sum_liens(&store, alice, 6000u128).unwrap();
+        let alice_user = sum_liens(&store, alice, alice_collateral).unwrap();
         assert!(alice_user.is_valid());
         USERS.save(&mut store, alice, &alice_user).unwrap();
 
-        let bob_user = sum_liens(&store, bob, 4000u128).unwrap();
+        let bob_user = sum_liens(&store, bob, bob_collateral).unwrap();
         assert!(bob_user.is_valid());
         USERS.save(&mut store, bob, &bob_user).unwrap();
 
-        let carl_user = sum_liens(&store, carl, 10000u128).unwrap();
+        let carl_user = sum_liens(&store, carl, carl_collateral).unwrap();
         assert!(carl_user.is_valid());
         USERS.save(&mut store, carl, &carl_user).unwrap();
 
         // Note: below should be in a transactional context where we could roll back on error
 
-        // TODO: let's make an invalid change, which may go below min...
+        // let's make an invalid change, which may go below min...
+        // Bob tried to withdraw on the inflight lien (0, 2000)
+        let err = LIENS
+            .update::<_, TestsError>(&mut store, (bob, stake2), |lien| {
+                let mut lien = lien.unwrap();
+                lien.amount
+                    .prepare_sub(Uint128::new(1000), Uint128::zero())?;
+                Ok(lien)
+            })
+            .unwrap_err();
+        assert_eq!(err, TestsError::Range(RangeError::Underflow));
 
-        // TODO: let's make an invalid change, which may go above max...
+        // let's make an invalid change, which may go above max...
+        // adding 3000 to stake1 will not pass collateral or max_lien check, but max_slashable
+        LIENS
+            .update::<_, TestsError>(&mut store, (carl, stake1), |lien| {
+                let mut lien = lien.unwrap();
+                lien.amount
+                    .prepare_add(Uint128::new(3000), carl_collateral)?;
+                Ok(lien)
+            })
+            .unwrap();
+        let carl_user = sum_liens(&store, carl, carl_collateral).unwrap();
+        assert!(!carl_user.is_valid());
 
-        // TODO: let's make a valid change...
-
+        // let's make a valid change...
+        // alice makes another 1000 to hit her cap
+        LIENS
+            .update::<_, TestsError>(&mut store, (alice, stake1), |lien| {
+                let mut lien = lien.unwrap();
+                lien.amount
+                    .prepare_add(Uint128::new(1000), alice_collateral)?;
+                Ok(lien)
+            })
+            .unwrap();
+        let alice_user = sum_liens(&store, alice, alice_collateral).unwrap();
+        assert!(alice_user.is_valid());
     }
 }
