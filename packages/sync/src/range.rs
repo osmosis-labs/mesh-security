@@ -11,8 +11,8 @@ use cosmwasm_schema::cw_serde;
 #[derive(Default, Copy)]
 // Note: this was (T, T) but (Uint128, Uint128) hit `serialize_tuple_struct` which is not supported by serde-json-wasm
 pub struct ValueRange<T> {
-    min: T,
-    max: T,
+    lo: T,
+    hi: T,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -21,13 +21,15 @@ pub enum RangeError {
     Underflow,
     #[error("Overflow maximum value")]
     Overflow,
+    #[error("Range is not one value")]
+    NotOneValue,
 }
 
 impl<T> ValueRange<T> {
     /// Constructor as close to the old tuple
     /// ValueRange(5, 10) => ValueRange::at(5, 10)
     pub fn at(min: T, max: T) -> Self {
-        Self { min, max }
+        Self { lo: min, hi: max }
     }
 }
 
@@ -37,24 +39,38 @@ where
 {
     pub fn new(value: T) -> Self {
         Self {
-            min: value,
-            max: value,
+            lo: value,
+            hi: value,
         }
     }
 
-    pub fn min(&self) -> T {
-        self.min
+    pub fn low(&self) -> T {
+        self.lo
     }
 
-    pub fn max(&self) -> T {
-        self.max
+    pub fn high(&self) -> T {
+        self.hi
+    }
+}
+
+impl<T> ValueRange<T>
+where
+    T: Copy + PartialEq,
+{
+    /// If lo == hi, then return this value, otherwise an error
+    pub fn val(&self) -> Result<T, RangeError> {
+        if self.lo == self.hi {
+            Ok(self.lo)
+        } else {
+            Err(RangeError::NotOneValue)
+        }
     }
 }
 
 pub fn max_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRange<T> {
     ValueRange {
-        min: std::cmp::max(a.min(), b.min()),
-        max: std::cmp::max(a.max(), b.max()),
+        lo: std::cmp::max(a.low(), b.low()),
+        hi: std::cmp::max(a.high(), b.high()),
     }
 }
 
@@ -72,8 +88,8 @@ where
 
 pub fn min_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRange<T> {
     ValueRange {
-        min: std::cmp::min(a.min(), b.min()),
-        max: std::cmp::min(a.max(), b.max()),
+        lo: std::cmp::min(a.low(), b.low()),
+        hi: std::cmp::min(a.high(), b.high()),
     }
 }
 
@@ -96,8 +112,8 @@ where
 {
     iter.copied()
         .reduce(|a, b| ValueRange {
-            min: std::cmp::min(a.min(), b.min()),
-            max: std::cmp::max(a.max(), b.max()),
+            lo: std::cmp::min(a.low(), b.low()),
+            hi: std::cmp::max(a.high(), b.high()),
         })
         .unwrap_or_default()
 }
@@ -110,7 +126,7 @@ where
     type Output = ValueRange<T>;
 
     fn mul(self, rhs: U) -> Self::Output {
-        ValueRange::at(self.min * rhs, self.max * rhs)
+        ValueRange::at(self.lo * rhs, self.hi * rhs)
     }
 }
 
@@ -122,7 +138,7 @@ where
     type Output = ValueRange<T>;
 
     fn mul(self, rhs: U) -> Self::Output {
-        ValueRange::at(self.min * rhs, self.max * rhs)
+        ValueRange::at(self.lo * rhs, self.hi * rhs)
     }
 }
 
@@ -133,13 +149,13 @@ where
     /// Returns true iff all values of the range are <= max.
     /// This can be used to assert invariants
     pub fn is_under_max(&self, max: T) -> bool {
-        self.max <= max
+        self.hi <= max
     }
 
     /// Returns true iff all values of the range are >= min.
     /// This can be used to assert invariants
     pub fn is_over_min(&self, min: T) -> bool {
-        self.min >= min
+        self.lo >= min
     }
 
     /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) an addition.
@@ -147,25 +163,25 @@ where
     /// Usage: `range.prepare_add(20, None)?;` or `range.prepare_add(20, 100)?;`
     pub fn prepare_add(&mut self, value: T, max: impl Into<Option<T>>) -> Result<(), RangeError> {
         if let Some(max) = max.into() {
-            if self.max + value > max {
+            if self.hi + value > max {
                 return Err(RangeError::Overflow);
             }
         }
-        self.max = self.max + value;
+        self.hi = self.hi + value;
         Ok(())
     }
 
     /// The caller should limit these to only previous `prepare_add` calls.
     /// We will panic on mistake as this should never happen
     pub fn rollback_add(&mut self, value: T) {
-        self.max = self.max - value;
+        self.hi = self.hi - value;
         self.assert_valid_range();
     }
 
     /// The caller should limit these to only previous `prepare_add` calls.
     /// We will panic on mistake as this should never happen
     pub fn commit_add(&mut self, value: T) {
-        self.min = self.min + value;
+        self.lo = self.lo + value;
         self.assert_valid_range();
     }
 
@@ -178,31 +194,31 @@ where
     pub fn prepare_sub(&mut self, value: T, min: impl Into<Option<T>>) -> Result<(), RangeError> {
         if let Some(min) = min.into() {
             // use plus not minus here, as we are much more likely to have underflow on u64 or Uint128 than overflow
-            if self.min < min + value {
+            if self.lo < min + value {
                 return Err(RangeError::Underflow);
             }
         }
-        self.min = self.min - value;
+        self.lo = self.lo - value;
         Ok(())
     }
 
     /// The caller should limit these to only previous `prepare_sub` calls.
     /// We will panic on mistake as this should never happen
     pub fn rollback_sub(&mut self, value: T) {
-        self.min = self.min + value;
+        self.lo = self.lo + value;
         self.assert_valid_range();
     }
 
     /// The caller should limit these to only previous `prepare_sub` calls.
     /// We will panic on mistake as this should never happen
     pub fn commit_sub(&mut self, value: T) {
-        self.max = self.max - value;
+        self.hi = self.hi - value;
         self.assert_valid_range();
     }
 
     #[inline]
     fn assert_valid_range(&self) {
-        assert!(self.min <= self.max);
+        assert!(self.lo <= self.hi);
     }
 }
 
@@ -210,7 +226,7 @@ impl<T: Add<Output = T>> Add for ValueRange<T> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        ValueRange::at(self.min + rhs.min, self.max + rhs.max)
+        ValueRange::at(self.lo + rhs.lo, self.hi + rhs.hi)
     }
 }
 
@@ -264,6 +280,22 @@ mod tests {
 
         let total = range + other;
         assert_eq!(total, ValueRange::at(180, 320));
+    }
+
+    #[test]
+    fn value() {
+        // (80, 120)
+        let range = ValueRange::new(80);
+        let v = range.val().unwrap();
+        assert_eq!(v, 80);
+
+        let range: ValueRange<i32> = ValueRange::at(200, 200);
+        let v = range.val().unwrap();
+        assert_eq!(v, 200);
+
+        let range: ValueRange<i32> = ValueRange::at(190, 200);
+        let err = range.val().unwrap_err();
+        assert_eq!(err, RangeError::NotOneValue);
     }
 
     #[test]
