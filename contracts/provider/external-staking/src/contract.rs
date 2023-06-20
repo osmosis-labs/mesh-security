@@ -145,6 +145,8 @@ impl ExternalStakingContract<'_> {
         // Remove tx
         self.pending_txs.remove(ctx.deps.storage, tx_id);
 
+        // TODO: Call commit hook on vault
+
         Ok(())
     }
 
@@ -186,6 +188,9 @@ impl ExternalStakingContract<'_> {
 
         // Remove tx
         self.pending_txs.remove(ctx.deps.storage, tx_id);
+
+        // TODO: Call rollback hook on vault
+
         Ok(())
     }
 
