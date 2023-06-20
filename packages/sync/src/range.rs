@@ -11,8 +11,10 @@ use cosmwasm_schema::cw_serde;
 #[derive(Default, Copy)]
 // Note: this was (T, T) but (Uint128, Uint128) hit `serialize_tuple_struct` which is not supported by serde-json-wasm
 pub struct ValueRange<T> {
-    lo: T,
-    hi: T,
+    #[serde(rename = "l")]
+    low: T,
+    #[serde(rename = "h")]
+    high: T,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -28,8 +30,12 @@ pub enum RangeError {
 impl<T> ValueRange<T> {
     /// Constructor as close to the old tuple
     /// ValueRange(5, 10) => ValueRange::at(5, 10)
+    #[inline]
     pub fn at(min: T, max: T) -> Self {
-        Self { lo: min, hi: max }
+        Self {
+            low: min,
+            high: max,
+        }
     }
 }
 
@@ -37,19 +43,22 @@ impl<T> ValueRange<T>
 where
     T: Copy,
 {
+    #[inline]
     pub fn new(value: T) -> Self {
         Self {
-            lo: value,
-            hi: value,
+            low: value,
+            high: value,
         }
     }
 
+    #[inline]
     pub fn low(&self) -> T {
-        self.lo
+        self.low
     }
 
+    #[inline]
     pub fn high(&self) -> T {
-        self.hi
+        self.high
     }
 }
 
@@ -59,8 +68,8 @@ where
 {
     /// If lo == hi, then return this value, otherwise an error
     pub fn val(&self) -> Result<T, RangeError> {
-        if self.lo == self.hi {
-            Ok(self.lo)
+        if self.low == self.high {
+            Ok(self.low)
         } else {
             Err(RangeError::NotOneValue)
         }
@@ -69,8 +78,8 @@ where
 
 pub fn max_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRange<T> {
     ValueRange {
-        lo: std::cmp::max(a.low(), b.low()),
-        hi: std::cmp::max(a.high(), b.high()),
+        low: std::cmp::max(a.low(), b.low()),
+        high: std::cmp::max(a.high(), b.high()),
     }
 }
 
@@ -88,8 +97,8 @@ where
 
 pub fn min_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRange<T> {
     ValueRange {
-        lo: std::cmp::min(a.low(), b.low()),
-        hi: std::cmp::min(a.high(), b.high()),
+        low: std::cmp::min(a.low(), b.low()),
+        high: std::cmp::min(a.high(), b.high()),
     }
 }
 
@@ -112,8 +121,8 @@ where
 {
     iter.copied()
         .reduce(|a, b| ValueRange {
-            lo: std::cmp::min(a.low(), b.low()),
-            hi: std::cmp::max(a.high(), b.high()),
+            low: std::cmp::min(a.low(), b.low()),
+            high: std::cmp::max(a.high(), b.high()),
         })
         .unwrap_or_default()
 }
@@ -125,8 +134,9 @@ where
 {
     type Output = ValueRange<T>;
 
+    #[inline]
     fn mul(self, rhs: U) -> Self::Output {
-        ValueRange::at(self.lo * rhs, self.hi * rhs)
+        ValueRange::at(self.low * rhs, self.high * rhs)
     }
 }
 
@@ -137,8 +147,24 @@ where
 {
     type Output = ValueRange<T>;
 
+    #[inline]
     fn mul(self, rhs: U) -> Self::Output {
-        ValueRange::at(self.lo * rhs, self.hi * rhs)
+        ValueRange::at(self.low * rhs, self.high * rhs)
+    }
+}
+
+impl<T: Add<Output = T>> Add for ValueRange<T> {
+    type Output = Self;
+
+    #[inline]
+    fn add(self, rhs: Self) -> Self::Output {
+        ValueRange::at(self.low + rhs.low, self.high + rhs.high)
+    }
+}
+
+impl<T: Add<Output = T> + Default> Sum for ValueRange<T> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(ValueRange::default(), |acc, x| acc + x)
     }
 }
 
@@ -148,14 +174,16 @@ where
 {
     /// Returns true iff all values of the range are <= max.
     /// This can be used to assert invariants
+    #[inline]
     pub fn is_under_max(&self, max: T) -> bool {
-        self.hi <= max
+        self.high <= max
     }
 
     /// Returns true iff all values of the range are >= min.
     /// This can be used to assert invariants
+    #[inline]
     pub fn is_over_min(&self, min: T) -> bool {
-        self.lo >= min
+        self.low >= min
     }
 
     /// This is to be called at the beginning of a transaction, to reserve the ability to commit (or rollback) an addition.
@@ -163,25 +191,25 @@ where
     /// Usage: `range.prepare_add(20, None)?;` or `range.prepare_add(20, 100)?;`
     pub fn prepare_add(&mut self, value: T, max: impl Into<Option<T>>) -> Result<(), RangeError> {
         if let Some(max) = max.into() {
-            if self.hi + value > max {
+            if self.high + value > max {
                 return Err(RangeError::Overflow);
             }
         }
-        self.hi = self.hi + value;
+        self.high = self.high + value;
         Ok(())
     }
 
     /// The caller should limit these to only previous `prepare_add` calls.
     /// We will panic on mistake as this should never happen
     pub fn rollback_add(&mut self, value: T) {
-        self.hi = self.hi - value;
+        self.high = self.high - value;
         self.assert_valid_range();
     }
 
     /// The caller should limit these to only previous `prepare_add` calls.
     /// We will panic on mistake as this should never happen
     pub fn commit_add(&mut self, value: T) {
-        self.lo = self.lo + value;
+        self.low = self.low + value;
         self.assert_valid_range();
     }
 
@@ -194,45 +222,31 @@ where
     pub fn prepare_sub(&mut self, value: T, min: impl Into<Option<T>>) -> Result<(), RangeError> {
         if let Some(min) = min.into() {
             // use plus not minus here, as we are much more likely to have underflow on u64 or Uint128 than overflow
-            if self.lo < min + value {
+            if self.low < min + value {
                 return Err(RangeError::Underflow);
             }
         }
-        self.lo = self.lo - value;
+        self.low = self.low - value;
         Ok(())
     }
 
     /// The caller should limit these to only previous `prepare_sub` calls.
     /// We will panic on mistake as this should never happen
     pub fn rollback_sub(&mut self, value: T) {
-        self.lo = self.lo + value;
+        self.low = self.low + value;
         self.assert_valid_range();
     }
 
     /// The caller should limit these to only previous `prepare_sub` calls.
     /// We will panic on mistake as this should never happen
     pub fn commit_sub(&mut self, value: T) {
-        self.hi = self.hi - value;
+        self.high = self.high - value;
         self.assert_valid_range();
     }
 
     #[inline]
     fn assert_valid_range(&self) {
-        assert!(self.lo <= self.hi);
-    }
-}
-
-impl<T: Add<Output = T>> Add for ValueRange<T> {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        ValueRange::at(self.lo + rhs.lo, self.hi + rhs.hi)
-    }
-}
-
-impl<T: Add<Output = T> + Default> Sum for ValueRange<T> {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(ValueRange::default(), |acc, x| acc + x)
+        assert!(self.low <= self.high);
     }
 }
 
