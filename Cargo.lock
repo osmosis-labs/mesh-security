@@ -557,6 +557,8 @@ version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "schemars",
+ "semver",
  "serde",
  "sylvia",
  "thiserror",
