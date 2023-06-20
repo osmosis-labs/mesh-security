@@ -98,6 +98,7 @@ impl ExternalStakingContract<'_> {
         let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
 
         // TODO: Verify tx comes from the right context
+        // TODO: Verify tx is of the right type
 
         // Load stake
         let mut stake_lock = self
@@ -194,29 +195,10 @@ impl ExternalStakingContract<'_> {
             .unwrap_or_default();
         let stake = stake_lock.read()?;
 
-        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &validator)?;
-        let distribution = distribution_lock.write()?;
-
         ensure!(
             stake.stake >= amount.amount,
             ContractError::NotEnoughStake(stake.stake)
         );
-        let stake = stake_lock.write()?;
-
-        stake.stake -= amount.amount;
-
-        let release_at = ctx.env.block.time.plus_seconds(config.unbonding_period);
-        let unbond = PendingUnbond {
-            amount: amount.amount,
-            release_at,
-        };
-        stake.pending_unbonds.push(unbond);
-
-        // Distribution alignment
-        stake
-            .points_alignment
-            .stake_decreased(amount.amount, distribution.points_per_stake);
-        distribution.total_stake -= amount.amount;
 
         stake_lock.lock_write()?;
         self.stakes.save(
@@ -225,19 +207,76 @@ impl ExternalStakingContract<'_> {
             &stake_lock,
         )?;
 
+        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &validator)?;
+
+        distribution_lock.lock_write()?;
         self.distribution
             .save(ctx.deps.storage, &validator, &distribution_lock)?;
 
-        // TODO:
-        //
-        // Probably some more communication with remote via IBC should happen here?
-        // Or maybe this contract should be called via IBC here? To be specified
+        // TODO: Remote IBC should happen here.
+        // Or maybe `unstake` should be called via IBC. To be specified
         let resp = Response::new()
             .add_attribute("action", "unstake")
             .add_attribute("owner", ctx.info.sender.into_string())
             .add_attribute("amount", amount.amount.to_string());
 
         Ok(resp)
+    }
+
+    /// Commits a pending unstake.
+    /// Must be called by the IBC callback handler on successful remote unstaking.
+    #[allow(unused)]
+    fn commit_unstake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
+
+        // TODO: Verify tx comes from the right context
+        // TODO: Verify tx is of the right type
+
+        let config = self.config.load(ctx.deps.storage)?;
+
+        // Load stake
+        let mut stake_lock = self
+            .stakes
+            .load(ctx.deps.storage, (&tx.user, &tx.validator))?;
+
+        // Load distribution
+        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx.validator)?;
+
+        // Commit amount (need to unlock it first)
+        stake_lock.unlock_write()?;
+        let stake = stake_lock.write()?;
+        stake.stake -= tx.amount;
+
+        // FIXME? Release period being computed after successful IBC tx
+        let release_at = ctx.env.block.time.plus_seconds(config.unbonding_period);
+        let unbond = PendingUnbond {
+            amount: tx.amount,
+            release_at,
+        };
+        stake.pending_unbonds.push(unbond);
+
+        // Commit distribution (need to unlock it first)
+        distribution_lock.unlock_write()?;
+        let distribution = distribution_lock.write()?;
+        // Distribution alignment
+        stake
+            .points_alignment
+            .stake_decreased(tx.amount, distribution.points_per_stake);
+        distribution.total_stake -= tx.amount;
+
+        // Save stake
+        self.stakes
+            .save(ctx.deps.storage, (&tx.user, &tx.validator), &stake_lock)?;
+
+        // Save distribution
+        self.distribution
+            .save(ctx.deps.storage, &tx.validator, &distribution_lock)?;
+
+        // Remove tx
+        self.pending_txs.remove(ctx.deps.storage, tx_id);
+
+        Ok(())
     }
 
     /// Withdraws all released tokens to the sender.
