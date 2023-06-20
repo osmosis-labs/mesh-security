@@ -245,6 +245,7 @@ mod tests {
 mod tests_plus {
     use super::*;
 
+    use crate::locks::tests_plus::MaybeCollateral::{Collateral, Locked};
     use cosmwasm_std::{testing::MockStorage, StdError, Uint128};
     use cw_storage_plus::{Item, Map};
 
@@ -280,6 +281,12 @@ mod tests_plus {
         pub max_lien: Uint128,
         // Total slashable amount for user
         pub total_slashable: Uint128,
+    }
+
+    #[cw_serde]
+    enum MaybeCollateral {
+        Collateral(Uint128),
+        Locked { user: String },
     }
 
     #[test]
@@ -538,6 +545,21 @@ mod tests_plus {
             .collect::<Result<_, TestsError>>()
             .unwrap();
         assert_eq!(collaterals.len(), 2);
+
+        // Finally, we can also report the locked users
+        let maybe_collaterals: Vec<_> = USERS
+            .range(&store, None, None, cosmwasm_std::Order::Ascending)
+            .map(|item| {
+                item.map(|(user, user_lock)| {
+                    user_lock
+                        .read()
+                        .map(|user| Ok(Collateral(user.collateral)))
+                        .unwrap_or(Ok(Locked { user })) // Report locked collateral
+                })? // Surface errors
+            })
+            .collect::<Result<_, TestsError>>()
+            .unwrap();
+        assert_eq!(maybe_collaterals.len(), 3);
 
         // We can get count (kind of edge case bug, but I don't think we can change this or it matters)
         let num_users = USERS
