@@ -135,6 +135,42 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
+    /// Rollbacks a pending stake.
+    /// Must be called by the IBC callback handler on failed remote staking.
+    #[allow(unused)]
+    fn rollback_stake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
+
+        // TODO: Verify tx comes from the right context
+
+        // Load stake
+        let mut stake_lock = self
+            .stakes
+            .load(ctx.deps.storage, (&tx.user, &tx.validator))?;
+
+        // Load distribution
+        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx.validator)?;
+
+        // Release stake lock
+        stake_lock.unlock_write()?;
+
+        // Save stake
+        self.stakes
+            .save(ctx.deps.storage, (&tx.user, &tx.validator), &stake_lock)?;
+
+        // Release distribution lock
+        distribution_lock.unlock_write()?;
+
+        // Save distribution
+        self.distribution
+            .save(ctx.deps.storage, &tx.validator, &distribution_lock)?;
+
+        // Remove tx
+        self.pending_txs.remove(ctx.deps.storage, tx_id);
+        Ok(())
+    }
+
     /// Schedules tokens for release, adding them to the pending unbonds. After `unbonding_period`
     /// passes, funds are ready to be released with `withdraw_unbonded` call by the user
     #[msg(exec)]
