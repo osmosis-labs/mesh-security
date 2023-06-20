@@ -16,10 +16,12 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use crate::error::ContractError;
 use crate::ibc::VAL_CRDT;
 use crate::msg::{
-    AuthorizedEndpointResponse, ConfigResponse, IbcChannelResponse, ListRemoteValidatorsResponse,
-    PendingRewards, ReceiveVirtualStake, StakeInfo, StakesResponse,
+    AllTxsResponse, AllTxsResponseItem, AuthorizedEndpointResponse, ConfigResponse,
+    IbcChannelResponse, ListRemoteValidatorsResponse, PendingRewards, ReceiveVirtualStake,
+    StakeInfo, StakesResponse, TxResponse,
 };
 use crate::state::{Config, Distribution, PendingUnbond, Stake};
+use crate::txs::Tx;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -36,10 +38,12 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
 
 pub struct ExternalStakingContract<'a> {
     pub config: Item<'a, Config>,
-    // Stakes indexed by `(owner, validator)` pair
+    /// Stakes indexed by `(owner, validator)` pair
     pub stakes: Map<'a, (&'a Addr, &'a str), Lockable<Stake>>,
-    // Per-validator distribution information
+    /// Per-validator distribution information
     pub distribution: Map<'a, &'a str, Lockable<Distribution>>,
+    /// Pending txs information
+    pub pending_txs: Map<'a, u64, Tx>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -52,6 +56,7 @@ impl ExternalStakingContract<'_> {
             config: Item::new("config"),
             stakes: Map::new("stakes"),
             distribution: Map::new("distribution"),
+            pending_txs: Map::new("pending_txs"),
         }
     }
 
@@ -387,6 +392,41 @@ impl ExternalStakingContract<'_> {
         Ok(resp)
     }
 
+    /// Queries a pending tx.
+    #[msg(query)]
+    fn pending_tx(&self, ctx: QueryCtx, tx_id: u64) -> Result<TxResponse, ContractError> {
+        let resp = self.pending_txs.load(ctx.deps.storage, tx_id)?;
+        Ok(resp)
+    }
+
+    /// Queries for all pending txs.
+    /// Reports txs in descending order (newest first).
+    /// `start_after` is the last tx id included in previous page
+    #[msg(query)]
+    fn all_pending_txs(
+        &self,
+        ctx: QueryCtx,
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    ) -> Result<AllTxsResponse, ContractError> {
+        let limit = clamp_page_limit(limit);
+        let bound = start_after.and_then(Bounder::exclusive_bound);
+
+        let txs = self
+            .pending_txs
+            .range(ctx.deps.storage, None, bound, Order::Descending)
+            .map(|item| {
+                let (_id, tx) = item?;
+                Ok::<AllTxsResponseItem, ContractError>(tx)
+            })
+            .take(limit)
+            .collect::<Result<_, _>>()?;
+
+        let resp = AllTxsResponse { txs };
+
+        Ok(resp)
+    }
+
     /// Returns how much rewards are to be withdrawn by particular user, from the particular
     /// validator staking
     #[msg(query)]
@@ -442,6 +482,7 @@ impl ExternalStakingContract<'_> {
 
 pub mod cross_staking {
     use super::*;
+    use crate::txs::TxType;
 
     #[contract]
     #[messages(cross_staking_api as CrossStakingApi)]
@@ -478,27 +519,37 @@ pub mod cross_staking {
                 .distribution
                 .may_load(ctx.deps.storage, &msg.validator)?
                 .unwrap_or_default();
+
+            // TODO: Move to commit
             let distribution = distribution_lock.write()?;
-
             let stake = stake_lock.write()?;
-
             stake.stake += amount.amount;
-
             // Distribution alignment
             stake
                 .points_alignment
                 .stake_increased(amount.amount, distribution.points_per_stake);
             distribution.total_stake += amount.amount;
 
+            // Write lock and save state and distribution
+            stake_lock.lock_write()?;
             self.stakes
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake_lock)?;
 
+            distribution_lock.lock_write()?;
             self.distribution
                 .save(ctx.deps.storage, &msg.validator, &distribution_lock)?;
 
             // TODO: Send proper IBC message to remote staking contract
 
-            // TODO? Update tx state in vault
+            // Save tx
+            let new_tx = Tx {
+                id: tx_id,
+                ty: TxType::InFlightRemoteStaking,
+                amount: amount.amount,
+                user: owner.clone(),
+                validator: msg.validator,
+            };
+            self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
 
             let resp = Response::new()
                 .add_attribute("action", "receive_virtual_stake")

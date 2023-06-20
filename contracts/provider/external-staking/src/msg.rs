@@ -94,3 +94,11 @@ pub struct UsersResponse {
 pub struct PendingRewards {
     pub amount: Coin,
 }
+
+pub type TxResponse = crate::txs::Tx;
+pub type AllTxsResponseItem = TxResponse;
+
+#[cw_serde]
+pub struct AllTxsResponse {
+    pub txs: Vec<AllTxsResponseItem>,
+}
