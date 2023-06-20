@@ -4,8 +4,18 @@ use cosmwasm_std::{Addr, Uint128};
 #[cw_serde]
 pub enum TxType {
     InFlightRemoteStaking,
+    InFlightRemoteUnstaking,
     // TODO
     // Slash,
+}
+
+impl std::fmt::Display for TxType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TxType::InFlightRemoteStaking => write!(f, "RemoteStaking"),
+            TxType::InFlightRemoteUnstaking => write!(f, "RemoteUnstaking"),
+        }
+    }
 }
 
 #[cw_serde]

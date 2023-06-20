@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     coin, coins, ensure, ensure_eq, from_binary, Addr, BankMsg, Binary, Coin, Decimal, Order,
-    Response, Uint128, Uint256,
+    Response, StdResult, Storage, Uint128, Uint256,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -21,7 +21,7 @@ use crate::msg::{
     StakeInfo, StakesResponse, TxResponse,
 };
 use crate::state::{Config, Distribution, PendingUnbond, Stake};
-use crate::txs::Tx;
+use crate::txs::{Tx, TxType};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -43,6 +43,7 @@ pub struct ExternalStakingContract<'a> {
     /// Per-validator distribution information
     pub distribution: Map<'a, &'a str, Lockable<Distribution>>,
     /// Pending txs information
+    pub tx_count: Item<'a, u64>,
     pub pending_txs: Map<'a, u64, Tx>,
 }
 
@@ -57,7 +58,14 @@ impl ExternalStakingContract<'_> {
             stakes: Map::new("stakes"),
             distribution: Map::new("distribution"),
             pending_txs: Map::new("pending_txs"),
+            tx_count: Item::new("tx_count"),
         }
+    }
+
+    pub fn next_tx_id(&self, store: &mut dyn Storage) -> StdResult<u64> {
+        let id: u64 = self.tx_count.may_load(store)?.unwrap_or(u64::MAX >> 1) + 1;
+        self.tx_count.save(store, &id)?;
+        Ok(id)
     }
 
     #[msg(instantiate)]
@@ -98,7 +106,11 @@ impl ExternalStakingContract<'_> {
         let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
 
         // TODO: Verify tx comes from the right context
-        // TODO: Verify tx is of the right type
+        // Verify tx is of the right type
+        ensure!(
+            tx.ty == TxType::InFlightRemoteStaking,
+            ContractError::WrongTxType(tx.id, tx.ty)
+        );
 
         // Load stake
         let mut stake_lock = self
@@ -144,7 +156,11 @@ impl ExternalStakingContract<'_> {
         let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
 
         // TODO: Verify tx comes from the right context
-        // TODO: Verify tx is of the right type
+        // Verify tx is of the right type
+        ensure!(
+            tx.ty == TxType::InFlightRemoteStaking,
+            ContractError::WrongTxType(tx.id, tx.ty)
+        );
 
         // Load stake
         let mut stake_lock = self
@@ -214,6 +230,19 @@ impl ExternalStakingContract<'_> {
         self.distribution
             .save(ctx.deps.storage, &validator, &distribution_lock)?;
 
+        // Create new tx
+        let tx_id = self.next_tx_id(ctx.deps.storage)?;
+
+        // Save tx
+        let new_tx = Tx {
+            id: tx_id,
+            ty: TxType::InFlightRemoteUnstaking,
+            amount: amount.amount,
+            user: ctx.info.sender.clone(),
+            validator,
+        };
+        self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
+
         // TODO: Remote IBC should happen here.
         // Or maybe `unstake` should be called via IBC. To be specified
         let resp = Response::new()
@@ -232,7 +261,11 @@ impl ExternalStakingContract<'_> {
         let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
 
         // TODO: Verify tx comes from the right context
-        // TODO: Verify tx is of the right type
+        // Verify tx is of the right type
+        ensure!(
+            tx.ty == TxType::InFlightRemoteUnstaking,
+            ContractError::WrongTxType(tx.id, tx.ty)
+        );
 
         let config = self.config.load(ctx.deps.storage)?;
 
@@ -288,7 +321,11 @@ impl ExternalStakingContract<'_> {
         let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
 
         // TODO: Verify tx comes from the right context
-        // TODO: Verify tx is of the right type
+        // Verify tx is of the right type
+        ensure!(
+            tx.ty == TxType::InFlightRemoteUnstaking,
+            ContractError::WrongTxType(tx.id, tx.ty)
+        );
 
         // Load stake
         let mut stake_lock = self

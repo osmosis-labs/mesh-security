@@ -1,3 +1,4 @@
+use crate::txs::TxType;
 use cosmwasm_std::{ConversionOverflowError, StdError, Uint128};
 use cw_utils::PaymentError;
 use mesh_apis::ibc::VersionError;
@@ -44,4 +45,7 @@ pub enum ContractError {
 
     #[error("Invalid authorized endpoint: {0}")]
     InvalidEndpoint(String),
+
+    #[error("The tx {0} exists but is of the wrong type: {1}")]
+    WrongTxType(u64, TxType),
 }
