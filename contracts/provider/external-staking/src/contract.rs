@@ -90,6 +90,51 @@ impl ExternalStakingContract<'_> {
         Ok(Response::new())
     }
 
+    /// Commits a pending stake.
+    /// Must be called by the IBC callback handler on successful remote staking.
+    #[allow(unused)]
+    fn commit_stake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
+
+        // TODO: Verify tx comes from the right context
+
+        // Load stake
+        let mut stake_lock = self
+            .stakes
+            .load(ctx.deps.storage, (&tx.user, &tx.validator))?;
+
+        // Load distribution
+        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx.validator)?;
+
+        // Commit amount (need to unlock it first)
+        stake_lock.unlock_write()?;
+        let stake = stake_lock.write()?;
+        stake.stake += tx.amount;
+
+        // Commit distribution (need to unlock it first)
+        distribution_lock.unlock_write()?;
+        let distribution = distribution_lock.write()?;
+        // Distribution alignment
+        stake
+            .points_alignment
+            .stake_increased(tx.amount, distribution.points_per_stake);
+        distribution.total_stake += tx.amount;
+
+        // Save stake
+        self.stakes
+            .save(ctx.deps.storage, (&tx.user, &tx.validator), &stake_lock)?;
+
+        // Save distribution
+        self.distribution
+            .save(ctx.deps.storage, &tx.validator, &distribution_lock)?;
+
+        // Remove tx
+        self.pending_txs.remove(ctx.deps.storage, tx_id);
+
+        Ok(())
+    }
+
     /// Schedules tokens for release, adding them to the pending unbonds. After `unbonding_period`
     /// passes, funds are ready to be released with `withdraw_unbonded` call by the user
     #[msg(exec)]
@@ -520,17 +565,7 @@ pub mod cross_staking {
                 .may_load(ctx.deps.storage, &msg.validator)?
                 .unwrap_or_default();
 
-            // TODO: Move to commit
-            let distribution = distribution_lock.write()?;
-            let stake = stake_lock.write()?;
-            stake.stake += amount.amount;
-            // Distribution alignment
-            stake
-                .points_alignment
-                .stake_increased(amount.amount, distribution.points_per_stake);
-            distribution.total_stake += amount.amount;
-
-            // Write lock and save state and distribution
+            // Write lock and save stake and distribution
             stake_lock.lock_write()?;
             self.stakes
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake_lock)?;
