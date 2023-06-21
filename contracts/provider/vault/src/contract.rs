@@ -636,22 +636,36 @@ impl VaultContract<'_> {
 
         // Max lien has to be recalculated from scratch; the just rolled back lien
         // is already written to storage
-        user.max_lien = self
-            .liens
-            .prefix(&tx_user)
-            .range(ctx.deps.storage, None, None, Order::Ascending)
-            .try_fold(Uint128::zero(), |max_lien, item| {
-                let (_, lien_lock) = item?;
-                // Shouldn't fail, because unlocked already
-                let lien = lien_lock.read().map_err(Into::<ContractError>::into);
-                lien.map(|lien| max_lien.max(lien.amount))
-            })?;
+        self.recalculate_max_lien(ctx.deps.storage, &tx_user, &mut user)?;
 
         user.total_slashable -= tx_amount * tx_slashable;
         self.users.save(ctx.deps.storage, &tx_user, &user_lock)?;
 
         // Remove tx
         self.pending.txs.remove(ctx.deps.storage, tx_id)?;
+        Ok(())
+    }
+
+    /// Recalculates the max lien for the user
+    ///
+    /// Needs to be called with the liens belonging to the user in an unlocked state, so that they
+    /// can be read.
+    fn recalculate_max_lien(
+        &self,
+        storage: &mut dyn Storage,
+        user: &Addr,
+        user_info: &mut UserInfo,
+    ) -> Result<(), ContractError> {
+        user_info.max_lien = self
+            .liens
+            .prefix(&user)
+            .range(storage, None, None, Order::Ascending)
+            .try_fold(Uint128::zero(), |max_lien, item| {
+                let (_, lien_lock) = item?;
+                // Shouldn't fail, because unlocked already
+                let lien = lien_lock.read().map_err(Into::<ContractError>::into);
+                lien.map(|lien| max_lien.max(lien.amount))
+            })?;
         Ok(())
     }
 
@@ -684,15 +698,7 @@ impl VaultContract<'_> {
 
         // Max lien has to be recalculated from scratch; the just saved lien
         // is already written to storage
-        user.max_lien = self
-            .liens
-            .prefix(&owner)
-            .range(ctx.deps.storage, None, None, Order::Ascending)
-            .try_fold(Uint128::zero(), |max_lien, item| {
-                let (_, lien_lock) = item?;
-                let lien = lien_lock.read().map_err(Into::<ContractError>::into);
-                lien.map(|lien| max_lien.max(lien.amount))
-            })?;
+        self.recalculate_max_lien(ctx.deps.storage, &owner, &mut user)?;
 
         user.total_slashable -= amount * slashable;
         self.users.save(ctx.deps.storage, &owner, &user_lock)?;
