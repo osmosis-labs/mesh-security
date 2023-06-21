@@ -7,4 +7,3 @@ pub mod msg;
 mod multitest;
 mod points_alignment;
 pub mod state;
-mod txs;
