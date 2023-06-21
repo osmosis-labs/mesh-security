@@ -632,11 +632,11 @@ impl VaultContract<'_> {
         let mut user_lock = self.users.load(ctx.deps.storage, &tx_user)?;
         // Rollback user's max_lien (need to unlock it first)
         user_lock.unlock_write()?;
-        let mut user = user_lock.write()?;
+        let user = user_lock.write()?;
 
         // Max lien has to be recalculated from scratch; the just rolled back lien
         // is already written to storage
-        self.recalculate_max_lien(ctx.deps.storage, &tx_user, &mut user)?;
+        self.recalculate_max_lien(ctx.deps.storage, &tx_user, user)?;
 
         user.total_slashable -= tx_amount * tx_slashable;
         self.users.save(ctx.deps.storage, &tx_user, &user_lock)?;
@@ -658,7 +658,7 @@ impl VaultContract<'_> {
     ) -> Result<(), ContractError> {
         user_info.max_lien = self
             .liens
-            .prefix(&user)
+            .prefix(user)
             .range(storage, None, None, Order::Ascending)
             .try_fold(Uint128::zero(), |max_lien, item| {
                 let (_, lien_lock) = item?;
@@ -693,11 +693,11 @@ impl VaultContract<'_> {
             .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien_lock)?;
 
         let mut user_lock = self.users.load(ctx.deps.storage, &owner)?;
-        let mut user = user_lock.write()?;
+        let user = user_lock.write()?;
 
         // Max lien has to be recalculated from scratch; the just saved lien
         // is already written to storage
-        self.recalculate_max_lien(ctx.deps.storage, &owner, &mut user)?;
+        self.recalculate_max_lien(ctx.deps.storage, &owner, user)?;
 
         user.total_slashable -= amount * slashable;
         self.users.save(ctx.deps.storage, &owner, &user_lock)?;
