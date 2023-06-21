@@ -9,7 +9,8 @@ use crate::{contract, msg::AccountResponse};
 use cosmwasm_std::StdError::GenericErr;
 use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
-use mesh_sync::LockError;
+use mesh_sync::Tx::InFlightStaking;
+use mesh_sync::{LockError, Tx};
 use sylvia::multitest::App;
 
 const OSMO: &str = "OSMO";
@@ -448,7 +449,9 @@ fn stake_local() {
 #[track_caller]
 fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
     let txs = vault.all_pending_txs(None, None).unwrap().txs;
-    txs.first().map(|tx| tx.id)
+    txs.first().map(|tx| match tx {
+        Tx::InFlightStaking { id, .. } => *id,
+    })
 }
 
 #[test]
@@ -880,10 +883,10 @@ fn stake_cross_txs() {
         .unwrap();
 
     // First tx is still pending
-    assert_eq!(
-        vault.all_pending_txs(None, None).unwrap().txs[0].id,
-        first_tx
-    );
+    let first_id = match vault.all_pending_txs(None, None).unwrap().txs[0] {
+        InFlightStaking { id, .. } => id,
+    };
+    assert_eq!(first_id, first_tx);
 
     // Cannot query account while pending
     assert!(matches!(
