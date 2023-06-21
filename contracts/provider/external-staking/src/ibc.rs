@@ -20,7 +20,7 @@ const MIN_IBC_PROTOCOL_VERSION: &str = "1.0.0";
 pub const AUTH_ENDPOINT: Item<AuthorizedEndpoint> = Item::new("auth_endpoint");
 
 // TODO: expected endpoint
-const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
+pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// enforces ordering and versioning constraints

@@ -37,4 +37,7 @@ pub enum ContractError {
 
     #[error("You must start the channel handshake on the other side, it doesn't support OpenInit")]
     IbcOpenInitDisallowed,
+
+    #[error("Invalid authorized endpoint: {0}")]
+    InvalidEndpoint(String),
 }
