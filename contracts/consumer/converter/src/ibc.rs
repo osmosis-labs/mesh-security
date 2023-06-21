@@ -2,13 +2,15 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_slice, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
-    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse,
-    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse,
+    from_slice, to_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
+    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcMsg,
+    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
 };
 use cw_storage_plus::Item;
 
-use mesh_apis::ibc::{validate_channel_order, ProtocolVersion, PROTOCOL_NAME};
+use mesh_apis::ibc::{
+    validate_channel_order, AddValidator, ConsumerPacket, ProtocolVersion, PROTOCOL_NAME,
+};
 
 use crate::error::ContractError;
 
@@ -19,6 +21,16 @@ const MIN_IBC_PROTOCOL_VERSION: &str = "1.0.0";
 
 // IBC specific state
 const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
+
+// Let those validator syncs take a day...
+const DEFAULT_TIMEOUT: u64 = 24 * 60 * 60;
+
+fn packet_timeout(env: &Env) -> IbcTimeout {
+    // No idea about their blocktime, but 24 hours ahead of our view of the clock
+    // should be decently in the future.
+    let timeout = env.block.time.plus_seconds(DEFAULT_TIMEOUT);
+    IbcTimeout::with_timestamp(timeout)
+}
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// enforces ordering and versioning constraints
@@ -63,7 +75,7 @@ pub fn ibc_channel_open(
 /// once it's established, we store data
 pub fn ibc_channel_connect(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     msg: IbcChannelConnectMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
     // ensure we have no channel yet
@@ -89,8 +101,27 @@ pub fn ibc_channel_connect(
     // store the channel
     IBC_CHANNEL.save(deps.storage, &channel)?;
 
-    // FIXME: later we start with sending the validator sync packets
-    Ok(IbcBasicResponse::default())
+    // Send a validator sync packet to arrive with the newly established channel
+    let validators = deps.querier.query_all_validators()?;
+    let updates = validators
+        .into_iter()
+        .map(|v| AddValidator {
+            valoper: v.address,
+            // TODO: not yet available in CosmWasm APIs
+            pub_key: "TODO".to_string(),
+            // Use current height/time as start height/time (no slashing before mesh starts)
+            start_height: env.block.height,
+            start_time: env.block.time.seconds(),
+        })
+        .collect();
+    let packet = ConsumerPacket::AddValidators(updates);
+    let msg = IbcMsg::SendPacket {
+        channel_id: channel.endpoint.channel_id,
+        data: to_binary(&packet)?,
+        timeout: packet_timeout(&env),
+    };
+
+    Ok(IbcBasicResponse::new().add_message(msg))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -117,21 +148,28 @@ pub fn ibc_packet_receive(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// never should be called as we do not send packets
+/// We get acks on sync state without much to do.
+/// If it succeeded, take no action. If it errored, we can't do anything else and let it go.
 pub fn ibc_packet_ack(
     _deps: DepsMut,
     _env: Env,
     _msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    Ok(IbcBasicResponse::new().add_attribute("action", "ibc_packet_ack"))
+    Ok(IbcBasicResponse::new())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// never should be called as we do not send packets
+/// The most we can do here is retry the packet, hoping it will eventually arrive.
 pub fn ibc_packet_timeout(
     _deps: DepsMut,
-    _env: Env,
-    _msg: IbcPacketTimeoutMsg,
+    env: Env,
+    msg: IbcPacketTimeoutMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    Ok(IbcBasicResponse::new().add_attribute("action", "ibc_packet_timeout"))
+    // Play it again, Sam.
+    let msg = IbcMsg::SendPacket {
+        channel_id: msg.packet.src.channel_id,
+        data: msg.packet.data,
+        timeout: packet_timeout(&env),
+    };
+    Ok(IbcBasicResponse::new().add_message(msg))
 }
