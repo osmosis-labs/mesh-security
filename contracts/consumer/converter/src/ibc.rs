@@ -62,12 +62,35 @@ pub fn ibc_channel_open(
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// once it's established, we store data
 pub fn ibc_channel_connect(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
     msg: IbcChannelConnectMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let _channel = msg.channel();
-    todo!();
+    // ensure we have no channel yet
+    if IBC_CHANNEL.may_load(deps.storage)?.is_some() {
+        return Err(ContractError::IbcChannelAlreadyOpen);
+    }
+    // ensure we are called with OpenAck
+    let (channel, counterparty_version) = match msg {
+        IbcChannelConnectMsg::OpenAck {
+            channel,
+            counterparty_version,
+        } => (channel, counterparty_version),
+        IbcChannelConnectMsg::OpenConfirm { .. } => {
+            return Err(ContractError::IbcOpenTryDisallowed)
+        }
+    };
+
+    // Ensure the counterparty responded with a version we support.
+    // Note: here, we error if it is higher than what we proposed originally
+    let v: ProtocolVersion = from_slice(counterparty_version.as_bytes())?;
+    v.verify_compatibility(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?;
+
+    // store the channel
+    IBC_CHANNEL.save(deps.storage, &channel)?;
+
+    // FIXME: later we start with sending the validator sync packets
+    Ok(IbcBasicResponse::default())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

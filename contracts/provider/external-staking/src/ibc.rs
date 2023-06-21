@@ -75,12 +75,24 @@ pub fn ibc_channel_open(
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// once it's established, we store data
 pub fn ibc_channel_connect(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
     msg: IbcChannelConnectMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let _channel = msg.channel();
-    todo!();
+    // ensure we have no channel yet
+    if IBC_CHANNEL.may_load(deps.storage)?.is_some() {
+        return Err(ContractError::IbcChannelAlreadyOpen);
+    }
+    // ensure we are called with OpenConfirm
+    let channel = match msg {
+        IbcChannelConnectMsg::OpenConfirm { channel } => channel,
+        IbcChannelConnectMsg::OpenAck { .. } => return Err(ContractError::IbcOpenInitDisallowed),
+    };
+
+    // Version negotiation over, we can only store the channel
+    IBC_CHANNEL.save(deps.storage, &channel)?;
+
+    Ok(IbcBasicResponse::default())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

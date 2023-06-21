@@ -72,6 +72,34 @@ impl ProtocolVersion {
         }
     }
 
+    /// This is like build_response, but called in the Ack/Confirm step.
+    /// The only difference is if the version is higher than the supported_ver,
+    /// but has the same major version, we error, as there is no further
+    /// possibility to negotiate.
+    pub fn verify_compatibility(
+        &self,
+        supported_ver: &str,
+        min_ver: &str,
+    ) -> Result<(), VersionError> {
+        let supported_ver = parse_version(supported_ver)?;
+        let min_ver = parse_version(min_ver)?;
+        let proposed = self.validate()?;
+        if proposed < min_ver {
+            Err(VersionError::VersionTooOld {
+                proposed: proposed.to_string(),
+                supported: self.version.to_string(),
+            })
+        } else if proposed > supported_ver {
+            // we compare full version, not just major version like above
+            Err(VersionError::VersionTooNew {
+                proposed: proposed.to_string(),
+                supported: self.version.to_string(),
+            })
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn to_string(&self) -> StdResult<String> {
         let bytes = to_vec(self)?;
         Ok(String::from_utf8(bytes)?)
