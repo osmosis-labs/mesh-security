@@ -13,5 +13,6 @@ thiserror        = { workspace = true }
 
 [dev-dependencies]
 cw-storage-plus     = { workspace = true }
+itertools = "0.10.5"
 
 

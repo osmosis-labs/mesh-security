@@ -494,32 +494,30 @@ mod examples {
 
     const USERS: Map<&str, UserInfo> = Map::new("users");
 
-    // sum them up for each user - collateral info must be provided externally
-    fn sum_liens(
+    // Recalculate user aggregate info from the liens (and the original user collateral)
+    // Question: return (Vec<_>, Vec<_>) here instead and don't pass in collateral?
+    fn collect_liens_for_user(
         storage: &dyn Storage,
         user: &str,
         collateral: impl Into<Uint128>,
         // if set, we don't include this lien in the sum (to use when reducing one)
         skip: Option<&str>,
     ) -> Result<UserInfo, TestsError> {
-        let (max_lien, total_slashable) = LIENS
+        // Create (amount, slashable) extract from all liens (possibly skipping one)
+        let all_liens = LIENS
             .prefix(user)
             .range(storage, None, None, Order::Ascending)
             .filter(|r| match (skip, r) {
                 (Some(x), Ok((k, _))) => x != k,
                 _ => true,
             })
-            .map(|r| {
-                let (_, lien) = r?;
-                Ok((lien.amount, lien.amount * lien.slashable))
-            })
-            .reduce(|acc: Result<_, TestsError>, x| {
-                let (max_lien, total_slashable) = acc?;
-                let (amount, slashable) = x?;
-                Ok((max_range(max_lien, amount), total_slashable + slashable))
-            })
-            .transpose()?
-            .unwrap_or_default();
+            .map(|r| r.map(|(_, lien)| (lien.amount, lien.amount * lien.slashable)));
+
+        // collect into two vectors, which we can reduce / sum independently
+        let (liens, slashable): (Vec<_>, Vec<_>) =
+            itertools::process_results(all_liens, |iter| iter.unzip())?;
+        let max_lien = liens.into_iter().reduce(max_range).unwrap_or_default();
+        let total_slashable = slashable.into_iter().sum();
         Ok(UserInfo {
             collateral: collateral.into(),
             max_lien,
@@ -595,15 +593,15 @@ mod examples {
             )
             .unwrap();
 
-        let mut alice_user = sum_liens(&store, alice, alice_collateral, None).unwrap();
+        let mut alice_user = collect_liens_for_user(&store, alice, alice_collateral, None).unwrap();
         assert!(alice_user.is_valid());
         USERS.save(&mut store, alice, &alice_user).unwrap();
 
-        let bob_user = sum_liens(&store, bob, bob_collateral, None).unwrap();
+        let bob_user = collect_liens_for_user(&store, bob, bob_collateral, None).unwrap();
         assert!(bob_user.is_valid());
         USERS.save(&mut store, bob, &bob_user).unwrap();
 
-        let mut carl_user = sum_liens(&store, carl, carl_collateral, None).unwrap();
+        let mut carl_user = collect_liens_for_user(&store, carl, carl_collateral, None).unwrap();
         assert!(carl_user.is_valid());
         USERS.save(&mut store, carl, &carl_user).unwrap();
 
@@ -650,7 +648,8 @@ mod examples {
         LIENS.save(&mut store, (alice, stake1), &lien).unwrap();
         USERS.save(&mut store, alice, &alice_user).unwrap();
         // verify this matches the full calculation
-        let alice_user2 = sum_liens(&store, alice, alice_user.collateral, None).unwrap();
+        let alice_user2 =
+            collect_liens_for_user(&store, alice, alice_user.collateral, None).unwrap();
         assert_eq!(alice_user, alice_user2);
 
         // but 500 more is too much
@@ -666,7 +665,8 @@ mod examples {
             .prepare_sub(Uint128::new(2000), Uint128::zero())
             .unwrap();
         // this requires a bit more tricky version to get max_lien
-        let mut bob_user = sum_liens(&store, bob, bob_user.collateral, Some(stake1)).unwrap();
+        let mut bob_user =
+            collect_liens_for_user(&store, bob, bob_user.collateral, Some(stake1)).unwrap();
         // and add this lien fully
         bob_user.total_slashable = bob_user.total_slashable + (lien.amount * lien.slashable);
         bob_user.max_lien = max_range(bob_user.max_lien, lien.amount);
@@ -676,7 +676,7 @@ mod examples {
         LIENS.save(&mut store, (bob, stake1), &lien).unwrap();
         USERS.save(&mut store, bob, &bob_user).unwrap();
         // verify this matches the full calculation
-        let bob_user2 = sum_liens(&store, bob, bob_user.collateral, None).unwrap();
+        let bob_user2 = collect_liens_for_user(&store, bob, bob_user.collateral, None).unwrap();
         assert_eq!(bob_user, bob_user2);
     }
 }
