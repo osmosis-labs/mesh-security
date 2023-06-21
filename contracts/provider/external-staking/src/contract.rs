@@ -13,7 +13,10 @@ use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use crate::error::ContractError;
-use crate::msg::{ConfigResponse, PendingRewards, ReceiveVirtualStake, StakeInfo, StakesResponse};
+use crate::msg::{
+    AuthorizedEndpointResponse, ConfigResponse, IbcChannelResponse, PendingRewards,
+    ReceiveVirtualStake, StakeInfo, StakesResponse,
+};
 use crate::state::{Config, Distribution, PendingUnbond, Stake};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -58,6 +61,7 @@ impl ExternalStakingContract<'_> {
         rewards_denom: String,
         vault: String,
         unbonding_period: u64,
+        remote_contact: crate::msg::AuthorizedEndpoint,
     ) -> Result<Response, ContractError> {
         let vault = ctx.deps.api.addr_validate(&vault)?;
         let vault = VaultApiHelper(vault);
@@ -72,6 +76,9 @@ impl ExternalStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+        remote_contact.validate()?;
+        crate::ibc::AUTH_ENDPOINT.save(ctx.deps.storage, &remote_contact)?;
 
         Ok(Response::new())
     }
@@ -271,6 +278,23 @@ impl ExternalStakingContract<'_> {
     pub fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         let resp = self.config.load(ctx.deps.storage)?.into();
         Ok(resp)
+    }
+
+    /// Query for the endpoint that can connect
+    #[msg(query)]
+    pub fn authorized_endpoint(
+        &self,
+        ctx: QueryCtx,
+    ) -> Result<AuthorizedEndpointResponse, ContractError> {
+        let resp = crate::ibc::AUTH_ENDPOINT.load(ctx.deps.storage)?;
+        Ok(resp)
+    }
+
+    /// Query for the endpoint that can connect
+    #[msg(query)]
+    pub fn ibc_channel(&self, ctx: QueryCtx) -> Result<IbcChannelResponse, ContractError> {
+        let channel = crate::ibc::IBC_CHANNEL.load(ctx.deps.storage)?;
+        Ok(IbcChannelResponse { channel })
     }
 
     /// Queries for stake info

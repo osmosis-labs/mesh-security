@@ -15,3 +15,5 @@ cosmwasm-schema  = { workspace = true }
 thiserror        = { workspace = true }
 serde            = { workspace = true }
 
+semver = { workspace = true }
+schemars = { workspace = true } 
