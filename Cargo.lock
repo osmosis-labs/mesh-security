@@ -399,6 +399,7 @@ dependencies = [
  "mesh-apis",
  "mesh-native-staking",
  "mesh-native-staking-proxy",
+ "mesh-sync",
  "mesh-vault",
  "schemars",
  "serde",

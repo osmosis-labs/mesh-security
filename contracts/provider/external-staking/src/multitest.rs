@@ -1,3 +1,5 @@
+use anyhow::Result as AnyResult;
+
 use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal};
 use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
@@ -6,6 +8,8 @@ use mesh_vault::contract::multitest_utils::{CodeId as VaultCodeId, VaultContract
 use mesh_vault::contract::test_utils::VaultApi;
 use mesh_vault::msg::StakingInitInfo;
 
+use mesh_sync::Tx;
+
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
 
@@ -13,8 +17,6 @@ use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
 use crate::msg::{ReceiveVirtualStake, StakeInfo};
-
-use anyhow::Result as AnyResult;
 
 const OSMO: &str = "osmo";
 const STAR: &str = "star";
@@ -285,7 +287,9 @@ fn staking() {
 #[track_caller]
 fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
     let txs = vault.all_pending_txs(None, None).unwrap().txs;
-    txs.first().map(|tx| tx.id)
+    txs.first().map(|tx| match tx {
+        Tx::InFlightStaking { id, .. } => *id,
+    })
 }
 
 #[test]

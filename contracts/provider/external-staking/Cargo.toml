@@ -39,6 +39,7 @@ anyhow        = { workspace = true }
 mesh-vault = { workspace = true, features = ["mt"] }
 mesh-native-staking-proxy = { workspace = true, features = ["mt"] }
 mesh-native-staking = { workspace = true, features = ["mt"] }
+mesh-sync = { workspace = true }
 
 [[bin]]
 name = "schema"
