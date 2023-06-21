@@ -3,6 +3,21 @@ use cosmwasm_std::{Coin, Uint128};
 
 use crate::state::Config;
 
+#[cw_serde]
+pub struct AuthorizedEndpoint {
+    pub connection_id: String,
+    pub port_id: String,
+}
+
+impl AuthorizedEndpoint {
+    pub fn new(connection_id: &str, port_id: &str) -> Self {
+        Self {
+            connection_id: connection_id.into(),
+            port_id: port_id.into(),
+        }
+    }
+}
+
 /// Config information returned with query
 #[cw_serde]
 pub struct ConfigResponse {

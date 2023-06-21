@@ -58,6 +58,7 @@ impl ExternalStakingContract<'_> {
         rewards_denom: String,
         vault: String,
         unbonding_period: u64,
+        remote_contact: crate::msg::AuthorizedEndpoint,
     ) -> Result<Response, ContractError> {
         let vault = ctx.deps.api.addr_validate(&vault)?;
         let vault = VaultApiHelper(vault);
@@ -72,6 +73,10 @@ impl ExternalStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+        // Question: do we need to validate here? Is there a defined schema for such
+        // Question: should we add a query endpoint for this?
+        crate::ibc::AUTH_ENDPOINT.save(ctx.deps.storage, &remote_contact)?;
 
         Ok(Response::new())
     }

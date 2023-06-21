@@ -16,7 +16,7 @@ use sylvia::multitest::App;
 use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
-use crate::msg::{ReceiveVirtualStake, StakeInfo};
+use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo};
 
 const OSMO: &str = "osmo";
 const STAR: &str = "star";
@@ -50,12 +50,15 @@ fn setup<'app>(
         .instantiate(OSMO.to_owned(), staking_init)
         .call(owner)?;
 
+    let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
+
     let contract = contract_code
         .instantiate(
             OSMO.to_owned(),
             STAR.to_owned(),
             vault.contract_addr.to_string(),
             unbond_period,
+            remote_contact,
         )
         .call(owner)?;
 

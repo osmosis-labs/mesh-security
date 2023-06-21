@@ -1,4 +1,3 @@
-use cosmwasm_schema::cw_serde;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
@@ -10,21 +9,15 @@ use cosmwasm_std::{
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{validate_channel_order, ProtocolVersion};
 
-use crate::error::ContractError;
+use crate::{error::ContractError, msg::AuthorizedEndpoint};
 
 /// This is the maximum version of the Mesh Security protocol that we support
 const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "1.0.0";
 /// This is the minimum version that we are compatible with
 const MIN_IBC_PROTOCOL_VERSION: &str = "1.0.0";
 
-#[cw_serde]
-pub struct AuthorizedEndpoint {
-    pub connection_id: String,
-    pub port_id: String,
-}
-
 // IBC specific state
-const AUTH_ENDPOINT: Item<AuthorizedEndpoint> = Item::new("auth_endpoint");
+pub const AUTH_ENDPOINT: Item<AuthorizedEndpoint> = Item::new("auth_endpoint");
 
 // TODO: expected endpoint
 const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
