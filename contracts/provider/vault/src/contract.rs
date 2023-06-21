@@ -12,6 +12,7 @@ use mesh_apis::local_staking_api::{
 };
 use mesh_apis::vault_api::{self, VaultApi};
 use mesh_sync::Lockable;
+use mesh_sync::Tx::InFlightStaking;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
@@ -21,7 +22,7 @@ use crate::msg::{
     AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, StakingInitInfo, TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
-use crate::txs::{Tx, TxType, Txs};
+use crate::txs::Txs;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -520,9 +521,8 @@ impl VaultContract<'_> {
             // Create new tx
             let tx_id = self.next_tx_id(ctx.deps.storage)?;
 
-            let new_tx = Tx {
+            let new_tx = InFlightStaking {
                 id: tx_id,
-                ty: TxType::InFlightStaking,
                 amount,
                 slashable,
                 user: ctx.info.sender.clone(),
@@ -540,27 +540,45 @@ impl VaultContract<'_> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
 
-        // Verify tx comes from the right contract
+        // Verify tx comes from the right contract, and is the right type
         ensure!(
-            tx.lienholder == ctx.info.sender,
-            ContractError::WrongContractTx(tx_id, ctx.info.sender.clone())
+            match tx.clone() {
+                InFlightStaking { lienholder, .. } => {
+                    ensure!(
+                        lienholder == ctx.info.sender,
+                        ContractError::WrongContractTx(tx_id, ctx.info.sender.clone())
+                    );
+                    true
+                }
+            },
+            ContractError::WrongTypeTx(tx_id, tx)
         );
+
+        let (_tx_amount, _tx_slashable, tx_user, tx_lienholder) = match tx {
+            InFlightStaking {
+                amount,
+                slashable,
+                user,
+                lienholder,
+                ..
+            } => (amount, slashable, user, lienholder),
+        };
 
         // Load lien
         let mut lien_lock = self
             .liens
-            .load(ctx.deps.storage, (&tx.user, &tx.lienholder))?;
+            .load(ctx.deps.storage, (&tx_user, &tx_lienholder))?;
         // Unlock it
         lien_lock.unlock_write()?;
         // Save it
         self.liens
-            .save(ctx.deps.storage, (&tx.user, &tx.lienholder), &lien_lock)?;
+            .save(ctx.deps.storage, (&tx_user, &tx_lienholder), &lien_lock)?;
         // Load user
-        let mut user_lock = self.users.load(ctx.deps.storage, &tx.user)?;
+        let mut user_lock = self.users.load(ctx.deps.storage, &tx_user)?;
         // Unlock it
         user_lock.unlock_write()?;
         // Save it
-        self.users.save(ctx.deps.storage, &tx.user, &user_lock)?;
+        self.users.save(ctx.deps.storage, &tx_user, &user_lock)?;
 
         // Remove tx
         self.pending.txs.remove(ctx.deps.storage, tx_id)?;
@@ -572,26 +590,45 @@ impl VaultContract<'_> {
     fn rollback_stake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
-        // Verify tx comes from the right contract
+
+        // Verify tx comes from the right contract, and is the right type
         ensure!(
-            tx.lienholder == ctx.info.sender,
-            ContractError::WrongContractTx(tx_id, ctx.info.sender.clone())
+            match tx.clone() {
+                InFlightStaking { lienholder, .. } => {
+                    ensure!(
+                        lienholder == ctx.info.sender,
+                        ContractError::WrongContractTx(tx_id, ctx.info.sender.clone())
+                    );
+                    true
+                }
+            },
+            ContractError::WrongTypeTx(tx_id, tx)
         );
+
+        let (tx_amount, tx_slashable, tx_user, tx_lienholder) = match tx {
+            InFlightStaking {
+                amount,
+                slashable,
+                user,
+                lienholder,
+                ..
+            } => (amount, slashable, user, lienholder),
+        };
 
         // Load lien
         let mut lien_lock = self
             .liens
-            .load(ctx.deps.storage, (&tx.user, &tx.lienholder))?;
+            .load(ctx.deps.storage, (&tx_user, &tx_lienholder))?;
         // Rollback amount (need to unlock it first)
         lien_lock.unlock_write()?;
         let lien = lien_lock.write()?;
-        lien.amount -= tx.amount;
+        lien.amount -= tx_amount;
         // Save it unlocked
         self.liens
-            .save(ctx.deps.storage, (&tx.user, &tx.lienholder), &lien_lock)?;
+            .save(ctx.deps.storage, (&tx_user, &tx_lienholder), &lien_lock)?;
 
         // Load user
-        let mut user_lock = self.users.load(ctx.deps.storage, &tx.user)?;
+        let mut user_lock = self.users.load(ctx.deps.storage, &tx_user)?;
         // Rollback user's max_lien (need to unlock it first)
         user_lock.unlock_write()?;
         let mut user = user_lock.write()?;
@@ -600,7 +637,7 @@ impl VaultContract<'_> {
         // is already written to storage
         user.max_lien = self
             .liens
-            .prefix(&tx.user)
+            .prefix(&tx_user)
             .range(ctx.deps.storage, None, None, Order::Ascending)
             .try_fold(Uint128::zero(), |max_lien, item| {
                 let (_, lien_lock) = item?;
@@ -609,8 +646,8 @@ impl VaultContract<'_> {
                 lien.map(|lien| max_lien.max(lien.amount))
             })?;
 
-        user.total_slashable -= tx.amount * tx.slashable;
-        self.users.save(ctx.deps.storage, &tx.user, &user_lock)?;
+        user.total_slashable -= tx_amount * tx_slashable;
+        self.users.save(ctx.deps.storage, &tx_user, &user_lock)?;
 
         // Remove tx
         self.pending.txs.remove(ctx.deps.storage, tx_id)?;

@@ -1,29 +1,7 @@
-use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, Order, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Order, StdResult, Storage};
 use cw_storage_plus::{Index, IndexList, IndexedMap, MultiIndex};
-
-#[cw_serde]
-pub enum TxType {
-    InFlightStaking,
-    // TODO
-    // Slash,
-}
-
-#[cw_serde]
-pub struct Tx {
-    /// Transaction id
-    pub id: u64,
-    /// Transaction type
-    pub ty: TxType,
-    /// Associated amount
-    pub amount: Uint128,
-    /// Slashable portion of lien
-    pub slashable: Decimal,
-    /// Associated user
-    pub user: Addr,
-    /// Remote staking contract
-    pub lienholder: Addr,
-}
+use mesh_sync::Tx;
+use mesh_sync::Tx::InFlightStaking;
 
 pub struct TxIndexes<'a> {
     // Last type param defines the pk deserialization type
@@ -44,7 +22,16 @@ pub struct Txs<'a> {
 impl<'a> Txs<'a> {
     pub fn new(storage_key: &'a str, user_subkey: &'a str) -> Self {
         let indexes = TxIndexes {
-            users: MultiIndex::new(|_, tx| tx.user.clone(), storage_key, user_subkey),
+            users: MultiIndex::new(
+                |_, tx| {
+                    let user = match tx {
+                        InFlightStaking { user, .. } => user,
+                    };
+                    user.clone()
+                },
+                storage_key,
+                user_subkey,
+            ),
         };
         let txs = IndexedMap::new(storage_key, indexes);
 
