@@ -1,3 +1,4 @@
+use cosmwasm_std::IbcOrder;
 use schemars::JsonSchema;
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,8 @@ pub enum VersionError {
     VersionTooOld { proposed: String, supported: String },
     #[error("Proposed version {proposed} has breaking changes ahead of supported {supported}")]
     VersionTooNew { proposed: String, supported: String },
+    #[error("Channel must be unordered")]
+    InvalidChannelOrder,
 }
 
 /// Implements logic as defined here:
@@ -64,5 +67,21 @@ impl ProtocolVersion {
                 version: ver.to_string(),
             })
         }
+    }
+}
+
+pub fn validate_channel_order(check: &IbcOrder) -> Result<(), VersionError> {
+    if check == &ORDERING {
+        Ok(())
+    } else {
+        Err(VersionError::InvalidChannelOrder)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn todo_implement_tests() {
+        todo!();
     }
 }
