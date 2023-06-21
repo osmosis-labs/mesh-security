@@ -683,11 +683,10 @@ impl VaultContract<'_> {
             .liens
             .may_load(ctx.deps.storage, (&owner, &ctx.info.sender))?
             .ok_or(ContractError::UnknownLienholder)?;
-        let lien = lien_lock.read()?;
+        let lien = lien_lock.write()?;
 
         ensure!(lien.amount >= amount, ContractError::InsufficientLien);
         let slashable = lien.slashable;
-        let lien = lien_lock.write()?;
         lien.amount -= amount;
 
         self.liens
