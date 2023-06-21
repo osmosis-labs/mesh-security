@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Order, Reply, Response, SubMsg,
-    SubMsgResponse, Uint128, WasmMsg,
+    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Order, Reply, Response, StdResult,
+    Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -11,15 +11,18 @@ use mesh_apis::local_staking_api::{
     LocalStakingApiHelper, LocalStakingApiQueryMsg, MaxSlashResponse,
 };
 use mesh_apis::vault_api::{self, VaultApi};
+use mesh_sync::Lockable;
+use mesh_sync::Tx::InFlightStaking;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
-    ConfigResponse, LienInfo, StakingInitInfo,
+    AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, StakingInitInfo, TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
+use crate::txs::Txs;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -47,9 +50,12 @@ pub struct VaultContract<'a> {
     /// All liens in the protocol
     ///
     /// Liens are indexed with (user, creditor), as this pair has to be unique
-    pub liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
+    pub liens: Map<'a, (&'a Addr, &'a Addr), Lockable<Lien>>,
     /// Per-user information
-    pub users: Map<'a, &'a Addr, UserInfo>,
+    pub users: Map<'a, &'a Addr, Lockable<UserInfo>>,
+    /// Pending txs information
+    pub tx_count: Item<'a, u64>,
+    pub pending: Txs<'a>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -57,13 +63,21 @@ pub struct VaultContract<'a> {
 #[error(ContractError)]
 #[messages(vault_api as VaultApi)]
 impl VaultContract<'_> {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             config: Item::new("config"),
             local_staking: Item::new("local_staking"),
             liens: Map::new("liens"),
             users: Map::new("users"),
+            pending: Txs::new("pending_txs", "users"),
+            tx_count: Item::new("tx_count"),
         }
+    }
+
+    pub fn next_tx_id(&self, store: &mut dyn Storage) -> StdResult<u64> {
+        let id: u64 = self.tx_count.may_load(store)?.unwrap_or_default() + 1;
+        self.tx_count.save(store, &id)?;
+        Ok(id)
     }
 
     #[msg(instantiate)]
@@ -98,12 +112,14 @@ impl VaultContract<'_> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let amount = must_pay(&ctx.info, &denom)?;
 
-        let mut user = self
+        let mut user_lock = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
+        let user = user_lock.write()?;
         user.collateral += amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users
+            .save(ctx.deps.storage, &ctx.info.sender, &user_lock)?;
 
         let resp = Response::new()
             .add_attribute("action", "bond")
@@ -121,10 +137,11 @@ impl VaultContract<'_> {
 
         ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
 
-        let mut user = self
+        let mut user_lock = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
+        let user = user_lock.read()?;
 
         let free_collateral = user.free_collateral();
         ensure!(
@@ -132,8 +149,10 @@ impl VaultContract<'_> {
             ContractError::ClaimsLocked(free_collateral)
         );
 
+        let user = user_lock.write()?;
         user.collateral -= amount.amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users
+            .save(ctx.deps.storage, &ctx.info.sender, &user_lock)?;
 
         let msg = BankMsg::Send {
             to_address: ctx.info.sender.to_string(),
@@ -168,17 +187,19 @@ impl VaultContract<'_> {
         let contract = CrossStakingApiHelper(contract);
         let slashable = contract.max_slash(ctx.deps.as_ref())?;
 
-        self.stake(
+        let tx_id = self.stake(
             &mut ctx,
             &config,
             &contract.0,
             slashable.max_slash,
             amount.clone(),
+            true,
         )?;
 
         let stake_msg = contract.receive_virtual_stake(
             ctx.info.sender.to_string(),
             amount.clone(),
+            tx_id,
             msg,
             vec![],
         )?;
@@ -187,7 +208,8 @@ impl VaultContract<'_> {
             .add_message(stake_msg)
             .add_attribute("action", "stake_remote")
             .add_attribute("sender", ctx.info.sender)
-            .add_attribute("amount", amount.amount.to_string());
+            .add_attribute("amount", amount.amount.to_string())
+            .add_attribute("tx_id", tx_id.to_string());
 
         Ok(resp)
     }
@@ -213,6 +235,7 @@ impl VaultContract<'_> {
             &local_staking.contract.0,
             local_staking.max_slash,
             amount.clone(),
+            false,
         )?;
 
         let stake_msg = local_staking.contract.receive_stake(
@@ -235,10 +258,11 @@ impl VaultContract<'_> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let account = ctx.deps.api.addr_validate(&account)?;
 
-        let user = self
+        let user_lock = self
             .users
             .may_load(ctx.deps.storage, &account)?
             .unwrap_or_default();
+        let user = user_lock.read()?;
 
         let resp = AccountResponse {
             denom,
@@ -274,8 +298,10 @@ impl VaultContract<'_> {
         let lienholder = ctx.deps.api.addr_validate(&lienholder)?;
 
         self.liens
-            .load(ctx.deps.storage, (&account, &lienholder))
+            .load(ctx.deps.storage, (&account, &lienholder))?
+            .read()
             .map_err(Into::into)
+            .cloned()
     }
 
     /// Returns paginated claims list for an user
@@ -298,8 +324,10 @@ impl VaultContract<'_> {
             .liens
             .prefix(&account)
             .range(ctx.deps.storage, bound, None, Order::Ascending)
-            .map(|lien| {
-                lien.map(|(lienholder, lien)| LienInfo {
+            .map(|item| {
+                let (lienholder, lien) = item?;
+                let lien = lien.read()?;
+                Ok::<LienInfo, ContractError>(LienInfo {
                     lienholder: lienholder.into(),
                     amount: lien.amount,
                 })
@@ -315,9 +343,9 @@ impl VaultContract<'_> {
     /// Queries for all users ever performing action in the system, paginating over
     /// them.
     ///
-    /// `start_after` is the last accoutn inlcuded in previous page
+    /// `start_after` is the last account included in previous page
     ///
-    /// `with_collateral` flag filters out users with no collateral, defualted to false
+    /// `with_collateral` flag filters out users with no collateral, defaulted to false
     #[msg(query)]
     fn all_accounts(
         &self,
@@ -332,28 +360,73 @@ impl VaultContract<'_> {
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
 
-        let accounts = self
+        let accounts: Vec<_> = self
             .users
             .range(ctx.deps.storage, bound, None, Order::Ascending)
             .filter(|account| {
-                !(with_collateral
-                    && account
-                        .as_ref()
-                        .map(|(_, account)| account.collateral.is_zero())
-                        .unwrap_or(false))
+                account
+                    .as_ref()
+                    .map(|(_, account_lock)| {
+                        account_lock
+                            .read()
+                            .map(|account| !with_collateral || !account.collateral.is_zero()) // Skip zero collateral
+                            // FIXME: Don't skip write-locked accounts (map to `MaybeAccount` wrapper)
+                            .unwrap_or(false) // Skip write-locked accounts
+                    })
+                    .unwrap_or(false) // Skip other errors
             })
             .map(|account| {
-                account.map(|(addr, account)| AllAccountsResponseItem {
-                    account: addr.into(),
-                    denom: denom.clone(),
-                    bonded: account.collateral,
-                    free: account.free_collateral(),
-                })
+                account.map(|(addr, account_lock)| {
+                    account_lock.read().map(|account| {
+                        Ok(AllAccountsResponseItem {
+                            account: addr.into(),
+                            denom: denom.clone(),
+                            bonded: account.collateral,
+                            free: account.free_collateral(),
+                        })
+                    })?
+                })?
+            })
+            .take(limit)
+            .collect::<Result<_, ContractError>>()?;
+
+        let resp = AllAccountsResponse { accounts };
+
+        Ok(resp)
+    }
+
+    /// Queries a pending tx.
+    #[msg(query)]
+    fn pending_tx(&self, ctx: QueryCtx, tx_id: u64) -> Result<TxResponse, ContractError> {
+        let resp = self.pending.txs.load(ctx.deps.storage, tx_id)?;
+        Ok(resp)
+    }
+
+    /// Queries for all pending txs.
+    /// Reports txs in descending order (newest first).
+    /// `start_after` is the last tx id included in previous page
+    #[msg(query)]
+    fn all_pending_txs_desc(
+        &self,
+        ctx: QueryCtx,
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    ) -> Result<AllTxsResponse, ContractError> {
+        let limit = clamp_page_limit(limit);
+        let bound = start_after.and_then(Bounder::exclusive_bound);
+
+        let txs = self
+            .pending
+            .txs
+            .range(ctx.deps.storage, None, bound, Order::Descending)
+            .map(|item| {
+                let (_id, tx) = item?;
+                Ok::<AllTxsResponseItem, ContractError>(tx)
             })
             .take(limit)
             .collect::<Result<_, _>>()?;
 
-        let resp = AllAccountsResponse { accounts };
+        let resp = AllTxsResponse { txs };
 
         Ok(resp)
     }
@@ -404,36 +477,195 @@ impl VaultContract<'_> {
         lienholder: &Addr,
         slashable: Decimal,
         amount: Coin,
-    ) -> Result<(), ContractError> {
+        remote: bool,
+    ) -> Result<u64, ContractError> {
         ensure!(
             amount.denom == config.denom,
             ContractError::UnexpectedDenom(config.denom.clone())
         );
 
         let amount = amount.amount;
-        let mut lien = self
+        let mut lien_lock = self
             .liens
             .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
-            .unwrap_or(Lien {
-                amount: Uint128::zero(),
-                slashable,
+            .unwrap_or_else(|| {
+                Lockable::new(Lien {
+                    amount: Uint128::zero(),
+                    slashable,
+                })
             });
+        let lien = lien_lock.write()?;
         lien.amount += amount;
 
-        let mut user = self
+        let mut user_lock = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
+        let mut user = user_lock.write()?;
         user.max_lien = user.max_lien.max(lien.amount);
         user.total_slashable += amount * lien.slashable;
 
         ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
+        // Write lock it if remote stake
+        if remote {
+            lien_lock.lock_write()?;
+            user_lock.lock_write()?;
+        }
         self.liens
-            .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien)?;
+            .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien_lock)?;
 
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users
+            .save(ctx.deps.storage, &ctx.info.sender, &user_lock)?;
 
+        if remote {
+            // Create new tx
+            let tx_id = self.next_tx_id(ctx.deps.storage)?;
+
+            let new_tx = InFlightStaking {
+                id: tx_id,
+                amount,
+                slashable,
+                user: ctx.info.sender.clone(),
+                lienholder: lienholder.clone(),
+            };
+            self.pending.txs.save(ctx.deps.storage, tx_id, &new_tx)?;
+            Ok(tx_id)
+        } else {
+            Ok(0)
+        }
+    }
+
+    /// Commits a pending stake
+    fn commit_stake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
+
+        // Verify tx comes from the right contract, and is the right type
+        ensure!(
+            match tx.clone() {
+                InFlightStaking { lienholder, .. } => {
+                    ensure!(
+                        lienholder == ctx.info.sender,
+                        ContractError::WrongContractTx(tx_id, ctx.info.sender.clone())
+                    );
+                    true
+                }
+            },
+            ContractError::WrongTypeTx(tx_id, tx)
+        );
+
+        let (_tx_amount, _tx_slashable, tx_user, tx_lienholder) = match tx {
+            InFlightStaking {
+                amount,
+                slashable,
+                user,
+                lienholder,
+                ..
+            } => (amount, slashable, user, lienholder),
+        };
+
+        // Load lien
+        let mut lien_lock = self
+            .liens
+            .load(ctx.deps.storage, (&tx_user, &tx_lienholder))?;
+        // Unlock it
+        lien_lock.unlock_write()?;
+        // Save it
+        self.liens
+            .save(ctx.deps.storage, (&tx_user, &tx_lienholder), &lien_lock)?;
+        // Load user
+        let mut user_lock = self.users.load(ctx.deps.storage, &tx_user)?;
+        // Unlock it
+        user_lock.unlock_write()?;
+        // Save it
+        self.users.save(ctx.deps.storage, &tx_user, &user_lock)?;
+
+        // Remove tx
+        self.pending.txs.remove(ctx.deps.storage, tx_id)?;
+
+        Ok(())
+    }
+
+    /// Rollbacks a pending tx
+    fn rollback_stake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
+
+        // Verify tx comes from the right contract, and is the right type
+        ensure!(
+            match tx.clone() {
+                InFlightStaking { lienholder, .. } => {
+                    ensure!(
+                        lienholder == ctx.info.sender,
+                        ContractError::WrongContractTx(tx_id, ctx.info.sender.clone())
+                    );
+                    true
+                }
+            },
+            ContractError::WrongTypeTx(tx_id, tx)
+        );
+
+        let (tx_amount, tx_slashable, tx_user, tx_lienholder) = match tx {
+            InFlightStaking {
+                amount,
+                slashable,
+                user,
+                lienholder,
+                ..
+            } => (amount, slashable, user, lienholder),
+        };
+
+        // Load lien
+        let mut lien_lock = self
+            .liens
+            .load(ctx.deps.storage, (&tx_user, &tx_lienholder))?;
+        // Rollback amount (need to unlock it first)
+        lien_lock.unlock_write()?;
+        let lien = lien_lock.write()?;
+        lien.amount -= tx_amount;
+        // Save it unlocked
+        self.liens
+            .save(ctx.deps.storage, (&tx_user, &tx_lienholder), &lien_lock)?;
+
+        // Load user
+        let mut user_lock = self.users.load(ctx.deps.storage, &tx_user)?;
+        // Rollback user's max_lien (need to unlock it first)
+        user_lock.unlock_write()?;
+        let user = user_lock.write()?;
+
+        // Max lien has to be recalculated from scratch; the just rolled back lien
+        // is already written to storage
+        self.recalculate_max_lien(ctx.deps.storage, &tx_user, user)?;
+
+        user.total_slashable -= tx_amount * tx_slashable;
+        self.users.save(ctx.deps.storage, &tx_user, &user_lock)?;
+
+        // Remove tx
+        self.pending.txs.remove(ctx.deps.storage, tx_id)?;
+        Ok(())
+    }
+
+    /// Recalculates the max lien for the user
+    ///
+    /// Needs to be called with the liens belonging to the user in an unlocked state, so that they
+    /// can be read.
+    fn recalculate_max_lien(
+        &self,
+        storage: &mut dyn Storage,
+        user: &Addr,
+        user_info: &mut UserInfo,
+    ) -> Result<(), ContractError> {
+        user_info.max_lien = self
+            .liens
+            .prefix(user)
+            .range(storage, None, None, Order::Ascending)
+            .try_fold(Uint128::zero(), |max_lien, item| {
+                let (_, lien_lock) = item?;
+                // Shouldn't fail, because unlocked already
+                let lien = lien_lock.read().map_err(Into::<ContractError>::into);
+                lien.map(|lien| max_lien.max(lien.amount))
+            })?;
         Ok(())
     }
 
@@ -447,33 +679,36 @@ impl VaultContract<'_> {
         let amount = amount.amount;
 
         let owner = Addr::unchecked(owner);
-        let mut lien = self
+        let mut lien_lock = self
             .liens
             .may_load(ctx.deps.storage, (&owner, &ctx.info.sender))?
             .ok_or(ContractError::UnknownLienholder)?;
+        let lien = lien_lock.write()?;
 
         ensure!(lien.amount >= amount, ContractError::InsufficientLien);
+        let slashable = lien.slashable;
         lien.amount -= amount;
 
         self.liens
-            .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien)?;
+            .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien_lock)?;
 
-        let mut user = self.users.load(ctx.deps.storage, &owner)?;
+        let mut user_lock = self.users.load(ctx.deps.storage, &owner)?;
+        let user = user_lock.write()?;
 
-        // Max lien has to be recalculated from scratch; the just released lien
+        // Max lien has to be recalculated from scratch; the just saved lien
         // is already written to storage
-        user.max_lien = self
-            .liens
-            .prefix(&owner)
-            .range(ctx.deps.storage, None, None, Order::Ascending)
-            .try_fold(Uint128::zero(), |max_lien, lien| {
-                lien.map(|(_, lien)| max_lien.max(lien.amount))
-            })?;
+        self.recalculate_max_lien(ctx.deps.storage, &owner, user)?;
 
-        user.total_slashable -= amount * lien.slashable;
-        self.users.save(ctx.deps.storage, &owner, &user)?;
+        user.total_slashable -= amount * slashable;
+        self.users.save(ctx.deps.storage, &owner, &user_lock)?;
 
         Ok(())
+    }
+}
+
+impl Default for VaultContract<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -525,6 +760,29 @@ impl VaultApi for VaultContract<'_> {
             .add_attribute("owner", owner)
             .add_attribute("amount", amount.to_string());
 
+        Ok(resp)
+    }
+
+    #[msg(exec)]
+    fn commit_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
+        self.commit_stake(&mut ctx, tx_id)?;
+
+        let resp = Response::new()
+            .add_attribute("action", "commit_tx")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("tx_id", tx_id.to_string());
+
+        Ok(resp)
+    }
+
+    #[msg(exec)]
+    fn rollback_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
+        self.rollback_stake(&mut ctx, tx_id)?;
+
+        let resp = Response::new()
+            .add_attribute("action", "rollback_tx")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("tx_id", tx_id.to_string());
         Ok(resp)
     }
 }

@@ -391,6 +391,7 @@ pub mod cross_staking {
             ctx: ExecCtx,
             owner: String,
             amount: Coin,
+            tx_id: u64,
             msg: Binary,
         ) -> Result<Response, Self::Error> {
             let config = self.config.load(ctx.deps.storage)?;
@@ -434,7 +435,8 @@ pub mod cross_staking {
             let resp = Response::new()
                 .add_attribute("action", "receive_virtual_stake")
                 .add_attribute("owner", owner)
-                .add_attribute("amount", amount.amount.to_string());
+                .add_attribute("amount", amount.amount.to_string())
+                .add_attribute("tx_id", tx_id.to_string());
 
             Ok(resp)
         }

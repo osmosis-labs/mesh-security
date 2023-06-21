@@ -66,6 +66,7 @@ impl CrossStakingApi for CrossStaking<'_> {
         _ctx: ExecCtx,
         _owner: String,
         _amount: Coin,
+        _tx: u64,
         _msg: Binary,
     ) -> Result<Response, ContractError> {
         Ok(Response::new())

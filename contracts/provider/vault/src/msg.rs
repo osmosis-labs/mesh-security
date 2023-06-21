@@ -1,5 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Binary, Uint128};
+use mesh_sync::Tx;
 
 /// This is the info used to construct the native staking contract
 #[cw_serde]
@@ -51,4 +52,12 @@ pub struct LienInfo {
 pub struct ConfigResponse {
     pub denom: String,
     pub local_staking: String,
+}
+
+pub type TxResponse = Tx;
+pub type AllTxsResponseItem = TxResponse;
+
+#[cw_serde]
+pub struct AllTxsResponse {
+    pub txs: Vec<AllTxsResponseItem>,
 }

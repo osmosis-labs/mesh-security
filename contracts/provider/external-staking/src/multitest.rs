@@ -1,9 +1,14 @@
+use anyhow::Result as AnyResult;
+
 use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal};
 use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::contract::multitest_utils::CodeId as NativeStakingProxyCodeId;
 use mesh_vault::contract::multitest_utils::{CodeId as VaultCodeId, VaultContractProxy};
+use mesh_vault::contract::test_utils::VaultApi;
 use mesh_vault::msg::StakingInitInfo;
+
+use mesh_sync::Tx;
 
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
@@ -12,8 +17,6 @@ use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
 use crate::msg::{ReceiveVirtualStake, StakeInfo};
-
-use anyhow::Result as AnyResult;
 
 const OSMO: &str = "osmo";
 const STAR: &str = "star";
@@ -127,6 +130,14 @@ fn staking() {
         .call(users[0])
         .unwrap();
 
+    let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    // Hardcoded commit_tx call (lack of IBC support yet)
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(contract.contract_addr.as_str())
+        .unwrap();
+
     vault
         .stake_remote(
             contract.contract_addr.to_string(),
@@ -140,6 +151,12 @@ fn staking() {
         .unwrap();
 
     vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
+        .unwrap();
+
+    vault
         .stake_remote(
             contract.contract_addr.to_string(),
             coin(100, OSMO),
@@ -149,6 +166,12 @@ fn staking() {
             .unwrap(),
         )
         .call(users[0])
+        .unwrap();
+
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
         .unwrap();
 
     vault
@@ -164,6 +187,12 @@ fn staking() {
         .unwrap();
 
     vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
+        .unwrap();
+
+    vault
         .stake_remote(
             contract.contract_addr.to_string(),
             coin(100, OSMO),
@@ -173,6 +202,11 @@ fn staking() {
             .unwrap(),
         )
         .call(users[1])
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
         .unwrap();
 
     // All tokens should be only on the vault contract
@@ -250,6 +284,14 @@ fn staking() {
     );
 }
 
+#[track_caller]
+fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
+    let txs = vault.all_pending_txs_desc(None, None).unwrap().txs;
+    txs.first().map(|tx| match tx {
+        Tx::InFlightStaking { id, .. } => *id,
+    })
+}
+
 #[test]
 fn unstaking() {
     let users = ["user1", "user2"];
@@ -300,6 +342,13 @@ fn unstaking() {
         )
         .call(users[0])
         .unwrap();
+    let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    // Hardcoded commit_tx call (lack of IBC support yet)
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(contract.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -312,6 +361,11 @@ fn unstaking() {
         )
         .call(users[0])
         .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -323,6 +377,11 @@ fn unstaking() {
             .unwrap(),
         )
         .call(users[1])
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
         .unwrap();
 
     // Properly unstake some tokens
@@ -583,6 +642,12 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
+    // Hardcoded commit_tx call (lack of IBC support yet)
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -595,6 +660,11 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -606,6 +676,11 @@ fn distribution() {
             .unwrap(),
         )
         .call(users[1])
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(contract.contract_addr.as_str())
         .unwrap();
 
     // Start with equal distribution:

@@ -1,11 +1,16 @@
 mod cross_staking;
 mod local_staking;
 
+use crate::contract::multitest_utils::VaultContractProxy;
+use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
 use crate::msg::{AllAccountsResponseItem, LienInfo, StakingInitInfo};
 use crate::{contract, msg::AccountResponse};
+use cosmwasm_std::StdError::GenericErr;
 use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
+use mesh_sync::Tx::InFlightStaking;
+use mesh_sync::{LockError, Tx};
 use sylvia::multitest::App;
 
 const OSMO: &str = "OSMO";
@@ -441,6 +446,14 @@ fn stake_local() {
         .unwrap_err();
 }
 
+#[track_caller]
+fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
+    let txs = vault.all_pending_txs_desc(None, None).unwrap().txs;
+    txs.first().map(|tx| match tx {
+        Tx::InFlightStaking { id, .. } => *id,
+    })
+}
+
 #[test]
 fn stake_cross() {
     let owner = "owner";
@@ -511,7 +524,7 @@ fn stake_cross() {
         coin(0, OSMO)
     );
 
-    // Staking localy
+    // Staking remotely
 
     vault
         .stake_remote(
@@ -520,6 +533,14 @@ fn stake_cross() {
             Binary::default(),
         )
         .call(user)
+        .unwrap();
+
+    let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    // Hardcoded commit_tx call (lack of IBC support yet)
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(cross_staking.contract_addr.as_str())
         .unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
@@ -561,6 +582,11 @@ fn stake_cross() {
             Binary::default(),
         )
         .call(user)
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking.contract_addr.as_str())
         .unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
@@ -712,6 +738,356 @@ fn stake_cross() {
 }
 
 #[test]
+fn stake_cross_txs() {
+    let owner = "owner";
+    let user = "user1";
+    let user2 = "user2";
+
+    let app = MtApp::new(|router, _api, storage| {
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(user), coins(300, OSMO))
+            .unwrap();
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(user2), coins(500, OSMO))
+            .unwrap();
+    });
+    let app = App::new(app);
+
+    // Contracts setup
+
+    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
+    let cross_staking_code = cross_staking::multitest_utils::CodeId::store_code(&app);
+    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
+
+    let cross_staking = cross_staking_code
+        .instantiate(Decimal::percent(10))
+        .call(owner)
+        .unwrap();
+
+    let staking_init_info = StakingInitInfo {
+        admin: None,
+        code_id: local_staking_code.code_id(),
+        msg: to_binary(&Empty {}).unwrap(),
+        label: None,
+    };
+
+    let vault = vault_code
+        .instantiate(OSMO.to_owned(), staking_init_info)
+        .with_label("Vault")
+        .call(owner)
+        .unwrap();
+
+    // Bond some tokens
+
+    vault
+        .bond()
+        .with_funds(&coins(300, OSMO))
+        .call(user)
+        .unwrap();
+
+    assert_eq!(
+        vault.account(user.to_owned()).unwrap(),
+        AccountResponse {
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(300),
+            free: Uint128::new(300),
+        }
+    );
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(claims.claims, []);
+
+    vault
+        .bond()
+        .with_funds(&coins(500, OSMO))
+        .call(user2)
+        .unwrap();
+    assert_eq!(
+        vault.account(user2.to_owned()).unwrap(),
+        AccountResponse {
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(500),
+            free: Uint128::new(500),
+        }
+    );
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(&vault.contract_addr, OSMO)
+            .unwrap(),
+        coin(800, OSMO)
+    );
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(&cross_staking.contract_addr, OSMO)
+            .unwrap(),
+        coin(0, OSMO)
+    );
+
+    // No pending txs
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs, vec![]);
+    // Can query all accounts
+    let accounts = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(accounts.accounts.len(), 2);
+
+    // Staking remotely
+
+    vault
+        .stake_remote(
+            cross_staking.contract_addr.to_string(),
+            coin(100, OSMO),
+            Binary::default(),
+        )
+        .call(user)
+        .unwrap();
+
+    // One pending tx
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 1);
+
+    // Same user cannot stake while pending tx
+    assert_eq!(
+        vault
+            .stake_remote(
+                cross_staking.contract_addr.to_string(),
+                coin(100, OSMO),
+                Binary::default(),
+            )
+            .call(user)
+            .unwrap_err(),
+        ContractError::Lock(LockError::WriteLocked)
+    );
+    // Store for later
+    let first_tx = get_last_pending_tx_id(&vault).unwrap();
+
+    // But other user can
+    vault
+        .stake_remote(
+            cross_staking.contract_addr.to_string(),
+            coin(100, OSMO),
+            Binary::default(),
+        )
+        .call(user2)
+        .unwrap();
+
+    // Two pending txs
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 2);
+
+    // Last tx commit_tx call
+    let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(last_tx)
+        .call(cross_staking.contract_addr.as_str())
+        .unwrap();
+
+    // First tx is still pending
+    let first_id = match vault.all_pending_txs_desc(None, None).unwrap().txs[0] {
+        InFlightStaking { id, .. } => id,
+    };
+    assert_eq!(first_id, first_tx);
+
+    // Cannot query account while pending
+    assert!(matches!(
+        vault.account(user.to_owned()).unwrap_err(),
+        ContractError::Std(GenericErr { .. })
+    )); // write locked
+        // Cannot query claims while pending
+    assert!(matches!(
+        vault
+            .account_claims(user.to_owned(), None, None)
+            .unwrap_err(),
+        ContractError::Std(GenericErr { .. })
+    )); // write locked
+        // Can query vault's balance while pending
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(&vault.contract_addr, OSMO)
+            .unwrap(),
+        coin(800, OSMO)
+    );
+    // Can query all accounts, but locked ones are not returned
+    let accounts = vault.all_accounts(false, None, None).unwrap();
+    assert_eq!(
+        accounts.accounts,
+        [AllAccountsResponseItem {
+            account: user2.to_string(),
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(500),
+            free: Uint128::new(400),
+        }]
+    );
+
+    // Can query the other account
+    let acc = vault.account(user2.to_owned()).unwrap();
+    assert_eq!(
+        acc,
+        AccountResponse {
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(500),
+            free: Uint128::new(400),
+        }
+    );
+    // Can query the other account claims
+    let claims = vault.account_claims(user2.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: cross_staking.contract_addr.to_string(),
+            amount: Uint128::new(100)
+        }]
+    );
+
+    // Commit first tx
+    vault
+        .vault_api_proxy()
+        .commit_tx(first_tx)
+        .call(cross_staking.contract_addr.as_str())
+        .unwrap();
+
+    // Can query account now
+    let acc = vault.account(user.to_owned()).unwrap();
+    assert_eq!(
+        acc,
+        AccountResponse {
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(300),
+            free: Uint128::new(200),
+        }
+    );
+    // Can query claims
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: cross_staking.contract_addr.to_string(),
+            amount: Uint128::new(100)
+        }]
+    );
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(&vault.contract_addr, OSMO)
+            .unwrap(),
+        coin(800, OSMO)
+    );
+}
+
+#[test]
+fn stake_cross_rollback_tx() {
+    let owner = "owner";
+    let user = "user1";
+
+    let app = MtApp::new(|router, _api, storage| {
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(user), coins(300, OSMO))
+            .unwrap();
+    });
+    let app = App::new(app);
+
+    // Contracts setup
+
+    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
+    let cross_staking_code = cross_staking::multitest_utils::CodeId::store_code(&app);
+    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
+
+    let cross_staking = cross_staking_code
+        .instantiate(Decimal::percent(10))
+        .call(owner)
+        .unwrap();
+
+    let staking_init_info = StakingInitInfo {
+        admin: None,
+        code_id: local_staking_code.code_id(),
+        msg: to_binary(&Empty {}).unwrap(),
+        label: None,
+    };
+
+    let vault = vault_code
+        .instantiate(OSMO.to_owned(), staking_init_info)
+        .with_label("Vault")
+        .call(owner)
+        .unwrap();
+
+    // Bond some tokens
+
+    vault
+        .bond()
+        .with_funds(&coins(300, OSMO))
+        .call(user)
+        .unwrap();
+
+    assert_eq!(
+        vault.account(user.to_owned()).unwrap(),
+        AccountResponse {
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(300),
+            free: Uint128::new(300),
+        }
+    );
+
+    // Staking remotely
+
+    vault
+        .stake_remote(
+            cross_staking.contract_addr.to_string(),
+            coin(100, OSMO),
+            Binary::default(),
+        )
+        .call(user)
+        .unwrap();
+
+    // One pending tx
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 1);
+
+    // Rollback tx
+    let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    vault
+        .vault_api_proxy()
+        .rollback_tx(last_tx)
+        .call(cross_staking.contract_addr.as_str())
+        .unwrap();
+
+    // No pending txs
+    assert!(vault
+        .all_pending_txs_desc(None, None)
+        .unwrap()
+        .txs
+        .is_empty());
+
+    // Funds are restored
+    let acc = vault.account(user.to_owned()).unwrap();
+    assert_eq!(
+        acc,
+        AccountResponse {
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(300),
+            free: Uint128::new(300),
+        }
+    );
+    // No non-empty claims
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [LienInfo {
+            lienholder: cross_staking.contract_addr.to_string(),
+            amount: Uint128::new(0)
+        }]
+    );
+    // Vault has the funds
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(&vault.contract_addr, OSMO)
+            .unwrap(),
+        coin(300, OSMO)
+    );
+}
+
+#[test]
 fn multiple_stakes() {
     let owner = "owner";
     let user = "user1";
@@ -783,6 +1159,11 @@ fn multiple_stakes() {
         )
         .call(user)
         .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking1.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -791,6 +1172,11 @@ fn multiple_stakes() {
             Binary::default(),
         )
         .call(user)
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking2.contract_addr.as_str())
         .unwrap();
 
     assert_eq!(
@@ -834,6 +1220,11 @@ fn multiple_stakes() {
         )
         .call(user)
         .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking1.contract_addr.as_str())
+        .unwrap();
 
     vault
         .stake_remote(
@@ -842,6 +1233,11 @@ fn multiple_stakes() {
             Binary::default(),
         )
         .call(user)
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking2.contract_addr.as_str())
         .unwrap();
 
     assert_eq!(
@@ -882,6 +1278,11 @@ fn multiple_stakes() {
             Binary::default(),
         )
         .call(user)
+        .unwrap();
+    vault
+        .vault_api_proxy()
+        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
+        .call(cross_staking1.contract_addr.as_str())
         .unwrap();
 
     let err = vault

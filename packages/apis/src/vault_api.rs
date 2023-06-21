@@ -29,6 +29,16 @@ pub trait VaultApi {
         // address of the user who originally called stake_remote
         owner: String,
     ) -> Result<Response, Self::Error>;
+
+    /// This must be called by the remote staking contract to commit the remote staking call on success.
+    /// Transaction ID is used to identify the original (vault contract originated) transaction.
+    #[msg(exec)]
+    fn commit_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
+
+    /// This must be called by the remote staking contract to rollback the remote staking call on failure.
+    /// Transaction ID is used to identify the original (vault contract originated) transaction.
+    #[msg(exec)]
+    fn rollback_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]
@@ -68,6 +78,26 @@ impl VaultApiHelper {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,
             funds,
+        };
+        Ok(wasm)
+    }
+
+    pub fn commit_tx(&self, tx_id: u64) -> Result<WasmMsg, StdError> {
+        let msg = VaultApiExecMsg::CommitTx { tx_id };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
+        };
+        Ok(wasm)
+    }
+
+    pub fn rollback_tx(&self, tx_id: u64) -> Result<WasmMsg, StdError> {
+        let msg = VaultApiExecMsg::RollbackTx { tx_id };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
         };
         Ok(wasm)
     }

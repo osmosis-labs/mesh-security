@@ -129,6 +129,8 @@ impl MockVaultContract<'_> {
         contract: String,
         // amount to stake on that contract
         amount: Coin,
+        // associated transaction id
+        tx_id: u64,
         // action to take with that stake
         msg: Binary,
     ) -> Result<Response, VaultError> {
@@ -139,6 +141,7 @@ impl MockVaultContract<'_> {
         let wasm_msg = cross_staking.receive_virtual_stake(
             ctx.info.sender.into_string(),
             amount,
+            tx_id,
             msg,
             vec![],
         )?;
@@ -224,6 +227,22 @@ impl VaultApi for MockVaultContract<'_> {
     ) -> Result<Response, VaultError> {
         let _ = owner;
         // we don't track liens so no-op
+        Ok(Response::new())
+    }
+
+    /// This must be called by the remote staking contract to commit the remote staking call on success.
+    /// Transaction ID is used to identify the original (vault contract originated) transaction.
+    #[msg(exec)]
+    fn commit_tx(&self, _ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error> {
+        let _ = tx_id;
+        Ok(Response::new())
+    }
+
+    /// This must be called by the remote staking contract to rollback the remote staking call on failure.
+    /// Transaction ID is used to identify the original (vault contract originated) transaction.
+    #[msg(exec)]
+    fn rollback_tx(&self, _ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error> {
+        let _ = tx_id;
         Ok(Response::new())
     }
 }
