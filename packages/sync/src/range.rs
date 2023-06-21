@@ -9,7 +9,6 @@ use cosmwasm_schema::cw_serde;
 /// This is designed to work with two numeric primitives that can be added, subtracted, and compared.
 #[cw_serde]
 #[derive(Default, Copy)]
-// Note: this was (T, T) but (Uint128, Uint128) hit `serialize_tuple_struct` which is not supported by serde-json-wasm
 pub struct ValueRange<T> {
     #[serde(rename = "l")]
     low: T,
@@ -28,10 +27,8 @@ pub enum RangeError {
 }
 
 impl<T> ValueRange<T> {
-    /// Constructor as close to the old tuple
-    /// ValueRange(5, 10) => ValueRange::at(5, 10)
     #[inline]
-    pub fn at(min: T, max: T) -> Self {
+    pub fn new(min: T, max: T) -> Self {
         Self {
             low: min,
             high: max,
@@ -44,7 +41,7 @@ where
     T: Copy,
 {
     #[inline]
-    pub fn new(value: T) -> Self {
+    pub fn new_val(value: T) -> Self {
         Self {
             low: value,
             high: value,
@@ -136,7 +133,7 @@ where
 
     #[inline]
     fn mul(self, rhs: U) -> Self::Output {
-        ValueRange::at(self.low * rhs, self.high * rhs)
+        ValueRange::new(self.low * rhs, self.high * rhs)
     }
 }
 
@@ -149,7 +146,7 @@ where
 
     #[inline]
     fn mul(self, rhs: U) -> Self::Output {
-        ValueRange::at(self.low * rhs, self.high * rhs)
+        ValueRange::new(self.low * rhs, self.high * rhs)
     }
 }
 
@@ -158,7 +155,7 @@ impl<T: Add<Output = T>> Add for ValueRange<T> {
 
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
-        ValueRange::at(self.low + rhs.low, self.high + rhs.high)
+        ValueRange::new(self.low + rhs.low, self.high + rhs.high)
     }
 }
 
@@ -259,7 +256,7 @@ mod tests {
     #[test]
     fn comparisons() {
         // check for one point - it behaves like an integer
-        let mut range = ValueRange::new(50);
+        let mut range = ValueRange::new_val(50);
         // valid_min + valid_max is like equals
         assert!(range.is_under_max(50));
         assert!(range.is_over_min(50));
@@ -285,29 +282,29 @@ mod tests {
     #[test]
     fn add_ranges() {
         // (80, 120)
-        let mut range = ValueRange::new(80);
+        let mut range = ValueRange::new_val(80);
         range.prepare_add(40, None).unwrap();
 
         // (100, 200)
-        let mut other = ValueRange::new(200);
+        let mut other = ValueRange::new_val(200);
         other.prepare_sub(100, 0).unwrap();
 
         let total = range + other;
-        assert_eq!(total, ValueRange::at(180, 320));
+        assert_eq!(total, ValueRange::new(180, 320));
     }
 
     #[test]
     fn value() {
         // (80, 120)
-        let range = ValueRange::new(80);
+        let range = ValueRange::new_val(80);
         let v = range.val().unwrap();
         assert_eq!(v, 80);
 
-        let range: ValueRange<i32> = ValueRange::at(200, 200);
+        let range: ValueRange<i32> = ValueRange::new(200, 200);
         let v = range.val().unwrap();
         assert_eq!(v, 200);
 
-        let range: ValueRange<i32> = ValueRange::at(190, 200);
+        let range: ValueRange<i32> = ValueRange::new(190, 200);
         let err = range.val().unwrap_err();
         assert_eq!(err, RangeError::NotOneValue);
     }
@@ -315,52 +312,52 @@ mod tests {
     #[test]
     fn sums() {
         let ranges = [
-            ValueRange::new(100),
-            ValueRange::at(0, 250),
-            ValueRange::new(200),
-            ValueRange::at(170, 380),
+            ValueRange::new_val(100),
+            ValueRange::new(0, 250),
+            ValueRange::new_val(200),
+            ValueRange::new(170, 380),
         ];
         let total: ValueRange<u32> = ranges.into_iter().sum();
-        assert_eq!(total, ValueRange::at(470, 930));
+        assert_eq!(total, ValueRange::new(470, 930));
     }
 
     #[test]
     fn min_max() {
         let ranges = [
-            ValueRange::new(100),
-            ValueRange::at(40, 250),
-            ValueRange::new(200),
-            ValueRange::at(170, 380),
+            ValueRange::new_val(100),
+            ValueRange::new(40, 250),
+            ValueRange::new_val(200),
+            ValueRange::new(170, 380),
         ];
 
         // (max value if all rollback, max value if all commit)
         let max = reduce_max_range(ranges.iter());
-        assert_eq!(max, ValueRange::at(200, 380));
+        assert_eq!(max, ValueRange::new(200, 380));
 
         // (min value if all rollback, min value if all commit)
         let min = reduce_min_range(ranges.iter());
-        assert_eq!(min, ValueRange::at(40, 100));
+        assert_eq!(min, ValueRange::new(40, 100));
 
         // (min value if all rollback, max value if all commit)
         let all = spread(ranges.iter());
-        assert_eq!(all, ValueRange::at(40, 380));
+        assert_eq!(all, ValueRange::new(40, 380));
     }
 
     // most tests will use i32 for simplicity - just ensure APIs work properly with Uint128
     #[test]
     fn works_with_uint128() {
         // (80, 120)
-        let mut range = ValueRange::new(Uint128::new(80));
+        let mut range = ValueRange::new_val(Uint128::new(80));
         range.prepare_add(Uint128::new(40), None).unwrap();
 
         // (100, 200)
-        let mut other = ValueRange::new(Uint128::new(200));
+        let mut other = ValueRange::new_val(Uint128::new(200));
         other
             .prepare_sub(Uint128::new(100), Uint128::zero())
             .unwrap();
 
         let total = range + other;
-        assert_eq!(total, ValueRange::at(Uint128::new(180), Uint128::new(320)));
+        assert_eq!(total, ValueRange::new(Uint128::new(180), Uint128::new(320)));
     }
 
     // This test attempts to use the API in a realistic scenario.
@@ -372,7 +369,7 @@ mod tests {
     #[test]
     fn real_world_usage() {
         let mut collateral = 10_000u64;
-        let mut lien = ValueRange::new(0u64);
+        let mut lien = ValueRange::new_val(0u64);
 
         // prepare some lien
         lien.prepare_add(2_000, collateral).unwrap();
@@ -385,7 +382,7 @@ mod tests {
         // let's commit the second pending lien (only 2000 left)
         // QUESTION: should we enforce the min/max on commit/rollback explicitly and pass them in?
         lien.commit_add(5_000);
-        assert_eq!(lien, ValueRange::at(5_000, 7_000));
+        assert_eq!(lien, ValueRange::new(5_000, 7_000));
 
         // See we cannot reduce this by 4_000
         assert!(!lien.is_under_max(collateral - 4_000));
@@ -401,7 +398,7 @@ mod tests {
 
         // if we rollback the other pending lien, this works
         lien.rollback_add(2_000);
-        assert_eq!(lien, ValueRange::at(2_000, 5_000));
+        assert_eq!(lien, ValueRange::new(2_000, 5_000));
         lien.prepare_add(1_500, collateral).unwrap();
     }
 
@@ -411,9 +408,9 @@ mod tests {
     fn invariants_over_set_of_liens() {
         // some existing outstanding liens
         let liens = vec![
-            ValueRange::at(Uint128::new(5000), Uint128::new(7000)),
-            ValueRange::at(Uint128::new(2000), Uint128::new(8000)),
-            ValueRange::at(Uint128::new(3000), Uint128::new(12000)),
+            ValueRange::new(Uint128::new(5000), Uint128::new(7000)),
+            ValueRange::new(Uint128::new(2000), Uint128::new(8000)),
+            ValueRange::new(Uint128::new(3000), Uint128::new(12000)),
         ];
         // for simplicity, assume all slash rates are the same, easier for writing tests, but ensures operations are allowed
         let slash_rate = Decimal::percent(10);
@@ -422,7 +419,7 @@ mod tests {
         let max_lien = reduce_max_range(liens.iter());
         assert_eq!(
             max_lien,
-            ValueRange::at(Uint128::new(5000), Uint128::new(12000))
+            ValueRange::new(Uint128::new(5000), Uint128::new(12000))
         );
         // check if this is less than some collateral
         assert!(max_lien.is_under_max(Uint128::new(15000)));
@@ -433,7 +430,7 @@ mod tests {
         let max_slashable: ValueRange<Uint128> = liens.iter().map(|l| l * slash_rate).sum();
         assert_eq!(
             max_slashable,
-            ValueRange::at(Uint128::new(1000), Uint128::new(2700))
+            ValueRange::new(Uint128::new(1000), Uint128::new(2700))
         );
         // check if this is less than some collateral
         assert!(max_slashable.is_under_max(Uint128::new(5000)));
@@ -447,7 +444,7 @@ mod tests {
         let lien_spread = spread(liens.iter());
         assert_eq!(
             lien_spread,
-            ValueRange::at(Uint128::new(2000), Uint128::new(12000))
+            ValueRange::new(Uint128::new(2000), Uint128::new(12000))
         );
     }
 }
@@ -508,7 +505,10 @@ mod examples {
         let (max_lien, total_slashable) = LIENS
             .prefix(user)
             .range(storage, None, None, Order::Ascending)
-            .filter(|r| !matches!((skip, r), (Some(x), Ok((k, _))) if x == k))
+            .filter(|r| match (skip, r) {
+                (Some(x), Ok((k, _))) => x != k,
+                _ => true,
+            })
             .map(|r| {
                 let (_, lien) = r?;
                 Ok((lien.amount, lien.amount * lien.slashable))
@@ -547,7 +547,7 @@ mod examples {
                 &mut store,
                 (alice, stake1),
                 &Lien {
-                    amount: ValueRange::at(Uint128::new(5000), Uint128::new(5000)),
+                    amount: ValueRange::new(Uint128::new(5000), Uint128::new(5000)),
                     slashable: Decimal::percent(50),
                 },
             )
@@ -558,7 +558,7 @@ mod examples {
                 &mut store,
                 (bob, stake1),
                 &Lien {
-                    amount: ValueRange::at(Uint128::new(3000), Uint128::new(3000)),
+                    amount: ValueRange::new(Uint128::new(3000), Uint128::new(3000)),
                     slashable: Decimal::percent(50),
                 },
             )
@@ -568,7 +568,7 @@ mod examples {
                 &mut store,
                 (bob, stake2),
                 &Lien {
-                    amount: ValueRange::at(Uint128::new(0), Uint128::new(2000)),
+                    amount: ValueRange::new(Uint128::new(0), Uint128::new(2000)),
                     slashable: Decimal::percent(80),
                 },
             )
@@ -579,7 +579,7 @@ mod examples {
                 &mut store,
                 (carl, stake1),
                 &Lien {
-                    amount: ValueRange::at(Uint128::new(1000), Uint128::new(2000)),
+                    amount: ValueRange::new(Uint128::new(1000), Uint128::new(2000)),
                     slashable: Decimal::percent(50),
                 },
             )
@@ -589,7 +589,7 @@ mod examples {
                 &mut store,
                 (carl, stake2),
                 &Lien {
-                    amount: ValueRange::at(Uint128::new(5000), Uint128::new(6000)),
+                    amount: ValueRange::new(Uint128::new(5000), Uint128::new(6000)),
                     slashable: Decimal::percent(80),
                 },
             )
