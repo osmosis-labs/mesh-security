@@ -16,7 +16,8 @@ pub enum Tx {
         /// Remote staking contract
         lienholder: Addr,
     },
-    InFlightRemoteStaking { // IBC flight
+    // IBC flight
+    InFlightRemoteStaking {
         /// Transaction id
         id: u64,
         /// Associated amount
@@ -26,7 +27,8 @@ pub enum Tx {
         /// Remote validator
         validator: String,
     },
-    InFlightRemoteUnstaking { // IBC flight
+    // IBC flight
+    InFlightRemoteUnstaking {
         /// Transaction id
         id: u64,
         /// Associated amount
