@@ -370,6 +370,7 @@ impl VaultContract<'_> {
                         account_lock
                             .read()
                             .map(|account| !with_collateral || !account.collateral.is_zero()) // Skip zero collateral
+                            // FIXME: Don't skip write-locked accounts (map to `MaybeAccount` wrapper)
                             .unwrap_or(false) // Skip write-locked accounts
                     })
                     .unwrap_or(false) // Skip other errors
