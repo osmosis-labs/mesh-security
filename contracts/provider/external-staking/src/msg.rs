@@ -95,7 +95,7 @@ pub struct PendingRewards {
     pub amount: Coin,
 }
 
-pub type TxResponse = crate::txs::Tx;
+pub type TxResponse = mesh_sync::Tx;
 pub type AllTxsResponseItem = TxResponse;
 
 #[cw_serde]

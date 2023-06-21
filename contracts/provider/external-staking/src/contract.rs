@@ -21,7 +21,7 @@ use crate::msg::{
     StakeInfo, StakesResponse, TxResponse,
 };
 use crate::state::{Config, Distribution, PendingUnbond, Stake};
-use crate::txs::{Tx, TxType};
+use mesh_sync::Tx;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -106,24 +106,37 @@ impl ExternalStakingContract<'_> {
         let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
 
         // TODO: Verify tx comes from the right context
-        // Verify tx is of the right type
+        // Verify tx is the right type
         ensure!(
-            tx.ty == TxType::InFlightRemoteStaking,
-            ContractError::WrongTxType(tx.id, tx.ty)
+            match tx {
+                Tx::InFlightRemoteStaking { .. } => true,
+                _ => false,
+            },
+            ContractError::WrongTypeTx(tx_id, tx)
         );
+
+        let (tx_amount, tx_user, tx_validator) = match tx {
+            Tx::InFlightRemoteStaking {
+                amount,
+                user,
+                validator,
+                ..
+            } => (amount, user, validator),
+            _ => unreachable!(),
+        };
 
         // Load stake
         let mut stake_lock = self
             .stakes
-            .load(ctx.deps.storage, (&tx.user, &tx.validator))?;
+            .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
 
         // Load distribution
-        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx.validator)?;
+        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx_validator)?;
 
         // Commit amount (need to unlock it first)
         stake_lock.unlock_write()?;
         let stake = stake_lock.write()?;
-        stake.stake += tx.amount;
+        stake.stake += tx_amount;
 
         // Commit distribution (need to unlock it first)
         distribution_lock.unlock_write()?;
@@ -131,16 +144,16 @@ impl ExternalStakingContract<'_> {
         // Distribution alignment
         stake
             .points_alignment
-            .stake_increased(tx.amount, distribution.points_per_stake);
-        distribution.total_stake += tx.amount;
+            .stake_increased(tx_amount, distribution.points_per_stake);
+        distribution.total_stake += tx_amount;
 
         // Save stake
         self.stakes
-            .save(ctx.deps.storage, (&tx.user, &tx.validator), &stake_lock)?;
+            .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
 
         // Save distribution
         self.distribution
-            .save(ctx.deps.storage, &tx.validator, &distribution_lock)?;
+            .save(ctx.deps.storage, &tx_validator, &distribution_lock)?;
 
         // Remove tx
         self.pending_txs.remove(ctx.deps.storage, tx_id);
@@ -158,33 +171,46 @@ impl ExternalStakingContract<'_> {
         let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
 
         // TODO: Verify tx comes from the right context
-        // Verify tx is of the right type
+        // Verify tx is the right type
         ensure!(
-            tx.ty == TxType::InFlightRemoteStaking,
-            ContractError::WrongTxType(tx.id, tx.ty)
+            match tx {
+                Tx::InFlightRemoteStaking { .. } => true,
+                _ => false,
+            },
+            ContractError::WrongTypeTx(tx_id, tx)
         );
+
+        let (_tx_amount, tx_user, tx_validator) = match tx {
+            Tx::InFlightRemoteStaking {
+                amount,
+                user,
+                validator,
+                ..
+            } => (amount, user, validator),
+            _ => unreachable!(),
+        };
 
         // Load stake
         let mut stake_lock = self
             .stakes
-            .load(ctx.deps.storage, (&tx.user, &tx.validator))?;
+            .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
 
         // Load distribution
-        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx.validator)?;
+        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx_validator)?;
 
         // Release stake lock
         stake_lock.unlock_write()?;
 
         // Save stake
         self.stakes
-            .save(ctx.deps.storage, (&tx.user, &tx.validator), &stake_lock)?;
+            .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
 
         // Release distribution lock
         distribution_lock.unlock_write()?;
 
         // Save distribution
         self.distribution
-            .save(ctx.deps.storage, &tx.validator, &distribution_lock)?;
+            .save(ctx.deps.storage, &tx_validator, &distribution_lock)?;
 
         // Remove tx
         self.pending_txs.remove(ctx.deps.storage, tx_id);
@@ -239,9 +265,8 @@ impl ExternalStakingContract<'_> {
         let tx_id = self.next_tx_id(ctx.deps.storage)?;
 
         // Save tx
-        let new_tx = Tx {
+        let new_tx = Tx::InFlightRemoteUnstaking {
             id: tx_id,
-            ty: TxType::InFlightRemoteUnstaking,
             amount: amount.amount,
             user: ctx.info.sender.clone(),
             validator,
@@ -268,29 +293,42 @@ impl ExternalStakingContract<'_> {
         // TODO: Verify tx comes from the right context
         // Verify tx is of the right type
         ensure!(
-            tx.ty == TxType::InFlightRemoteUnstaking,
-            ContractError::WrongTxType(tx.id, tx.ty)
+            match tx {
+                Tx::InFlightRemoteUnstaking { .. } => true,
+                _ => false,
+            },
+            ContractError::WrongTypeTx(tx_id, tx)
         );
+
+        let (tx_amount, tx_user, tx_validator) = match tx {
+            Tx::InFlightRemoteUnstaking {
+                amount,
+                user,
+                validator,
+                ..
+            } => (amount, user, validator),
+            _ => unreachable!(),
+        };
 
         let config = self.config.load(ctx.deps.storage)?;
 
         // Load stake
         let mut stake_lock = self
             .stakes
-            .load(ctx.deps.storage, (&tx.user, &tx.validator))?;
+            .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
 
         // Load distribution
-        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx.validator)?;
+        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx_validator)?;
 
         // Commit amount (need to unlock it first)
         stake_lock.unlock_write()?;
         let stake = stake_lock.write()?;
-        stake.stake -= tx.amount;
+        stake.stake -= tx_amount;
 
         // FIXME? Release period being computed after successful IBC tx
         let release_at = ctx.env.block.time.plus_seconds(config.unbonding_period);
         let unbond = PendingUnbond {
-            amount: tx.amount,
+            amount: tx_amount,
             release_at,
         };
         stake.pending_unbonds.push(unbond);
@@ -301,16 +339,16 @@ impl ExternalStakingContract<'_> {
         // Distribution alignment
         stake
             .points_alignment
-            .stake_decreased(tx.amount, distribution.points_per_stake);
-        distribution.total_stake -= tx.amount;
+            .stake_decreased(tx_amount, distribution.points_per_stake);
+        distribution.total_stake -= tx_amount;
 
         // Save stake
         self.stakes
-            .save(ctx.deps.storage, (&tx.user, &tx.validator), &stake_lock)?;
+            .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
 
         // Save distribution
         self.distribution
-            .save(ctx.deps.storage, &tx.validator, &distribution_lock)?;
+            .save(ctx.deps.storage, &tx_validator, &distribution_lock)?;
 
         // Remove tx
         self.pending_txs.remove(ctx.deps.storage, tx_id);
@@ -328,31 +366,43 @@ impl ExternalStakingContract<'_> {
         // TODO: Verify tx comes from the right context
         // Verify tx is of the right type
         ensure!(
-            tx.ty == TxType::InFlightRemoteUnstaking,
-            ContractError::WrongTxType(tx.id, tx.ty)
+            match tx {
+                Tx::InFlightRemoteUnstaking { .. } => true,
+                _ => false,
+            },
+            ContractError::WrongTypeTx(tx_id, tx)
         );
+        let (_tx_amount, tx_user, tx_validator) = match tx {
+            Tx::InFlightRemoteUnstaking {
+                amount,
+                user,
+                validator,
+                ..
+            } => (amount, user, validator),
+            _ => unreachable!(),
+        };
 
         // Load stake
         let mut stake_lock = self
             .stakes
-            .load(ctx.deps.storage, (&tx.user, &tx.validator))?;
+            .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
 
         // Load distribution
-        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx.validator)?;
+        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx_validator)?;
 
         // Release stake lock
         stake_lock.unlock_write()?;
 
         // Save stake
         self.stakes
-            .save(ctx.deps.storage, (&tx.user, &tx.validator), &stake_lock)?;
+            .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
 
         // Release distribution lock
         distribution_lock.unlock_write()?;
 
         // Save distribution
         self.distribution
-            .save(ctx.deps.storage, &tx.validator, &distribution_lock)?;
+            .save(ctx.deps.storage, &tx_validator, &distribution_lock)?;
 
         // Remove tx
         self.pending_txs.remove(ctx.deps.storage, tx_id);
@@ -682,7 +732,6 @@ impl ExternalStakingContract<'_> {
 
 pub mod cross_staking {
     use super::*;
-    use crate::txs::TxType;
 
     #[contract]
     #[messages(cross_staking_api as CrossStakingApi)]
@@ -732,9 +781,8 @@ pub mod cross_staking {
             // TODO: Send proper IBC message to remote staking contract
 
             // Save tx
-            let new_tx = Tx {
+            let new_tx = Tx::InFlightRemoteStaking {
                 id: tx_id,
-                ty: TxType::InFlightRemoteStaking,
                 amount: amount.amount,
                 user: owner.clone(),
                 validator: msg.validator,

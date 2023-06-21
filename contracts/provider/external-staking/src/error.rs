@@ -1,8 +1,7 @@
-use crate::txs::TxType;
 use cosmwasm_std::{ConversionOverflowError, StdError, Uint128};
 use cw_utils::PaymentError;
 use mesh_apis::ibc::VersionError;
-use mesh_sync::LockError;
+use mesh_sync::{LockError, Tx};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -47,5 +46,5 @@ pub enum ContractError {
     InvalidEndpoint(String),
 
     #[error("The tx {0} exists but is of the wrong type: {1}")]
-    WrongTxType(u64, TxType),
+    WrongTypeTx(u64, Tx),
 }
