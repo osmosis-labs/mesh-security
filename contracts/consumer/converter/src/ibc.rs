@@ -2,22 +2,61 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    DepsMut, Env, IbcBasicResponse, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg,
-    IbcChannelOpenResponse, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg,
-    IbcReceiveResponse,
+    from_slice, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
+    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse,
+    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse,
 };
+use cw_storage_plus::Item;
+
+use mesh_apis::ibc::{validate_channel_order, ProtocolVersion, PROTOCOL_NAME};
 
 use crate::error::ContractError;
+
+/// This is the maximum version of the Mesh Security protocol that we support
+const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "1.0.0";
+/// This is the minimum version that we are compatible with
+const MIN_IBC_PROTOCOL_VERSION: &str = "1.0.0";
+
+// IBC specific state
+const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// enforces ordering and versioning constraints
 pub fn ibc_channel_open(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
     msg: IbcChannelOpenMsg,
 ) -> Result<IbcChannelOpenResponse, ContractError> {
-    let _channel = msg.channel();
-    todo!();
+    // ensure we have no channel yet
+    if IBC_CHANNEL.may_load(deps.storage)?.is_some() {
+        return Err(ContractError::IbcChannelAlreadyOpen);
+    }
+    // ensure we are called with OpenInit
+    let channel = match msg {
+        IbcChannelOpenMsg::OpenInit { channel } => channel,
+        IbcChannelOpenMsg::OpenTry { .. } => return Err(ContractError::IbcOpenTryDisallowed),
+    };
+
+    // verify the ordering is correct
+    validate_channel_order(&channel.order)?;
+
+    // Check the version. If provided, ensure it is compatible.
+    // If not provided, use our most recent version.
+    let version = if channel.version.is_empty() {
+        ProtocolVersion {
+            protocol: PROTOCOL_NAME.to_string(),
+            version: SUPPORTED_IBC_PROTOCOL_VERSION.to_string(),
+        }
+    } else {
+        let v: ProtocolVersion = from_slice(channel.version.as_bytes())?;
+        // if we can build a response to this, then it is compatible. And we use the highest version there
+        v.build_response(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?
+    };
+
+    let response = Ibc3ChannelOpenResponse {
+        version: version.to_string()?,
+    };
+    Ok(Some(response))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

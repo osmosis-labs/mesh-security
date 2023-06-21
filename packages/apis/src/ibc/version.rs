@@ -1,4 +1,4 @@
-use cosmwasm_std::IbcOrder;
+use cosmwasm_std::{to_vec, IbcOrder, StdResult};
 use schemars::JsonSchema;
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -6,10 +6,8 @@ use serde::{Deserialize, Serialize};
 pub const PROTOCOL_NAME: &str = "mesh-security";
 pub const ORDERING: cosmwasm_std::IbcOrder = cosmwasm_std::IbcOrder::Unordered;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum VersionError {
-    #[error("Parse: {0}")]
-    Std(#[from] cosmwasm_std::StdError),
     #[error("Invalid protocol name: {0}")]
     InvalidProtocol(String),
     #[error("Invalid version: {0}")]
@@ -20,6 +18,10 @@ pub enum VersionError {
     VersionTooNew { proposed: String, supported: String },
     #[error("Channel must be unordered")]
     InvalidChannelOrder,
+}
+
+fn parse_version(version: &str) -> Result<Version, VersionError> {
+    Version::parse(version).map_err(|_| VersionError::InvalidVersion(version.to_string()))
 }
 
 /// Implements logic as defined here:
@@ -36,8 +38,7 @@ impl ProtocolVersion {
         if self.protocol != PROTOCOL_NAME {
             return Err(VersionError::InvalidProtocol(self.protocol.clone()));
         }
-        Version::parse(&self.version)
-            .map_err(|_| VersionError::InvalidVersion(self.version.clone()))
+        parse_version(&self.version)
     }
 
     /// Call this to do the version handshake negotiation. This includes validation
@@ -46,9 +47,11 @@ impl ProtocolVersion {
     /// Otherwise return min(self.version, supported_version)
     pub fn build_response(
         &self,
-        supported_ver: Version,
-        min_ver: Version,
+        supported_ver: &str,
+        min_ver: &str,
     ) -> Result<ProtocolVersion, VersionError> {
+        let supported_ver = parse_version(supported_ver)?;
+        let min_ver = parse_version(min_ver)?;
         let proposed = self.validate()?;
         if proposed < min_ver {
             Err(VersionError::VersionTooOld {
@@ -67,6 +70,11 @@ impl ProtocolVersion {
                 version: ver.to_string(),
             })
         }
+    }
+
+    pub fn to_string(&self) -> StdResult<String> {
+        let bytes = to_vec(self)?;
+        Ok(String::from_utf8(bytes)?)
     }
 }
 

@@ -1,5 +1,6 @@
 use cosmwasm_std::{ConversionOverflowError, StdError, Uint128};
 use cw_utils::PaymentError;
+use mesh_apis::ibc::VersionError;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -9,6 +10,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     Payment(#[from] PaymentError),
+
+    #[error("{0}")]
+    IbcVersion(#[from] VersionError),
 
     #[error("{0}")]
     Conversion(#[from] ConversionOverflowError),
@@ -27,4 +31,10 @@ pub enum ContractError {
 
     #[error("Validator for user missmatch, {0} expected")]
     InvalidValidator(String),
+
+    #[error("Contract already has an open IBC channel")]
+    IbcChannelAlreadyOpen,
+
+    #[error("You must start the channel handshake on the other side, it doesn't support OpenInit")]
+    IbcOpenInitDisallowed,
 }

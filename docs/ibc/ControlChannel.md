@@ -53,7 +53,7 @@ Unordered channels make it harder to prove guarantees for the application in an 
 environment, but we will use them here. Thus, all communication must have a proof that
 it maintains correctness in face of arbitrary packet reordering and dropping (via error/timeout).
 
-### Handshake
+### Deployment
 
 Before creating that channel, you must have created the `external-staking` and
 `converter` contracts. The `external-staking` contract must be initialized with
@@ -69,6 +69,20 @@ The general process (assuming a vault is already established on the provider) is
 2. Instantiate external staking contract on the provider chain (referencing IBC port of the converter)
 3. Create IBC channel from provider to consumer
 4. Apply to consumer governance to provide a virtual staking max cap to the associated virtual staking contract, so that this connection may have voting power.
+
+### Handshake
+
+Opening the channel is a 4 step process. It must be initiated by the consumer side.
+
+1. Start with `OpenInit` from converter to the (connection, port) of the external staking. The version SHOULD be set to the highest mesh-security version it supports (see below), and the channel ordering MUST be "unordered". It MUST error if it has a previously established channel.
+2. The external staking contract receives `OpenTry`. The channel ordering MUST be "unordered", and the version protocol MUST be `mesh-security`. It performs version negotiation as defined below. It MUST error if the (connection, port) being proposed is not the one it was initialized with. It MUST error if it has a previously established channel.
+3. The converter receives `OpenAck` and MUST verify the version protocol is `mesh-security`. It MUST verify the version is not higher than the one it proposed, and not lower than the oldest version it supports. If successful, it stores the new channel details locally.
+4. The external staking contract receives `OpenConfirm`. Everything has been verified on all sides, and there can be no errors here. It stores the new channel details locally.
+
+Closing a channel is currently not well defined. It is expected that the channel will remain open, as it is unordered. If the channel is closed,
+both sides must mark the channel as closed locally, and error on any attempt to send IBC packets. The channel may be re-opened by repeating
+the initial process, with both sides validating the re-open was from the same (connection, port) as the original channel. When that handshake is
+completed, they can replace the closed channel from storage with the new open channel.
 
 ### Version Negotiation
 
