@@ -448,7 +448,7 @@ fn stake_local() {
 
 #[track_caller]
 fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
-    let txs = vault.all_pending_txs(None, None).unwrap().txs;
+    let txs = vault.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(|tx| match tx {
         Tx::InFlightStaking { id, .. } => *id,
     })
@@ -827,7 +827,7 @@ fn stake_cross_txs() {
     );
 
     // No pending txs
-    assert_eq!(vault.all_pending_txs(None, None).unwrap().txs, vec![]);
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs, vec![]);
     // Can query all accounts
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(accounts.accounts.len(), 2);
@@ -844,7 +844,7 @@ fn stake_cross_txs() {
         .unwrap();
 
     // One pending tx
-    assert_eq!(vault.all_pending_txs(None, None).unwrap().txs.len(), 1);
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 1);
 
     // Same user cannot stake while pending tx
     assert_eq!(
@@ -872,7 +872,7 @@ fn stake_cross_txs() {
         .unwrap();
 
     // Two pending txs
-    assert_eq!(vault.all_pending_txs(None, None).unwrap().txs.len(), 2);
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 2);
 
     // Last tx commit_tx call
     let last_tx = get_last_pending_tx_id(&vault).unwrap();
@@ -883,7 +883,7 @@ fn stake_cross_txs() {
         .unwrap();
 
     // First tx is still pending
-    let first_id = match vault.all_pending_txs(None, None).unwrap().txs[0] {
+    let first_id = match vault.all_pending_txs_desc(None, None).unwrap().txs[0] {
         InFlightStaking { id, .. } => id,
     };
     assert_eq!(first_id, first_tx);
@@ -1041,7 +1041,7 @@ fn stake_cross_rollback_tx() {
         .unwrap();
 
     // One pending tx
-    assert_eq!(vault.all_pending_txs(None, None).unwrap().txs.len(), 1);
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 1);
 
     // Rollback tx
     let last_tx = get_last_pending_tx_id(&vault).unwrap();
@@ -1052,7 +1052,11 @@ fn stake_cross_rollback_tx() {
         .unwrap();
 
     // No pending txs
-    assert!(vault.all_pending_txs(None, None).unwrap().txs.is_empty());
+    assert!(vault
+        .all_pending_txs_desc(None, None)
+        .unwrap()
+        .txs
+        .is_empty());
 
     // Funds are restored
     let acc = vault.account(user.to_owned()).unwrap();

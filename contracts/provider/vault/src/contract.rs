@@ -406,7 +406,7 @@ impl VaultContract<'_> {
     /// Reports txs in descending order (newest first).
     /// `start_after` is the last tx id included in previous page
     #[msg(query)]
-    fn all_pending_txs(
+    fn all_pending_txs_desc(
         &self,
         ctx: QueryCtx,
         start_after: Option<u64>,
