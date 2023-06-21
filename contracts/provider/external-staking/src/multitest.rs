@@ -286,7 +286,7 @@ fn staking() {
 
 #[track_caller]
 fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
-    let txs = vault.all_pending_txs(None, None).unwrap().txs;
+    let txs = vault.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(|tx| match tx {
         Tx::InFlightStaking { id, .. } => *id,
     })
