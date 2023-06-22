@@ -15,6 +15,8 @@ pub enum ProviderPacket {
         /// It will be converted to the consumer-side staking token in the converter with help
         /// of the price feed.
         stake: Coin,
+        /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
+        tx_id: u64,
     },
     /// This should be called when we begin the unbonding period of some more tokens previously virtually staked
     Unstake {
@@ -23,16 +25,24 @@ pub enum ProviderPacket {
         /// It will be converted to the consumer-side staking token in the converter with help
         /// of the price feed.
         unstake: Coin,
+        /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
+        tx_id: u64,
     },
 }
 
 /// Ack sent for ProviderPacket::Stake
 #[cw_serde]
-pub struct StakeAck {}
+pub struct StakeAck {
+    /// Return the value from the original packet
+    tx_id: u64,
+}
 
 /// Ack sent for ProviderPacket::Unstake
 #[cw_serde]
-pub struct UnstakeAck {}
+pub struct UnstakeAck {
+    /// Return the value from the original packet
+    tx_id: u64,
+}
 
 /// These are messages sent from consumer -> provider
 /// ibc_packet_receive in external-staking must handle them all.
