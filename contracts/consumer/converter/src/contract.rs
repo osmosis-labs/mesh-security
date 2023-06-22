@@ -19,6 +19,10 @@ use crate::state::Config;
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+// TODO: remove need for this
+// This is used to gate the test functions that trigger IBC logic
+pub const FAKE_IBC: &str = "ADMIN";
+
 const REPLY_ID_INSTANTIATE: u64 = 1;
 
 pub struct ConverterContract<'a> {

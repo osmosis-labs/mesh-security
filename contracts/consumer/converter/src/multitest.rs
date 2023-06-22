@@ -1,23 +1,35 @@
 mod virtual_staking_mock;
 
-use cosmwasm_std::{Addr, Decimal};
+use cosmwasm_std::{coin, Addr, Decimal, Uint128};
 
 use sylvia::multitest::App;
 
 use crate::contract;
-// use crate::error::ContractError;
-// use crate::msg;
+use crate::contract::FAKE_IBC;
+use crate::error::ContractError;
 
 const JUNO: &str = "ujuno";
 
-#[test]
-fn instantiation() {
-    let app = App::default();
+struct SetupArgs<'a> {
+    owner: &'a str,
+    admin: &'a str,
+    discount: Decimal,
+    native_per_foreign: Decimal,
+}
 
-    let owner = "Sunny"; // Owner of the staking contract (i. e. the vault contract)
-    let admin = "The man";
-    let discount = Decimal::percent(40); // 1 OSMO worth of JUNO should give 0.6 OSMO of stake
-    let native_per_foreign = Decimal::percent(50); // 1 JUNO is worth 0.5 OSMO
+struct SetupResponse<'a> {
+    price_feed: mesh_simple_price_feed::contract::multitest_utils::SimplePriceFeedContractProxy<'a>,
+    converter: contract::multitest_utils::ConverterContractProxy<'a>,
+    virtual_staking: virtual_staking_mock::multitest_utils::VirtualStakingMockProxy<'a>,
+}
+
+fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
+    let SetupArgs {
+        owner,
+        admin,
+        discount,
+        native_per_foreign,
+    } = args;
 
     let price_feed_code =
         mesh_simple_price_feed::contract::multitest_utils::CodeId::store_code(&app);
@@ -42,6 +54,43 @@ fn instantiation() {
         .call(owner)
         .unwrap();
 
+    let config = converter.config().unwrap();
+    let virtual_staking_addr = Addr::unchecked(&config.virtual_staking);
+    let virtual_staking = virtual_staking_mock::multitest_utils::VirtualStakingMockProxy::new(
+        virtual_staking_addr,
+        &app,
+    );
+
+    SetupResponse {
+        price_feed,
+        converter,
+        virtual_staking,
+    }
+}
+
+#[test]
+fn instantiation() {
+    let app = App::default();
+
+    let owner = "Sunny"; // Owner of the staking contract (i. e. the vault contract)
+    let admin = "The man";
+    let discount = Decimal::percent(40); // 1 OSMO worth of JUNO should give 0.6 OSMO of stake
+    let native_per_foreign = Decimal::percent(50); // 1 JUNO is worth 0.5 OSMO
+
+    let SetupResponse {
+        price_feed,
+        converter,
+        virtual_staking,
+    } = setup(
+        &app,
+        SetupArgs {
+            owner,
+            admin,
+            discount,
+            native_per_foreign,
+        },
+    );
+
     // check the config
     let config = converter.config().unwrap();
     assert_eq!(config.price_feed, price_feed.contract_addr.to_string());
@@ -57,79 +106,105 @@ fn instantiation() {
     assert_eq!(vs_info.admin, Some(admin.to_string()));
 
     // let's query virtual staking to find the owner
-    let virtual_staking_addr = Addr::unchecked(&config.virtual_staking);
-    let virtual_staking = virtual_staking_mock::multitest_utils::VirtualStakingMockProxy::new(
-        virtual_staking_addr,
-        &app,
-    );
     let vs_config = virtual_staking.config().unwrap();
     assert_eq!(vs_config.converter, converter.contract_addr.to_string());
 }
 
-/*
 #[test]
-fn receiving_stake() {
-    let owner = "vault"; // Owner of the staking contract (i. e. the vault contract)
+fn ibc_stake_and_unstake() {
+    let app = App::default();
 
-    let user1 = "user1"; // One who wants to local stake
-    let user2 = "user2"; // Another one who wants to local stake
+    let owner = "Sunny"; // Owner of the staking contract (i. e. the vault contract)
+    let admin = "The man";
+    let discount = Decimal::percent(40); // 1 OSMO worth of JUNO should give 0.6 OSMO of stake
+    let native_per_foreign = Decimal::percent(50); // 1 JUNO is worth 0.5 OSMO
 
-    let validator = "validator1"; // Validator to stake on
+    let SetupResponse {
+        price_feed: _,
+        converter,
+        virtual_staking,
+    } = setup(
+        &app,
+        SetupArgs {
+            owner,
+            admin,
+            discount,
+            native_per_foreign,
+        },
+    );
 
-    // Fund the vault
-    let app = MtApp::new(|router, _api, storage| {
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(owner), coins(300, OSMO))
-            .unwrap();
-    });
-    let app = App::new(app);
+    // no one is staked
+    let val1 = "Val Kilmer";
+    let val2 = "Valley Girl";
+    assert!(virtual_staking.all_stake().unwrap().stakes.is_empty());
+    assert_eq!(
+        virtual_staking
+            .stake(val1.to_string())
+            .unwrap()
+            .stake
+            .u128(),
+        0
+    );
+    assert_eq!(
+        virtual_staking
+            .stake(val2.to_string())
+            .unwrap()
+            .stake
+            .u128(),
+        0
+    );
 
-    // Contracts setup
-    let staking_proxy_code = local_staking_proxy::multitest_utils::CodeId::store_code(&app);
-    let staking_code = contract::multitest_utils::CodeId::store_code(&app);
+    // let's stake some
+    converter
+        .demo_stake(val1.to_string(), coin(1000, JUNO))
+        .call(FAKE_IBC)
+        .unwrap();
+    converter
+        .demo_stake(val2.to_string(), coin(4000, JUNO))
+        .call(FAKE_IBC)
+        .unwrap();
 
-    let staking = staking_code
-        .instantiate(OSMO.to_owned(), staking_proxy_code.code_id())
-        .with_label("Staking")
+    // and unstake some
+    converter
+        .demo_unstake(val2.to_string(), coin(2000, JUNO))
+        .call(FAKE_IBC)
+        .unwrap();
+
+    // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
+    assert_eq!(
+        virtual_staking
+            .stake(val1.to_string())
+            .unwrap()
+            .stake
+            .u128(),
+        300
+    );
+    assert_eq!(
+        virtual_staking
+            .stake(val2.to_string())
+            .unwrap()
+            .stake
+            .u128(),
+        600
+    );
+    assert_eq!(
+        virtual_staking.all_stake().unwrap().stakes,
+        vec![
+            (val1.to_string(), Uint128::new(300)),
+            (val2.to_string(), Uint128::new(600)),
+        ]
+    );
+
+    // ensure other callers can't do this (even owner or creator)
+    let err = converter
+        .demo_unstake(val2.to_string(), coin(2000, JUNO))
+        .call(admin)
+        .unwrap_err();
+    assert_eq!(err, ContractError::Unauthorized);
+
+    let err = converter
+        .demo_unstake(val2.to_string(), coin(2000, JUNO))
         .call(owner)
-        .unwrap();
-
-    // Check that no proxy exists for user1 yet
-    let err = staking.proxy_by_owner(user1.to_owned()).unwrap_err();
-    assert!(matches!(
-        err,
-        ContractError::Std(StdError::GenericErr { .. }) // Addr not found
-    ));
-
-    // Receive some stake on behalf of user1 for validator
-    let stake_msg = to_binary(&msg::StakeMsg {
-        validator: validator.to_owned(),
-    })
-    .unwrap();
-    staking
-        .local_staking_api_proxy()
-        .receive_stake(user1.to_owned(), stake_msg)
-        .with_funds(&coins(100, OSMO))
-        .call(owner) // called from vault
-        .unwrap();
-
-    let proxy1 = staking.proxy_by_owner(user1.to_owned()).unwrap().proxy;
-    // Reverse query
-    assert_eq!(
-        staking.owner_by_proxy(proxy1.clone()).unwrap(),
-        OwnerByProxyResponse {
-            owner: user1.to_owned(),
-        }
-    );
-
-    // Check that funds are in the proxy contract
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(proxy1.clone(), OSMO)
-            .unwrap(),
-        coin(100, OSMO)
-    );
+        .unwrap_err();
+    assert_eq!(err, ContractError::Unauthorized);
 }
-*/
