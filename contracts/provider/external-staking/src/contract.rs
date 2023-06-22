@@ -108,10 +108,7 @@ impl ExternalStakingContract<'_> {
         // TODO: Verify tx comes from the right context
         // Verify tx is the right type
         ensure!(
-            match tx {
-                Tx::InFlightRemoteStaking { .. } => true,
-                _ => false,
-            },
+            matches!(tx, Tx::InFlightRemoteStaking { .. }),
             ContractError::WrongTypeTx(tx_id, tx)
         );
 
@@ -173,10 +170,7 @@ impl ExternalStakingContract<'_> {
         // TODO: Verify tx comes from the right context
         // Verify tx is the right type
         ensure!(
-            match tx {
-                Tx::InFlightRemoteStaking { .. } => true,
-                _ => false,
-            },
+            matches!(tx, Tx::InFlightRemoteStaking { .. }),
             ContractError::WrongTypeTx(tx_id, tx)
         );
 
@@ -293,10 +287,7 @@ impl ExternalStakingContract<'_> {
         // TODO: Verify tx comes from the right context
         // Verify tx is of the right type
         ensure!(
-            match tx {
-                Tx::InFlightRemoteUnstaking { .. } => true,
-                _ => false,
-            },
+            matches!(tx, Tx::InFlightRemoteUnstaking { .. }),
             ContractError::WrongTypeTx(tx_id, tx)
         );
 
@@ -366,10 +357,7 @@ impl ExternalStakingContract<'_> {
         // TODO: Verify tx comes from the right context
         // Verify tx is of the right type
         ensure!(
-            match tx {
-                Tx::InFlightRemoteUnstaking { .. } => true,
-                _ => false,
-            },
+            matches!(tx, Tx::InFlightRemoteUnstaking { .. }),
             ContractError::WrongTypeTx(tx_id, tx)
         );
         let (_tx_amount, tx_user, tx_validator) = match tx {
