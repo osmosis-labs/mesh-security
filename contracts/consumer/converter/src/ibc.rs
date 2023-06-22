@@ -10,11 +10,11 @@ use cosmwasm_std::{
 use cw_storage_plus::Item;
 
 use mesh_apis::ibc::{
-    validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, ProtocolVersion,
-    PROTOCOL_NAME,
+    ack_success, validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, ProtocolVersion,
+    ProviderPacket, StakeAck, UnstakeAck, PROTOCOL_NAME,
 };
 
-use crate::error::ContractError;
+use crate::{contract::ConverterContract, error::ContractError};
 
 /// This is the maximum version of the Mesh Security protocol that we support
 const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "1.0.0";
@@ -142,11 +142,41 @@ pub fn ibc_channel_close(
 /// We cannot return any meaningful response value as we do not know the response value
 /// of execution. We just return ok if we dispatched, error if we failed to dispatch
 pub fn ibc_packet_receive(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _msg: IbcPacketReceiveMsg,
+    msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
-    todo!();
+    let packet: ProviderPacket = from_slice(&msg.packet.data)?;
+    let contract = ConverterContract::new();
+    let res = match packet {
+        ProviderPacket::Stake {
+            validator,
+            stake,
+            tx_id,
+        } => {
+            let response = contract.stake(deps, validator, stake)?;
+            let ack = ack_success(&StakeAck { tx_id })?;
+            IbcReceiveResponse::new()
+                .set_ack(ack)
+                .add_submessages(response.messages)
+                .add_events(response.events)
+                .add_attributes(response.attributes)
+        }
+        ProviderPacket::Unstake {
+            validator,
+            unstake,
+            tx_id,
+        } => {
+            let response = contract.unstake(deps, validator, unstake)?;
+            let ack = ack_success(&UnstakeAck { tx_id })?;
+            IbcReceiveResponse::new()
+                .set_ack(ack)
+                .add_submessages(response.messages)
+                .add_events(response.events)
+                .add_attributes(response.attributes)
+        }
+    };
+    Ok(res)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

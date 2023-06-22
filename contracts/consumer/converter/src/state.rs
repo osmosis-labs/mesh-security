@@ -12,4 +12,8 @@ pub struct Config {
 
     /// Address of the contract we query for the price feed to normalize the foreign asset into native tokens.
     pub price_feed: Addr,
+
+    /// Staking denom used on this chain
+    pub local_denom: String,
+    // TODO: expected remote denom for virtual staking
 }

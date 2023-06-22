@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Decimal, Response};
+use cosmwasm_std::{to_binary, Addr, Coin, Decimal, Deps, DepsMut, Event, Response, WasmMsg};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
@@ -6,6 +6,8 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::converter_api::{self, ConverterApi, RewardInfo};
+use mesh_apis::price_feed_api;
+use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
 use crate::msg::ConfigResponse;
@@ -51,6 +53,7 @@ impl ConverterContract<'_> {
             price_feed: ctx.deps.api.addr_validate(&price_feed)?,
             // TODO: better error if discount greater than 1 (this will panic)
             adjustment: Decimal::one() - discount,
+            local_denom: ctx.deps.querier.query_bonded_denom()?,
         };
         self.config.save(ctx.deps.storage, &config)?;
 
@@ -70,6 +73,71 @@ impl ConverterContract<'_> {
             price_feed: config.price_feed.into_string(),
             adjustment: config.adjustment,
             virtual_staking,
+        })
+    }
+
+    /// This is called by ibc_packet_receive.
+    /// It is pulled out into a method, so it can also be called by sudo for testing
+    pub(crate) fn stake(
+        &self,
+        deps: DepsMut,
+        validator: String,
+        stake: Coin,
+    ) -> Result<Response, ContractError> {
+        let amount = self.normalize_price(deps.as_ref(), stake)?;
+
+        let event = Event::new("mesh-bond")
+            .add_attribute("validator", &validator)
+            .add_attribute("amount", amount.amount.to_string());
+
+        let msg = virtual_staking_api::ExecMsg::Bond { validator, amount };
+        let msg = WasmMsg::Execute {
+            contract_addr: self.virtual_stake.load(deps.storage)?.into(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
+        };
+
+        Ok(Response::new().add_message(msg).add_event(event))
+    }
+
+    /// This is called by ibc_packet_receive.
+    /// It is pulled out into a method, so it can also be called by sudo for testing
+    pub(crate) fn unstake(
+        &self,
+        deps: DepsMut,
+        validator: String,
+        unstake: Coin,
+    ) -> Result<Response, ContractError> {
+        let amount = self.normalize_price(deps.as_ref(), unstake)?;
+
+        let event = Event::new("mesh-unbond")
+            .add_attribute("validator", &validator)
+            .add_attribute("amount", amount.amount.to_string());
+
+        let msg = virtual_staking_api::ExecMsg::Unbond { validator, amount };
+        let msg = WasmMsg::Execute {
+            contract_addr: self.virtual_stake.load(deps.storage)?.into(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
+        };
+
+        Ok(Response::new().add_message(msg).add_event(event))
+    }
+
+    fn normalize_price(&self, deps: Deps, amount: Coin) -> Result<Coin, ContractError> {
+        // TODO: ensure the proper remote denom - set this in the instantiate
+        let config = self.config.load(deps.storage)?;
+
+        // get the price value (usage is a bit clunky, need use trait and cannot chain Remote::new() with .querier())
+        use price_feed_api::Querier;
+        let remote = price_feed_api::Remote::new(config.price_feed);
+        let price_feed = remote.querier(&deps.querier);
+        let price = price_feed.price()?.native_per_foreign;
+        let converted = (amount.amount * price) * config.adjustment;
+
+        Ok(Coin {
+            denom: config.local_denom,
+            amount: converted,
         })
     }
 }
