@@ -33,6 +33,11 @@ pub struct IbcChannelResponse {
     pub channel: IbcChannel,
 }
 
+#[cw_serde]
+pub struct ListRemoteValidatorsResponse {
+    pub validators: Vec<String>,
+}
+
 /// Config information returned with query
 #[cw_serde]
 pub struct ConfigResponse {

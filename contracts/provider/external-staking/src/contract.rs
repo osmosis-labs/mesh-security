@@ -13,9 +13,10 @@ use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use crate::error::ContractError;
+use crate::ibc::VAL_CRDT;
 use crate::msg::{
-    AuthorizedEndpointResponse, ConfigResponse, IbcChannelResponse, PendingRewards,
-    ReceiveVirtualStake, StakeInfo, StakesResponse,
+    AuthorizedEndpointResponse, ConfigResponse, IbcChannelResponse, ListRemoteValidatorsResponse,
+    PendingRewards, ReceiveVirtualStake, StakeInfo, StakesResponse,
 };
 use crate::state::{Config, Distribution, PendingUnbond, Stake};
 
@@ -295,6 +296,20 @@ impl ExternalStakingContract<'_> {
     pub fn ibc_channel(&self, ctx: QueryCtx) -> Result<IbcChannelResponse, ContractError> {
         let channel = crate::ibc::IBC_CHANNEL.load(ctx.deps.storage)?;
         Ok(IbcChannelResponse { channel })
+    }
+
+    /// Show all external validators that we know to be active (and can delegate to)
+    #[msg(query)]
+    pub fn list_remote_validators(
+        &self,
+        ctx: QueryCtx,
+        start_after: Option<String>,
+        limit: Option<u64>,
+    ) -> Result<ListRemoteValidatorsResponse, ContractError> {
+        let limit = limit.unwrap_or(100) as usize;
+        let validators =
+            VAL_CRDT.list_active_validators(ctx.deps.storage, start_after.as_deref(), limit)?;
+        Ok(ListRemoteValidatorsResponse { validators })
     }
 
     /// Queries for stake info

@@ -1,4 +1,5 @@
 pub mod contract;
+pub mod crdt;
 pub mod error;
 pub mod ibc;
 pub mod msg;

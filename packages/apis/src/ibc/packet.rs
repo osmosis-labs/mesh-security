@@ -1,11 +1,13 @@
+use std::error::Error;
+
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Coin;
+use cosmwasm_std::{to_binary, Binary, Coin, StdResult};
 
 /// These are messages sent from provider -> consumer
 /// ibc_packet_receive in converter must handle them all.
 /// Each one has a different ack to be used in the reply.
 #[cw_serde]
-pub enum ProviderMsg {
+pub enum ProviderPacket {
     /// This should be called when we lock more tokens to virtually stake on a given validator
     Stake {
         validator: String,
@@ -13,6 +15,8 @@ pub enum ProviderMsg {
         /// It will be converted to the consumer-side staking token in the converter with help
         /// of the price feed.
         stake: Coin,
+        /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
+        tx_id: u64,
     },
     /// This should be called when we begin the unbonding period of some more tokens previously virtually staked
     Unstake {
@@ -21,61 +25,85 @@ pub enum ProviderMsg {
         /// It will be converted to the consumer-side staking token in the converter with help
         /// of the price feed.
         unstake: Coin,
+        /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
+        tx_id: u64,
     },
 }
 
-/// Ack sent for ProviderMsg::Stake
+/// Ack sent for ProviderPacket::Stake
 #[cw_serde]
-pub struct StakeAck {}
+pub struct StakeAck {
+    /// Return the value from the original packet
+    tx_id: u64,
+}
 
-/// Ack sent for ProviderMsg::Unstake
+/// Ack sent for ProviderPacket::Unstake
 #[cw_serde]
-pub struct UnstakeAck {}
+pub struct UnstakeAck {
+    /// Return the value from the original packet
+    tx_id: u64,
+}
 
 /// These are messages sent from consumer -> provider
 /// ibc_packet_receive in external-staking must handle them all.
 #[cw_serde]
-pub enum ConsumerMsg {
+pub enum ConsumerPacket {
     /// This is sent when a new validator registers and is available to receive
-    /// delegations.
-    /// This packet is sent right after the channel is opened to sync initial state
-    AddValidators(Vec<Validator>),
+    /// delegations. This is also sent when a validator changes pubkey.
+    /// One such packet is sent right after the channel is opened to sync initial state
+    AddValidators(Vec<AddValidator>),
     /// This is sent when a validator is tombstoned. Not just leaving the active state,
     /// but when it is no longer a valid target to delegate to.
     /// It contains a list of `valoper_address` to be removed
     RemoveValidators(Vec<String>),
-    /// This is sent a validator changes the pubkey
-    UpdatePubkey {
-        /// This is the validator address that is changing the pubkey
-        valoper_address: String,
-        /// This is the block height (on the consumer) at which the pubkey was changed
-        height: u64,
-        /// This is the pubkey signing all blocks after `height`
-        new_pubkey: String,
-        /// This is the pubkey signing all blocks up to and including `height`
-        old_pubkey: String,
-    },
 }
 
 #[cw_serde]
-pub struct Validator {
-    /// This is the validator address used for delegations and rewards
-    pub valoper_address: String,
+pub struct AddValidator {
+    /// This is the validator operator (valoper) address used for delegations and rewards
+    pub valoper: String,
 
     // TODO: is there a better type for this? what encoding is used
     /// This is the *Tendermint* public key, used for signing blocks.
     /// This is needed to detect slashing conditions
     pub pub_key: String,
+
+    /// This is the first height the validator was active.
+    /// It is used to detect slashing conditions, eg which header heights are punishable.
+    pub start_height: u64,
+
+    /// This is the timestamp of the first block the validator was active.
+    /// It may be used for unbonding_period issues, maybe just for informational purposes.
+    /// Stored as unix seconds.
+    pub start_time: u64,
 }
 
-/// Ack sent for ConsumerMsg::AddValidators
+/// Ack sent for ConsumerPacket::AddValidators
 #[cw_serde]
 pub struct AddValidatorsAck {}
 
-/// Ack sent for ConsumerMsg::RemoveValidators
+/// Ack sent for ConsumerPacket::RemoveValidators
 #[cw_serde]
 pub struct RemoveValidatorsAck {}
 
-/// Ack sent for ConsumerMsg::UpdatePubkey
+/// This is a generic ICS acknowledgement format.
+/// Proto defined here: https://github.com/cosmos/cosmos-sdk/blob/v0.42.0/proto/ibc/core/channel/v1/channel.proto#L141-L147
+/// This is compatible with the JSON serialization.
+/// Wasmd uses this same wrapper for unhandled errors.
 #[cw_serde]
-pub struct UpdatePubkeyAck {}
+pub enum AckWrapper {
+    Result(Binary),
+    Error(String),
+}
+
+// create a serialized success message
+pub fn ack_success<T: serde::Serialize>(data: &T) -> StdResult<Binary> {
+    let res = AckWrapper::Result(to_binary(data)?);
+    to_binary(&res)
+}
+
+// create a serialized error message
+pub fn ack_fail<E: Error>(err: E) -> StdResult<Binary> {
+    let res = AckWrapper::Error(err.to_string());
+    to_binary(&res)
+}

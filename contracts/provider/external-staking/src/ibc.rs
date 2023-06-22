@@ -7,9 +7,16 @@ use cosmwasm_std::{
     IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse,
 };
 use cw_storage_plus::Item;
-use mesh_apis::ibc::{validate_channel_order, ProtocolVersion};
+use mesh_apis::ibc::{
+    ack_success, validate_channel_order, AddValidator, AddValidatorsAck, ConsumerPacket,
+    ProtocolVersion, RemoveValidatorsAck,
+};
 
-use crate::{error::ContractError, msg::AuthorizedEndpoint};
+use crate::{
+    crdt::{CrdtState, ValUpdate},
+    error::ContractError,
+    msg::AuthorizedEndpoint,
+};
 
 /// This is the maximum version of the Mesh Security protocol that we support
 const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "1.0.0";
@@ -21,6 +28,8 @@ pub const AUTH_ENDPOINT: Item<AuthorizedEndpoint> = Item::new("auth_endpoint");
 
 // TODO: expected endpoint
 pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
+
+pub const VAL_CRDT: CrdtState = CrdtState::new();
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// enforces ordering and versioning constraints
@@ -89,8 +98,6 @@ pub fn ibc_channel_connect(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// On closed channel, we take all tokens from reflect contract to this contract.
-/// We also delete the channel entry from accounts.
 pub fn ibc_channel_close(
     _deps: DepsMut,
     _env: Env,
@@ -100,15 +107,43 @@ pub fn ibc_channel_close(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// we look for a the proper reflect contract to relay to and send the message
-/// We cannot return any meaningful response value as we do not know the response value
-/// of execution. We just return ok if we dispatched, error if we failed to dispatch
+// this accepts validator sync packets and updates the crdt state
 pub fn ibc_packet_receive(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _msg: IbcPacketReceiveMsg,
+    msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
-    todo!();
+    // There is only one channel, so we don't need to switch.
+    // We also don't care about packet sequence as this is fully commutative.
+    let packet: ConsumerPacket = from_slice(&msg.packet.data)?;
+    let ack = match packet {
+        ConsumerPacket::AddValidators(to_add) => {
+            for AddValidator {
+                valoper,
+                pub_key,
+                start_height,
+                start_time,
+            } in to_add
+            {
+                let update = ValUpdate {
+                    pub_key,
+                    start_height,
+                    start_time,
+                };
+                VAL_CRDT.add_validator(deps.storage, &valoper, update)?;
+            }
+            ack_success(&AddValidatorsAck {})?
+        }
+        ConsumerPacket::RemoveValidators(to_remove) => {
+            for valoper in to_remove {
+                VAL_CRDT.remove_validator(deps.storage, &valoper)?;
+            }
+            ack_success(&RemoveValidatorsAck {})?
+        }
+    };
+
+    // return empty success ack
+    Ok(IbcReceiveResponse::new().set_ack(ack))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
