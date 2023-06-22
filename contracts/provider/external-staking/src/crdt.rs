@@ -179,5 +179,43 @@ mod tests {
         assert_eq!(active, vec!["alice".to_string(), "carl".to_string()]);
     }
 
+    // add and remove many validators, then iterate over them
+    #[test]
+    fn pagination_works() {
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        // use two digits so numeric and alphabetic sort match (-2 is after -11, but -02 is before -11)
+        let mut validators: Vec<_> = (0..20).map(|i| format!("validator-{:02}", i)).collect();
+        for v in &validators {
+            crdt.add_validator(&mut storage, v, mock_update(123))
+                .unwrap();
+        }
+        // in reverse order, so remove doesn't shift the indexes we will later read
+        for i in [19, 17, 12, 11, 7, 4, 3] {
+            crdt.remove_validator(&mut storage, &validators[i]).unwrap();
+            validators.remove(i);
+        }
+
+        // total of 13 if we get them all
+        let active = crdt.list_active_validators(&storage, None, 20).unwrap();
+        assert_eq!(active, validators);
+        assert_eq!(active.len(), 13);
+
+        // paginate by 7
+        let active = crdt.list_active_validators(&storage, None, 7).unwrap();
+        assert_eq!(active.len(), 7);
+        assert_eq!(active, validators[0..7]);
+        let active = crdt
+            .list_active_validators(&storage, Some(&active[6]), 7)
+            .unwrap();
+        assert_eq!(active.len(), 6);
+        assert_eq!(active, validators[7..]);
+        let active = crdt
+            .list_active_validators(&storage, Some(&active[5]), 7)
+            .unwrap();
+        assert_eq!(active, Vec::<String>::new());
+    }
+
     // TODO: test key rotation later
 }
