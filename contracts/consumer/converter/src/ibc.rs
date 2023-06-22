@@ -2,14 +2,16 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_slice, to_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
-    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcMsg,
-    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
+    from_slice, to_binary, DepsMut, Env, Event, Ibc3ChannelOpenResponse, IbcBasicResponse,
+    IbcChannel, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg,
+    IbcChannelOpenResponse, IbcMsg, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg,
+    IbcReceiveResponse, IbcTimeout,
 };
 use cw_storage_plus::Item;
 
 use mesh_apis::ibc::{
-    validate_channel_order, AddValidator, ConsumerPacket, ProtocolVersion, PROTOCOL_NAME,
+    validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, ProtocolVersion,
+    PROTOCOL_NAME,
 };
 
 use crate::error::ContractError;
@@ -150,12 +152,27 @@ pub fn ibc_packet_receive(
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// We get acks on sync state without much to do.
 /// If it succeeded, take no action. If it errored, we can't do anything else and let it go.
+/// We just log the error cases so they can be detected.
 pub fn ibc_packet_ack(
     _deps: DepsMut,
     _env: Env,
-    _msg: IbcPacketAckMsg,
+    msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    Ok(IbcBasicResponse::new())
+    let ack: AckWrapper = from_slice(&msg.acknowledgement.data)?;
+    let mut res = IbcBasicResponse::new();
+    match ack {
+        AckWrapper::Result(_) => {}
+        AckWrapper::Error(e) => {
+            // The wasmd framework will label this with the contract_addr, which helps us find the port and issue.
+            // Provide info to find the actual packet.
+            let event = Event::new("mesh_ibc_error")
+                .add_attribute("error", e)
+                .add_attribute("channel", msg.original_packet.src.channel_id)
+                .add_attribute("sequence", msg.original_packet.sequence.to_string());
+            res = res.add_event(event);
+        }
+    }
+    Ok(res)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

@@ -2,14 +2,14 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_slice, to_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
+    from_slice, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
     IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse,
     IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse,
 };
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
-    validate_channel_order, AddValidator, AddValidatorsAck, ConsumerPacket, ProtocolVersion,
-    RemoveValidatorsAck,
+    ack_success, validate_channel_order, AddValidator, AddValidatorsAck, ConsumerPacket,
+    ProtocolVersion, RemoveValidatorsAck,
 };
 
 use crate::{
@@ -132,13 +132,13 @@ pub fn ibc_packet_receive(
                 };
                 VAL_CRDT.add_validator(deps.storage, &valoper, update)?;
             }
-            to_binary(&AddValidatorsAck {})?
+            ack_success(&AddValidatorsAck {})?
         }
         ConsumerPacket::RemoveValidators(to_remove) => {
             for valoper in to_remove {
                 VAL_CRDT.remove_validator(deps.storage, &valoper)?;
             }
-            to_binary(&RemoveValidatorsAck {})?
+            ack_success(&RemoveValidatorsAck {})?
         }
     };
 

@@ -84,3 +84,6 @@ impl<'a> CrdtState<'a> {
         self.validators.save(storage, valoper, &state)
     }
 }
+
+#[cfg(test)]
+mod tests {}
