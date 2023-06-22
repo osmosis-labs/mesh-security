@@ -1,5 +1,5 @@
 use cosmwasm_std::StdError;
-use cw_utils::PaymentError;
+use cw_utils::{ParseReplyError, PaymentError};
 use mesh_apis::ibc::VersionError;
 use thiserror::Error;
 
@@ -14,6 +14,9 @@ pub enum ContractError {
     #[error("{0}")]
     IbcVersion(#[from] VersionError),
 
+    #[error("{0}")]
+    ParseReply(#[from] ParseReplyError),
+
     #[error("Unauthorized")]
     Unauthorized,
 
@@ -25,4 +28,7 @@ pub enum ContractError {
 
     #[error("Sent wrong denom over IBC: {sent}, expected {expected}")]
     WrongDenom { sent: String, expected: String },
+
+    #[error("Invalid reply id: {0}")]
+    InvalidReplyId(u64),
 }

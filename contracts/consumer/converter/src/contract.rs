@@ -1,10 +1,11 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, Coin, Decimal, Deps, DepsMut, Event, Response, WasmMsg,
+    ensure_eq, to_binary, Addr, Coin, Decimal, Deps, DepsMut, Event, Reply, Response, SubMsg,
+    SubMsgResponse, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
-use cw_utils::nonpayable;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+use cw_utils::{nonpayable, parse_instantiate_response_data};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::converter_api::{self, ConverterApi, RewardInfo};
@@ -17,6 +18,8 @@ use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const REPLY_ID_INSTANTIATE: u64 = 1;
 
 pub struct ConverterContract<'a> {
     pub config: Item<'a, Config>,
@@ -49,7 +52,7 @@ impl ConverterContract<'_> {
         price_feed: String,
         discount: Decimal,
         remote_denom: String,
-        virtual_staking: String, // TODO: figure out to pass this in later
+        virtual_staking_code_id: u64,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
         let config = Config {
@@ -62,12 +65,71 @@ impl ConverterContract<'_> {
         };
         self.config.save(ctx.deps.storage, &config)?;
 
-        let virtual_staking = ctx.deps.api.addr_validate(&virtual_staking)?;
-        self.virtual_stake
-            .save(ctx.deps.storage, &virtual_staking)?;
-
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+        // instantiate virtual staking contract here
+        let info = ctx
+            .deps
+            .querier
+            .query_wasm_contract_info(ctx.env.contract.address)?;
+        let init_msg = WasmMsg::Instantiate {
+            admin: info.admin,
+            code_id: virtual_staking_code_id,
+            msg: b"{}".into(),
+            funds: vec![],
+            label: format!("Virtual Staking: {}", &config.remote_denom),
+        };
+        let init_msg = SubMsg::reply_on_success(init_msg, REPLY_ID_INSTANTIATE);
+
+        Ok(Response::new().add_submessage(init_msg))
+    }
+
+    #[msg(reply)]
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+        match reply.id {
+            REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
+            _ => Err(ContractError::InvalidReplyId(reply.id)),
+        }
+    }
+
+    /// Store virtual staking address
+    fn reply_init_callback(
+        &self,
+        deps: DepsMut,
+        reply: SubMsgResponse,
+    ) -> Result<Response, ContractError> {
+        let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
+        let virtual_staking = Addr::unchecked(init_data.contract_address);
+        self.virtual_stake.save(deps.storage, &virtual_staking)?;
         Ok(Response::new())
+    }
+
+    /// This is only used for tests
+    /// Ideally we want conditional compilation of these whole methods and the enum variants
+    #[msg(exec)]
+    fn demo_stake(
+        &self,
+        ctx: ExecCtx,
+        validator: String,
+        stake: Coin,
+    ) -> Result<Response, ContractError> {
+        // This can only ever be valid in tests
+        ensure_eq!(ctx.info.sender, "ADMIN", ContractError::Unauthorized);
+        self.stake(ctx.deps, validator, stake)
+    }
+
+    /// This is only used for tests
+    /// Ideally we want conditional compilation of these whole methods and the enum variants
+    #[msg(exec)]
+    fn demo_unstake(
+        &self,
+        ctx: ExecCtx,
+        validator: String,
+        unstake: Coin,
+    ) -> Result<Response, ContractError> {
+        // This can only ever be valid in tests
+        ensure_eq!(ctx.info.sender, "ADMIN", ContractError::Unauthorized);
+        self.unstake(ctx.deps, validator, unstake)
     }
 
     #[msg(query)]
@@ -136,8 +198,8 @@ impl ConverterContract<'_> {
             config.remote_denom,
             amount.denom,
             ContractError::WrongDenom {
-                sent: amount.denom.clone(),
-                expected: config.remote_denom.clone()
+                sent: amount.denom,
+                expected: config.remote_denom
             }
         );
 
