@@ -15,5 +15,8 @@ pub struct Config {
 
     /// Staking denom used on this chain
     pub local_denom: String,
-    // TODO: expected remote denom for virtual staking
+
+    /// Token being "virtually sent" over IBC.
+    /// use remote via, eg "uosmo", not "ibc/4EF183..."
+    pub remote_denom: String,
 }

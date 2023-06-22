@@ -22,4 +22,7 @@ pub enum ContractError {
 
     #[error("You must start the channel handshake on this side, it doesn't support OpenTry")]
     IbcOpenTryDisallowed,
+
+    #[error("Sent wrong denom over IBC: {sent}, expected {expected}")]
+    WrongDenom { sent: String, expected: String },
 }

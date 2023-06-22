@@ -1,4 +1,6 @@
-use cosmwasm_std::{to_binary, Addr, Coin, Decimal, Deps, DepsMut, Event, Response, WasmMsg};
+use cosmwasm_std::{
+    ensure_eq, to_binary, Addr, Coin, Decimal, Deps, DepsMut, Event, Response, WasmMsg,
+};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
@@ -46,6 +48,7 @@ impl ConverterContract<'_> {
         ctx: InstantiateCtx,
         price_feed: String,
         discount: Decimal,
+        remote_denom: String,
         virtual_staking: String, // TODO: figure out to pass this in later
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
@@ -54,6 +57,8 @@ impl ConverterContract<'_> {
             // TODO: better error if discount greater than 1 (this will panic)
             adjustment: Decimal::one() - discount,
             local_denom: ctx.deps.querier.query_bonded_denom()?,
+            // TODO: validation here? Just that it is non-empty?
+            remote_denom,
         };
         self.config.save(ctx.deps.storage, &config)?;
 
@@ -127,6 +132,14 @@ impl ConverterContract<'_> {
     fn normalize_price(&self, deps: Deps, amount: Coin) -> Result<Coin, ContractError> {
         // TODO: ensure the proper remote denom - set this in the instantiate
         let config = self.config.load(deps.storage)?;
+        ensure_eq!(
+            config.remote_denom,
+            amount.denom,
+            ContractError::WrongDenom {
+                sent: amount.denom.clone(),
+                expected: config.remote_denom.clone()
+            }
+        );
 
         // get the price value (usage is a bit clunky, need use trait and cannot chain Remote::new() with .querier())
         use price_feed_api::Querier;
