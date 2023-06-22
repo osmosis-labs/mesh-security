@@ -1,11 +1,19 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{StdError, Storage};
-use cw_storage_plus::Map;
+use cosmwasm_std::{Order, StdError, StdResult, Storage};
+use cw_storage_plus::{Bound, Map};
 
+// Question: Do we need to add more info here if we want to keep historical info for slashing.
+// Would we ever need the pubkeys for a Tombstoned validator? Or do we consider it already slashed and therefore unslashable?
 #[cw_serde]
 pub enum ValidatorState {
     Active(ActiveState),
     Tombstoned {},
+}
+
+impl ValidatorState {
+    pub fn is_active(&self) -> bool {
+        matches!(self, ValidatorState::Active(_))
+    }
 }
 
 #[cw_serde]
@@ -83,7 +91,93 @@ impl<'a> CrdtState<'a> {
         let state = ValidatorState::Tombstoned {};
         self.validators.save(storage, valoper, &state)
     }
+
+    pub fn is_active_validator(&self, storage: &dyn Storage, valoper: &str) -> StdResult<bool> {
+        let active = self
+            .validators
+            .may_load(storage, valoper)?
+            .map(|s| s.is_active())
+            .unwrap_or(false);
+        Ok(active)
+    }
+
+    /// This returns the valoper address of all active validators
+    pub fn list_active_validators(
+        &self,
+        storage: &dyn Storage,
+        start_after: Option<&str>,
+        limit: usize,
+    ) -> StdResult<Vec<String>> {
+        let start = start_after.map(Bound::exclusive);
+        self.validators
+            .range(storage, start, None, Order::Ascending)
+            .filter_map(|r| match r {
+                Ok((valoper, ValidatorState::Active(_))) => Some(Ok(valoper)),
+                Ok((_, ValidatorState::Tombstoned {})) => None,
+                Err(e) => Some(Err(e)),
+            })
+            .take(limit)
+            .collect()
+    }
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    use cosmwasm_std::MemoryStorage;
+
+    fn mock_update(start_height: u64) -> ValUpdate {
+        ValUpdate {
+            pub_key: "TODO".to_string(),
+            start_height,
+            start_time: 1687339542,
+        }
+    }
+
+    // We add three new validators, and remove one
+    #[test]
+    fn happy_path() {
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        crdt.add_validator(&mut storage, "alice", mock_update(123))
+            .unwrap();
+        crdt.add_validator(&mut storage, "bob", mock_update(200))
+            .unwrap();
+        crdt.add_validator(&mut storage, "carl", mock_update(303))
+            .unwrap();
+        crdt.remove_validator(&mut storage, "bob").unwrap();
+
+        assert!(crdt.is_active_validator(&storage, "alice").unwrap());
+        assert!(!crdt.is_active_validator(&storage, "bob").unwrap());
+        assert!(crdt.is_active_validator(&storage, "carl").unwrap());
+
+        let active = crdt.list_active_validators(&storage, None, 10).unwrap();
+        assert_eq!(active, vec!["alice".to_string(), "carl".to_string()]);
+    }
+
+    // Like happy path, but we remove bob before he was ever added
+    #[test]
+    fn remove_before_add_works() {
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        crdt.remove_validator(&mut storage, "bob").unwrap();
+        crdt.add_validator(&mut storage, "alice", mock_update(123))
+            .unwrap();
+        crdt.add_validator(&mut storage, "bob", mock_update(200))
+            .unwrap();
+        crdt.add_validator(&mut storage, "carl", mock_update(303))
+            .unwrap();
+
+        assert!(crdt.is_active_validator(&storage, "alice").unwrap());
+        assert!(!crdt.is_active_validator(&storage, "bob").unwrap());
+        assert!(crdt.is_active_validator(&storage, "carl").unwrap());
+
+        let active = crdt.list_active_validators(&storage, None, 10).unwrap();
+        assert_eq!(active, vec!["alice".to_string(), "carl".to_string()]);
+    }
+
+    // TODO: test key rotation later
+}
