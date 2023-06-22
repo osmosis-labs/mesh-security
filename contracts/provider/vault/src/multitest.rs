@@ -451,6 +451,8 @@ fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
     let txs = vault.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(|tx| match tx {
         Tx::InFlightStaking { id, .. } => *id,
+        Tx::InFlightRemoteStaking { id, .. } => *id,
+        Tx::InFlightRemoteUnstaking { id, .. } => *id,
     })
 }
 
@@ -885,6 +887,7 @@ fn stake_cross_txs() {
     // First tx is still pending
     let first_id = match vault.all_pending_txs_desc(None, None).unwrap().txs[0] {
         InFlightStaking { id, .. } => id,
+        _ => panic!("unexpected tx type"),
     };
     assert_eq!(first_id, first_tx);
 
