@@ -550,7 +550,7 @@ impl VaultContract<'_> {
                         ContractError::WrongContractTx(tx_id, ctx.info.sender.clone())
                     );
                     true
-                },
+                }
                 _ => false,
             },
             ContractError::WrongTypeTx(tx_id, tx)
