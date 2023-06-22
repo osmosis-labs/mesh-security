@@ -61,6 +61,14 @@ impl VirtualStakingMock<'_> {
     }
 
     #[msg(query)]
+    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        let denom = cfg.denom;
+        let converter = cfg.converter.into_string();
+        Ok(ConfigResponse { denom, converter })
+    }
+
+    #[msg(query)]
     fn stake(&self, ctx: QueryCtx, validator: String) -> Result<StakeResponse, ContractError> {
         let stake = self
             .stake
@@ -87,6 +95,12 @@ pub struct StakeResponse {
 #[cw_serde]
 pub struct AllStakeResponse {
     pub stakes: Vec<(String, Uint128)>,
+}
+
+#[cw_serde]
+pub struct ConfigResponse {
+    pub denom: String,
+    pub converter: String,
 }
 
 #[contract]
