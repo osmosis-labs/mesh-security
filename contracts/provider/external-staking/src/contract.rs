@@ -100,8 +100,8 @@ impl ExternalStakingContract<'_> {
 
     /// Commits a pending stake.
     /// Must be called by the IBC callback handler on successful remote staking.
-    #[allow(unused)]
-    fn commit_stake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+    #[msg(exec)] // TODO: Only enable for tests / use another method (IBC message)
+    fn commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         // Load tx
         let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
 
@@ -157,7 +157,7 @@ impl ExternalStakingContract<'_> {
 
         // TODO: Call commit hook on vault
 
-        Ok(())
+        Ok(Response::new())
     }
 
     /// Rollbacks a pending stake.
@@ -280,7 +280,8 @@ impl ExternalStakingContract<'_> {
     /// Commits a pending unstake.
     /// Must be called by the IBC callback handler on successful remote unstaking.
     #[allow(unused)]
-    fn commit_unstake(&self, ctx: &mut ExecCtx, tx_id: u64) -> Result<(), ContractError> {
+    #[msg(exec)] // TODO: Only enable for tests / use another method (IBC message)
+    fn commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         // Load tx
         let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
 
@@ -344,7 +345,7 @@ impl ExternalStakingContract<'_> {
         // Remove tx
         self.pending_txs.remove(ctx.deps.storage, tx_id);
 
-        Ok(())
+        Ok(Response::new())
     }
 
     /// Rollbacks a pending unstake.
