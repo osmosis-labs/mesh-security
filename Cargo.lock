@@ -682,6 +682,7 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
+ "itertools",
  "schemars",
  "serde",
  "thiserror",
