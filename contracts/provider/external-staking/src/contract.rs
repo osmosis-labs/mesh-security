@@ -111,7 +111,6 @@ impl ExternalStakingContract<'_> {
         let tx = self.pending_txs.load(deps.storage, tx_id)?;
         println!("tx: {:?}", tx);
 
-        // TODO: Verify tx comes from the right context
         // Verify tx is the right type
         ensure!(
             matches!(tx, Tx::InFlightRemoteStaking { .. }),
@@ -142,7 +141,6 @@ impl ExternalStakingContract<'_> {
         let stake = stake_lock.write()?;
         stake.stake += tx_amount;
 
-        // Commit distribution (need to unlock it first)
         // Distribution alignment
         stake
             .points_alignment
@@ -176,7 +174,6 @@ impl ExternalStakingContract<'_> {
         // Load tx
         let tx = self.pending_txs.load(deps.storage, tx_id)?;
 
-        // TODO: Verify tx comes from the right context
         // Verify tx is the right type
         ensure!(
             matches!(tx, Tx::InFlightRemoteStaking { .. }),
@@ -330,7 +327,6 @@ impl ExternalStakingContract<'_> {
         // Load tx
         let tx = self.pending_txs.load(deps.storage, tx_id)?;
 
-        // TODO: Verify tx comes from the right context
         // Verify tx is of the right type
         ensure!(
             matches!(tx, Tx::InFlightRemoteUnstaking { .. }),
@@ -364,6 +360,7 @@ impl ExternalStakingContract<'_> {
         stake.stake -= tx_amount;
 
         // FIXME? Release period being computed after successful IBC tx
+        // (Note: this is good for now, but can be revisited in v1 design)
         let release_at = env.block.time.plus_seconds(config.unbonding_period);
         let unbond = PendingUnbond {
             amount: tx_amount,
@@ -396,7 +393,6 @@ impl ExternalStakingContract<'_> {
         // Load tx
         let tx = self.pending_txs.load(deps.storage, tx_id)?;
 
-        // TODO: Verify tx comes from the right context
         // Verify tx is of the right type
         ensure!(
             matches!(tx, Tx::InFlightRemoteUnstaking { .. }),
