@@ -53,6 +53,7 @@ impl ConverterContract<'_> {
         discount: Decimal,
         remote_denom: String,
         virtual_staking_code_id: u64,
+        admin: Option<String>,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
         let config = Config {
@@ -67,13 +68,13 @@ impl ConverterContract<'_> {
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-        // instantiate virtual staking contract here
-        let info = ctx
-            .deps
-            .querier
-            .query_wasm_contract_info(ctx.env.contract.address)?;
+        if let Some(admin) = &admin {
+            ctx.deps.api.addr_validate(admin)?;
+        }
+
+        // Instantiate virtual staking contract
         let init_msg = WasmMsg::Instantiate {
-            admin: info.admin,
+            admin,
             code_id: virtual_staking_code_id,
             msg: b"{}".into(),
             funds: vec![],
