@@ -5,8 +5,6 @@ use cosmwasm_std::{coin, Addr, Decimal, Uint128};
 use sylvia::multitest::App;
 
 use crate::contract;
-use crate::contract::FAKE_IBC;
-use crate::error::ContractError;
 
 const JUNO: &str = "ujuno";
 
@@ -32,9 +30,9 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
     } = args;
 
     let price_feed_code =
-        mesh_simple_price_feed::contract::multitest_utils::CodeId::store_code(&app);
-    let virtual_staking_code = virtual_staking_mock::multitest_utils::CodeId::store_code(&app);
-    let converter_code = contract::multitest_utils::CodeId::store_code(&app);
+        mesh_simple_price_feed::contract::multitest_utils::CodeId::store_code(app);
+    let virtual_staking_code = virtual_staking_mock::multitest_utils::CodeId::store_code(app);
+    let converter_code = contract::multitest_utils::CodeId::store_code(app);
 
     let price_feed = price_feed_code
         .instantiate(native_per_foreign, None)
@@ -55,10 +53,10 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
         .unwrap();
 
     let config = converter.config().unwrap();
-    let virtual_staking_addr = Addr::unchecked(&config.virtual_staking);
+    let virtual_staking_addr = Addr::unchecked(config.virtual_staking);
     let virtual_staking = virtual_staking_mock::multitest_utils::VirtualStakingMockProxy::new(
         virtual_staking_addr,
-        &app,
+        app,
     );
 
     SetupResponse {
@@ -156,18 +154,18 @@ fn ibc_stake_and_unstake() {
 
     // let's stake some
     converter
-        .demo_stake(val1.to_string(), coin(1000, JUNO))
-        .call(FAKE_IBC)
+        .test_stake(val1.to_string(), coin(1000, JUNO))
+        .call(owner)
         .unwrap();
     converter
-        .demo_stake(val2.to_string(), coin(4000, JUNO))
-        .call(FAKE_IBC)
+        .test_stake(val2.to_string(), coin(4000, JUNO))
+        .call(owner)
         .unwrap();
 
     // and unstake some
     converter
-        .demo_unstake(val2.to_string(), coin(2000, JUNO))
-        .call(FAKE_IBC)
+        .test_unstake(val2.to_string(), coin(2000, JUNO))
+        .call(owner)
         .unwrap();
 
     // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
@@ -194,17 +192,4 @@ fn ibc_stake_and_unstake() {
             (val2.to_string(), Uint128::new(600)),
         ]
     );
-
-    // ensure other callers can't do this (even owner or creator)
-    let err = converter
-        .demo_unstake(val2.to_string(), coin(2000, JUNO))
-        .call(admin)
-        .unwrap_err();
-    assert_eq!(err, ContractError::Unauthorized);
-
-    let err = converter
-        .demo_unstake(val2.to_string(), coin(2000, JUNO))
-        .call(owner)
-        .unwrap_err();
-    assert_eq!(err, ContractError::Unauthorized);
 }

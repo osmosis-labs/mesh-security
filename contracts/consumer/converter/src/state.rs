@@ -8,7 +8,7 @@ pub struct Config {
     /// Adjustment of 0.0 means the foreign asset has no value.
     /// Adjustment of 0.4 means the foreign asset has 40% of value after conversion.
     /// Note this is (1.0 - discount)
-    pub adjustment: Decimal,
+    pub price_adjustment: Decimal,
 
     /// Address of the contract we query for the price feed to normalize the foreign asset into native tokens.
     pub price_feed: Addr,

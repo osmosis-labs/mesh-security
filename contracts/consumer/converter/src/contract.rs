@@ -19,10 +19,6 @@ use crate::state::Config;
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// TODO: remove need for this
-// This is used to gate the test functions that trigger IBC logic
-pub const FAKE_IBC: &str = "ADMIN";
-
 const REPLY_ID_INSTANTIATE: u64 = 1;
 
 pub struct ConverterContract<'a> {
@@ -62,7 +58,7 @@ impl ConverterContract<'_> {
         let config = Config {
             price_feed: ctx.deps.api.addr_validate(&price_feed)?,
             // TODO: better error if discount greater than 1 (this will panic)
-            adjustment: Decimal::one() - discount,
+            price_adjustment: Decimal::one() - discount,
             local_denom: ctx.deps.querier.query_bonded_denom()?,
             // TODO: validation here? Just that it is non-empty?
             remote_denom,
@@ -111,29 +107,43 @@ impl ConverterContract<'_> {
     /// This is only used for tests
     /// Ideally we want conditional compilation of these whole methods and the enum variants
     #[msg(exec)]
-    fn demo_stake(
+    fn test_stake(
         &self,
         ctx: ExecCtx,
         validator: String,
         stake: Coin,
     ) -> Result<Response, ContractError> {
-        // This can only ever be valid in tests
-        ensure_eq!(ctx.info.sender, "ADMIN", ContractError::Unauthorized);
-        self.stake(ctx.deps, validator, stake)
+        #[cfg(test)]
+        {
+            // This can only ever be called in tests
+            self.stake(ctx.deps, validator, stake)
+        }
+        #[cfg(not(test))]
+        {
+            let _ = (ctx, validator, stake);
+            Err(ContractError::Unauthorized)
+        }
     }
 
     /// This is only used for tests
     /// Ideally we want conditional compilation of these whole methods and the enum variants
     #[msg(exec)]
-    fn demo_unstake(
+    fn test_unstake(
         &self,
         ctx: ExecCtx,
         validator: String,
         unstake: Coin,
     ) -> Result<Response, ContractError> {
-        // This can only ever be valid in tests
-        ensure_eq!(ctx.info.sender, "ADMIN", ContractError::Unauthorized);
-        self.unstake(ctx.deps, validator, unstake)
+        #[cfg(test)]
+        {
+            // This can only ever be called in tests
+            self.unstake(ctx.deps, validator, unstake)
+        }
+        #[cfg(not(test))]
+        {
+            let _ = (ctx, validator, unstake);
+            Err(ContractError::Unauthorized)
+        }
     }
 
     #[msg(query)]
@@ -142,7 +152,7 @@ impl ConverterContract<'_> {
         let virtual_staking = self.virtual_stake.load(ctx.deps.storage)?.into_string();
         Ok(ConfigResponse {
             price_feed: config.price_feed.into_string(),
-            adjustment: config.adjustment,
+            adjustment: config.price_adjustment,
             virtual_staking,
         })
     }
@@ -196,7 +206,6 @@ impl ConverterContract<'_> {
     }
 
     fn normalize_price(&self, deps: Deps, amount: Coin) -> Result<Coin, ContractError> {
-        // TODO: ensure the proper remote denom - set this in the instantiate
         let config = self.config.load(deps.storage)?;
         ensure_eq!(
             config.remote_denom,
@@ -208,11 +217,11 @@ impl ConverterContract<'_> {
         );
 
         // get the price value (usage is a bit clunky, need use trait and cannot chain Remote::new() with .querier())
+        // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
         use price_feed_api::Querier;
         let remote = price_feed_api::Remote::new(config.price_feed);
-        let price_feed = remote.querier(&deps.querier);
-        let price = price_feed.price()?.native_per_foreign;
-        let converted = (amount.amount * price) * config.adjustment;
+        let price = remote.querier(&deps.querier).price()?.native_per_foreign;
+        let converted = (amount.amount * price) * config.price_adjustment;
 
         Ok(Coin {
             denom: config.local_denom,
