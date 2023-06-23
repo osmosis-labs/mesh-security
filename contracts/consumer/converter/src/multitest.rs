@@ -46,6 +46,7 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
             discount,
             JUNO.to_owned(),
             virtual_staking_code.code_id(),
+            Some(admin.to_owned()),
         )
         .with_label("Juno Converter")
         .with_admin(admin)
@@ -70,8 +71,8 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
 fn instantiation() {
     let app = App::default();
 
-    let owner = "Sunny"; // Owner of the staking contract (i. e. the vault contract)
-    let admin = "The man";
+    let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
+    let admin = "theman";
     let discount = Decimal::percent(40); // 1 OSMO worth of JUNO should give 0.6 OSMO of stake
     let native_per_foreign = Decimal::percent(50); // 1 JUNO is worth 0.5 OSMO
 
@@ -112,8 +113,8 @@ fn instantiation() {
 fn ibc_stake_and_unstake() {
     let app = App::default();
 
-    let owner = "Sunny"; // Owner of the staking contract (i. e. the vault contract)
-    let admin = "The man";
+    let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
+    let admin = "theman";
     let discount = Decimal::percent(40); // 1 OSMO worth of JUNO should give 0.6 OSMO of stake
     let native_per_foreign = Decimal::percent(50); // 1 JUNO is worth 0.5 OSMO
 
