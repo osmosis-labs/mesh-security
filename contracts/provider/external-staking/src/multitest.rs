@@ -143,7 +143,7 @@ fn staking() {
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
-        .commit_stake(last_external_staking_tx)
+        .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
 
@@ -166,7 +166,7 @@ fn staking() {
         .unwrap();
 
     contract
-        .commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -189,7 +189,7 @@ fn staking() {
         .unwrap();
 
     contract
-        .commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -212,7 +212,7 @@ fn staking() {
         .unwrap();
 
     contract
-        .commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -234,7 +234,7 @@ fn staking() {
         .unwrap();
 
     contract
-        .commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -394,7 +394,7 @@ fn unstaking() {
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
-        .commit_stake(last_external_staking_tx)
+        .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
 
@@ -416,7 +416,7 @@ fn unstaking() {
         .unwrap();
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
-        .commit_stake(last_external_staking_tx)
+        .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
 
@@ -438,7 +438,7 @@ fn unstaking() {
         .unwrap();
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
-        .commit_stake(last_external_staking_tx)
+        .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
 
@@ -450,7 +450,7 @@ fn unstaking() {
         .call(users[0])
         .unwrap();
     contract
-        .commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -459,7 +459,7 @@ fn unstaking() {
         .call(users[0])
         .unwrap();
     contract
-        .commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -468,7 +468,7 @@ fn unstaking() {
         .call(users[1])
         .unwrap();
     contract
-        .commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -567,7 +567,7 @@ fn unstaking() {
         .call(users[0])
         .unwrap();
     contract
-        .commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -576,7 +576,7 @@ fn unstaking() {
         .call(users[0])
         .unwrap();
     contract
-        .commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -730,7 +730,7 @@ fn distribution() {
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
-        .commit_stake(last_external_staking_tx)
+        .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
 
@@ -751,7 +751,7 @@ fn distribution() {
         .call(contract.contract_addr.as_str())
         .unwrap();
     contract
-        .commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -772,7 +772,7 @@ fn distribution() {
         .call(contract.contract_addr.as_str())
         .unwrap();
     contract
-        .commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -975,7 +975,7 @@ fn distribution() {
         .call(users[1])
         .unwrap();
     contract
-        .commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -1002,7 +1002,7 @@ fn distribution() {
         .call(contract.contract_addr.as_str())
         .unwrap();
     contract
-        .commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -1103,7 +1103,7 @@ fn distribution() {
         .call(users[0])
         .unwrap();
     contract
-        .commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 
@@ -1112,7 +1112,7 @@ fn distribution() {
         .call(users[1])
         .unwrap();
     contract
-        .commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
 

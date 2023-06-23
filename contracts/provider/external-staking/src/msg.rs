@@ -96,9 +96,8 @@ pub struct PendingRewards {
 }
 
 pub type TxResponse = mesh_sync::Tx;
-pub type AllTxsResponseItem = TxResponse;
 
 #[cw_serde]
 pub struct AllTxsResponse {
-    pub txs: Vec<AllTxsResponseItem>,
+    pub txs: Vec<TxResponse>,
 }
