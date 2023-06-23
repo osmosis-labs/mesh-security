@@ -41,7 +41,7 @@ pub struct ExternalStakingContract<'a> {
     /// Stakes indexed by `(owner, validator)` pair
     pub stakes: Map<'a, (&'a Addr, &'a str), Lockable<Stake>>,
     /// Per-validator distribution information
-    pub distribution: Map<'a, &'a str, Lockable<Distribution>>,
+    pub distribution: Map<'a, &'a str, Distribution>,
     /// Pending txs information
     pub tx_count: Item<'a, u64>,
     pub pending_txs: Map<'a, u64, Tx>,
@@ -130,7 +130,10 @@ impl ExternalStakingContract<'_> {
                 .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
 
             // Load distribution
-            let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx_validator)?;
+            let mut distribution = self
+                .distribution
+                .may_load(ctx.deps.storage, &tx_validator)?
+                .unwrap_or_default();
 
             // Commit amount (need to unlock it first)
             stake_lock.unlock_write()?;
@@ -138,8 +141,6 @@ impl ExternalStakingContract<'_> {
             stake.stake += tx_amount;
 
             // Commit distribution (need to unlock it first)
-            distribution_lock.unlock_write()?;
-            let distribution = distribution_lock.write()?;
             // Distribution alignment
             stake
                 .points_alignment
@@ -152,7 +153,7 @@ impl ExternalStakingContract<'_> {
 
             // Save distribution
             self.distribution
-                .save(ctx.deps.storage, &tx_validator, &distribution_lock)?;
+                .save(ctx.deps.storage, &tx_validator, &distribution)?;
 
             // Remove tx
             self.pending_txs.remove(ctx.deps.storage, tx_id);
@@ -199,22 +200,12 @@ impl ExternalStakingContract<'_> {
                 .stakes
                 .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
 
-            // Load distribution
-            let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx_validator)?;
-
             // Release stake lock
             stake_lock.unlock_write()?;
 
             // Save stake
             self.stakes
                 .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
-
-            // Release distribution lock
-            distribution_lock.unlock_write()?;
-
-            // Save distribution
-            self.distribution
-                .save(ctx.deps.storage, &tx_validator, &distribution_lock)?;
 
             // Remove tx
             self.pending_txs.remove(ctx.deps.storage, tx_id);
@@ -264,12 +255,6 @@ impl ExternalStakingContract<'_> {
             (&ctx.info.sender, &validator),
             &stake_lock,
         )?;
-
-        let mut distribution_lock = self.distribution.load(ctx.deps.storage, &validator)?;
-
-        distribution_lock.lock_write()?;
-        self.distribution
-            .save(ctx.deps.storage, &validator, &distribution_lock)?;
 
         // Create new tx
         let tx_id = self.next_tx_id(ctx.deps.storage)?;
@@ -329,7 +314,10 @@ impl ExternalStakingContract<'_> {
                 .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
 
             // Load distribution
-            let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx_validator)?;
+            let mut distribution = self
+                .distribution
+                .may_load(ctx.deps.storage, &tx_validator)?
+                .unwrap_or_default();
 
             // Commit amount (need to unlock it first)
             stake_lock.unlock_write()?;
@@ -344,9 +332,6 @@ impl ExternalStakingContract<'_> {
             };
             stake.pending_unbonds.push(unbond);
 
-            // Commit distribution (need to unlock it first)
-            distribution_lock.unlock_write()?;
-            let distribution = distribution_lock.write()?;
             // Distribution alignment
             stake
                 .points_alignment
@@ -359,7 +344,7 @@ impl ExternalStakingContract<'_> {
 
             // Save distribution
             self.distribution
-                .save(ctx.deps.storage, &tx_validator, &distribution_lock)?;
+                .save(ctx.deps.storage, &tx_validator, &distribution)?;
 
             // Remove tx
             self.pending_txs.remove(ctx.deps.storage, tx_id);
@@ -403,22 +388,12 @@ impl ExternalStakingContract<'_> {
                 .stakes
                 .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
 
-            // Load distribution
-            let mut distribution_lock = self.distribution.load(ctx.deps.storage, &tx_validator)?;
-
             // Release stake lock
             stake_lock.unlock_write()?;
 
             // Save stake
             self.stakes
                 .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
-
-            // Release distribution lock
-            distribution_lock.unlock_write()?;
-
-            // Save distribution
-            self.distribution
-                .save(ctx.deps.storage, &tx_validator, &distribution_lock)?;
 
             // Remove tx
             self.pending_txs.remove(ctx.deps.storage, tx_id);
@@ -495,11 +470,10 @@ impl ExternalStakingContract<'_> {
         let config = self.config.load(ctx.deps.storage)?;
         let amount = must_pay(&ctx.info, &config.rewards_denom)?;
 
-        let mut distribution_lock = self
+        let mut distribution = self
             .distribution
             .may_load(ctx.deps.storage, &validator)?
             .unwrap_or_default();
-        let mut distribution = distribution_lock.write()?;
 
         let total_stake = Uint256::from(distribution.total_stake);
         let points_distributed =
@@ -510,7 +484,7 @@ impl ExternalStakingContract<'_> {
         distribution.points_per_stake += points_per_stake;
 
         self.distribution
-            .save(ctx.deps.storage, &validator, &distribution_lock)?;
+            .save(ctx.deps.storage, &validator, &distribution)?;
 
         let resp = Response::new()
             .add_attribute("action", "distribute_rewards")
@@ -535,13 +509,12 @@ impl ExternalStakingContract<'_> {
 
         let stake = stake_lock.write()?;
 
-        let mut distribution_lock = self
+        let distribution = self
             .distribution
             .may_load(ctx.deps.storage, &validator)?
             .unwrap_or_default();
-        let distribution = distribution_lock.write()?;
 
-        let amount = Self::calculate_reward(stake, distribution)?;
+        let amount = Self::calculate_reward(stake, &distribution)?;
 
         let mut resp = Response::new()
             .add_attribute("action", "withdraw_rewards")
@@ -716,13 +689,12 @@ impl ExternalStakingContract<'_> {
             .unwrap_or_default();
         let stake = stake_lock.read()?;
 
-        let distribution_lock = self
+        let distribution = self
             .distribution
             .may_load(ctx.deps.storage, &validator)?
             .unwrap_or_default();
-        let distribution = distribution_lock.read()?;
 
-        let amount = Self::calculate_reward(stake, distribution)?;
+        let amount = Self::calculate_reward(stake, &distribution)?;
         let config = self.config.load(ctx.deps.storage)?;
 
         let resp = PendingRewards {
@@ -786,19 +758,10 @@ pub mod cross_staking {
                 .may_load(ctx.deps.storage, (&owner, &msg.validator))?
                 .unwrap_or_default();
 
-            let mut distribution_lock = self
-                .distribution
-                .may_load(ctx.deps.storage, &msg.validator)?
-                .unwrap_or_default();
-
             // Write lock and save stake and distribution
             stake_lock.lock_write()?;
             self.stakes
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake_lock)?;
-
-            distribution_lock.lock_write()?;
-            self.distribution
-                .save(ctx.deps.storage, &msg.validator, &distribution_lock)?;
 
             // TODO: Send proper IBC message to remote staking contract
 
