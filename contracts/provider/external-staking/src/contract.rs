@@ -10,6 +10,14 @@ use mesh_apis::local_staking_api::MaxSlashResponse;
 use mesh_apis::vault_api::VaultApiHelper;
 use mesh_sync::Lockable;
 
+// IBC sending is disabled in tests...
+#[cfg(not(test))]
+use crate::ibc::{packet_timeout, IBC_CHANNEL};
+#[cfg(not(test))]
+use cosmwasm_std::{to_binary, IbcMsg};
+#[cfg(not(test))]
+use mesh_apis::ibc::ProviderPacket;
+
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
@@ -264,16 +272,33 @@ impl ExternalStakingContract<'_> {
             id: tx_id,
             amount: amount.amount,
             user: ctx.info.sender.clone(),
-            validator,
+            validator: validator.clone(),
         };
         self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
 
-        // TODO: Remote IBC should happen here.
-        // Or maybe `unstake` should be called via IBC. To be specified
-        let resp = Response::new()
+        let mut resp = Response::new()
             .add_attribute("action", "unstake")
-            .add_attribute("owner", ctx.info.sender.into_string())
             .add_attribute("amount", amount.amount.to_string());
+
+        // add ibc packet if we are ibc enabled (skip in tests)
+        #[cfg(not(test))]
+        {
+            let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+            let packet = ProviderPacket::Unstake {
+                validator,
+                unstake: amount,
+                tx_id,
+            };
+            let msg = IbcMsg::SendPacket {
+                channel_id: channel.endpoint.channel_id,
+                data: to_binary(&packet)?,
+                timeout: packet_timeout(&ctx.env),
+            };
+            resp = resp.add_message(msg);
+        }
+
+        // put this later so compiler doens't complain about mut in test mode
+        resp = resp.add_attribute("owner", ctx.info.sender);
 
         Ok(resp)
     }
@@ -763,22 +788,39 @@ pub mod cross_staking {
             self.stakes
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake_lock)?;
 
-            // TODO: Send proper IBC message to remote staking contract
-
             // Save tx
             let new_tx = Tx::InFlightRemoteStaking {
                 id: tx_id,
                 amount: amount.amount,
                 user: owner.clone(),
-                validator: msg.validator,
+                validator: msg.validator.clone(),
             };
             self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
 
-            let resp = Response::new()
+            let mut resp = Response::new()
                 .add_attribute("action", "receive_virtual_stake")
                 .add_attribute("owner", owner)
-                .add_attribute("amount", amount.amount.to_string())
-                .add_attribute("tx_id", tx_id.to_string());
+                .add_attribute("amount", amount.amount.to_string());
+
+            // add ibc packet if we are ibc enabled (skip in tests)
+            #[cfg(not(test))]
+            {
+                let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+                let packet = ProviderPacket::Stake {
+                    validator: msg.validator,
+                    stake: amount,
+                    tx_id,
+                };
+                let msg = IbcMsg::SendPacket {
+                    channel_id: channel.endpoint.channel_id,
+                    data: to_binary(&packet)?,
+                    timeout: packet_timeout(&ctx.env),
+                };
+                resp = resp.add_message(msg);
+            }
+
+            // This is later so `mut resp` is valid in test and non-test code
+            resp = resp.add_attribute("tx_id", tx_id.to_string());
 
             Ok(resp)
         }

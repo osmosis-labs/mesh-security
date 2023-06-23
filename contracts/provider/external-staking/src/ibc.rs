@@ -4,7 +4,7 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     from_slice, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
     IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse,
-    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse,
+    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
 };
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
@@ -30,6 +30,17 @@ pub const AUTH_ENDPOINT: Item<AuthorizedEndpoint> = Item::new("auth_endpoint");
 pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 
 pub const VAL_CRDT: CrdtState = CrdtState::new();
+
+// If we don't hear anything within 10 minutes, let's abort, for better UX
+// This is long enough to allow some clock drift between chains
+const DEFAULT_TIMEOUT: u64 = 10 * 60;
+
+pub fn packet_timeout(env: &Env) -> IbcTimeout {
+    // No idea about their blocktime, but 24 hours ahead of our view of the clock
+    // should be decently in the future.
+    let timeout = env.block.time.plus_seconds(DEFAULT_TIMEOUT);
+    IbcTimeout::with_timestamp(timeout)
+}
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// enforces ordering and versioning constraints
