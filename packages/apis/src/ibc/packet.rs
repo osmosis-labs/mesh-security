@@ -34,14 +34,14 @@ pub enum ProviderPacket {
 #[cw_serde]
 pub struct StakeAck {
     /// Return the value from the original packet
-    tx_id: u64,
+    pub tx_id: u64,
 }
 
 /// Ack sent for ProviderPacket::Unstake
 #[cw_serde]
 pub struct UnstakeAck {
     /// Return the value from the original packet
-    tx_id: u64,
+    pub tx_id: u64,
 }
 
 /// These are messages sent from consumer -> provider

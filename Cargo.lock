@@ -586,6 +586,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-simple-price-feed",
  "schemars",
  "serde",
  "sylvia",

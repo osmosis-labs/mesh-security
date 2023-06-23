@@ -53,12 +53,9 @@ impl VirtualStakingContract<'_> {
 
     /// The caller of the instantiation will be the converter contract
     #[msg(instantiate)]
-    pub fn instantiate(
-        &self,
-        ctx: InstantiateCtx,
-        denom: String,
-    ) -> Result<Response, ContractError> {
+    pub fn instantiate(&self, ctx: InstantiateCtx) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
+        let denom = ctx.deps.querier.query_bonded_denom()?;
         let config = Config {
             denom,
             converter: ctx.info.sender,
