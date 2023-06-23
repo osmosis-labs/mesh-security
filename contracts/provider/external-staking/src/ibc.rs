@@ -9,10 +9,11 @@ use cosmwasm_std::{
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AddValidator, AddValidatorsAck, ConsumerPacket,
-    ProtocolVersion, RemoveValidatorsAck,
+    ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
 };
 
 use crate::{
+    contract::ExternalStakingContract,
     crdt::{CrdtState, ValUpdate},
     error::ContractError,
     msg::AuthorizedEndpoint,
@@ -168,11 +169,26 @@ pub fn ibc_packet_ack(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// never should be called as we do not send packets
+/// This should trigger a rollback of staking/unstaking
 pub fn ibc_packet_timeout(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _msg: IbcPacketTimeoutMsg,
+    msg: IbcPacketTimeoutMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    Ok(IbcBasicResponse::new().add_attribute("action", "ibc_packet_timeout"))
+    let packet: ProviderPacket = from_slice(&msg.packet.data)?;
+    let contract = ExternalStakingContract::new();
+    let mut resp = IbcBasicResponse::new().add_attribute("action", "ibc_packet_timeout");
+    match packet {
+        ProviderPacket::Stake { tx_id, .. } => {
+            let msg = contract.rollback_stake(deps, tx_id)?;
+            resp = resp
+                .add_message(msg)
+                .add_attribute("tx_id", tx_id.to_string());
+        }
+        ProviderPacket::Unstake { tx_id, .. } => {
+            contract.rollback_unstake(deps, tx_id)?;
+            resp = resp.add_attribute("tx_id", tx_id.to_string());
+        }
+    };
+    Ok(resp)
 }

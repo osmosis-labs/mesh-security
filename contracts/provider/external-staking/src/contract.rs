@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, coins, ensure, ensure_eq, from_binary, Addr, BankMsg, Binary, Coin, Decimal, Order,
-    Response, StdResult, Storage, Uint128, Uint256,
+    coin, coins, ensure, ensure_eq, from_binary, Addr, BankMsg, Binary, Coin, Decimal, DepsMut,
+    Order, Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -166,9 +166,10 @@ impl ExternalStakingContract<'_> {
             // Remove tx
             self.pending_txs.remove(ctx.deps.storage, tx_id);
 
-            // TODO: Call commit hook on vault
-
-            Ok(Response::new())
+            // Call commit hook on vault
+            let cfg = self.config.load(ctx.deps.storage)?;
+            let msg = cfg.vault.commit_tx(tx_id)?;
+            Ok(Response::new().add_message(msg))
         }
         #[cfg(not(test))]
         {
@@ -177,50 +178,60 @@ impl ExternalStakingContract<'_> {
         }
     }
 
+    /// In test code, this is called from test_rollback_stake.
+    /// In non-test code, this is called from ibc_packet_ack or ibc_packet_timeout
+    pub(crate) fn rollback_stake(
+        &self,
+        deps: DepsMut,
+        tx_id: u64,
+    ) -> Result<WasmMsg, ContractError> {
+        // Load tx
+        let tx = self.pending_txs.load(deps.storage, tx_id)?;
+
+        // TODO: Verify tx comes from the right context
+        // Verify tx is the right type
+        ensure!(
+            matches!(tx, Tx::InFlightRemoteStaking { .. }),
+            ContractError::WrongTypeTx(tx_id, tx)
+        );
+
+        let (_tx_amount, tx_user, tx_validator) = match tx {
+            Tx::InFlightRemoteStaking {
+                amount,
+                user,
+                validator,
+                ..
+            } => (amount, user, validator),
+            _ => unreachable!(),
+        };
+
+        // Load stake
+        let mut stake_lock = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+
+        // Release stake lock
+        stake_lock.unlock_write()?;
+
+        // Save stake
+        self.stakes
+            .save(deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
+
+        // Remove tx
+        self.pending_txs.remove(deps.storage, tx_id);
+
+        // Call rollback hook on vault
+        let cfg = self.config.load(deps.storage)?;
+        let msg = cfg.vault.rollback_tx(tx_id)?;
+        Ok(msg)
+    }
+
     /// Rollbacks a pending stake.
     /// Must be called by the IBC callback handler on failed remote staking.
     #[msg(exec)]
     fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(test)]
         {
-            // Load tx
-            let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
-
-            // TODO: Verify tx comes from the right context
-            // Verify tx is the right type
-            ensure!(
-                matches!(tx, Tx::InFlightRemoteStaking { .. }),
-                ContractError::WrongTypeTx(tx_id, tx)
-            );
-
-            let (_tx_amount, tx_user, tx_validator) = match tx {
-                Tx::InFlightRemoteStaking {
-                    amount,
-                    user,
-                    validator,
-                    ..
-                } => (amount, user, validator),
-                _ => unreachable!(),
-            };
-
-            // Load stake
-            let mut stake_lock = self
-                .stakes
-                .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
-
-            // Release stake lock
-            stake_lock.unlock_write()?;
-
-            // Save stake
-            self.stakes
-                .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
-
-            // Remove tx
-            self.pending_txs.remove(ctx.deps.storage, tx_id);
-
-            // TODO: Call rollback hook on vault
-
-            Ok(Response::new())
+            let msg = self.rollback_stake(ctx.deps, tx_id)?;
+            Ok(Response::new().add_message(msg))
         }
         #[cfg(not(test))]
         {
@@ -383,45 +394,50 @@ impl ExternalStakingContract<'_> {
         }
     }
 
+    /// In test code, this is called from test_rollback_unstake.
+    /// In non-test code, this is called from ibc_packet_ack or ibc_packet_timeout
+    pub(crate) fn rollback_unstake(&self, deps: DepsMut, tx_id: u64) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending_txs.load(deps.storage, tx_id)?;
+
+        // TODO: Verify tx comes from the right context
+        // Verify tx is of the right type
+        ensure!(
+            matches!(tx, Tx::InFlightRemoteUnstaking { .. }),
+            ContractError::WrongTypeTx(tx_id, tx)
+        );
+        let (_tx_amount, tx_user, tx_validator) = match tx {
+            Tx::InFlightRemoteUnstaking {
+                amount,
+                user,
+                validator,
+                ..
+            } => (amount, user, validator),
+            _ => unreachable!(),
+        };
+
+        // Load stake
+        let mut stake_lock = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+
+        // Release stake lock
+        stake_lock.unlock_write()?;
+
+        // Save stake
+        self.stakes
+            .save(deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
+
+        // Remove tx
+        self.pending_txs.remove(deps.storage, tx_id);
+        Ok(())
+    }
+
     /// Rollbacks a pending unstake.
     /// Must be called by the IBC callback handler on failed remote unstaking.
     #[msg(exec)]
     fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(test)]
         {
-            // Load tx
-            let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
-
-            // TODO: Verify tx comes from the right context
-            // Verify tx is of the right type
-            ensure!(
-                matches!(tx, Tx::InFlightRemoteUnstaking { .. }),
-                ContractError::WrongTypeTx(tx_id, tx)
-            );
-            let (_tx_amount, tx_user, tx_validator) = match tx {
-                Tx::InFlightRemoteUnstaking {
-                    amount,
-                    user,
-                    validator,
-                    ..
-                } => (amount, user, validator),
-                _ => unreachable!(),
-            };
-
-            // Load stake
-            let mut stake_lock = self
-                .stakes
-                .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
-
-            // Release stake lock
-            stake_lock.unlock_write()?;
-
-            // Save stake
-            self.stakes
-                .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
-
-            // Remove tx
-            self.pending_txs.remove(ctx.deps.storage, tx_id);
+            self.rollback_unstake(ctx.deps, tx_id)?;
             Ok(Response::new())
         }
         #[cfg(not(test))]
