@@ -26,6 +26,7 @@ impl<'a> Txs<'a> {
                 |_, tx| {
                     let user = match tx {
                         InFlightStaking { user, .. } => user,
+                        _ => panic!("Invalid tx type"),
                     };
                     user.clone()
                 },

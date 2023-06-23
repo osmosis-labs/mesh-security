@@ -16,8 +16,29 @@ pub enum Tx {
         /// Remote staking contract
         lienholder: Addr,
     },
-    // TODO:
-    // InFlightSlashing
+    // IBC flight
+    InFlightRemoteStaking {
+        /// Transaction id
+        id: u64,
+        /// Associated amount
+        amount: Uint128,
+        /// Associated owner
+        user: Addr,
+        /// Remote validator
+        validator: String,
+    },
+    // IBC flight
+    InFlightRemoteUnstaking {
+        /// Transaction id
+        id: u64,
+        /// Associated amount
+        amount: Uint128,
+        /// Associated owner
+        user: Addr,
+        /// Remote validator
+        validator: String,
+    }, // TODO
+       // InFlightSlashing
 }
 
 // Implement display for Tx
@@ -32,6 +53,30 @@ impl std::fmt::Display for Tx {
                 lienholder,
             } => {
                 write!(f, "InFlightStaking {{ id: {}, amount: {}, slashable: {}, user: {}, lienholder: {} }}", id, amount, slashable, user, lienholder)
+            }
+            Tx::InFlightRemoteStaking {
+                id,
+                amount,
+                user,
+                validator,
+            } => {
+                write!(
+                    f,
+                    "InFlightRemoteStaking {{ id: {}, amount: {}, user: {}, validator: {} }}",
+                    id, amount, user, validator
+                )
+            }
+            Tx::InFlightRemoteUnstaking {
+                id,
+                amount,
+                user,
+                validator,
+            } => {
+                write!(
+                    f,
+                    "InFlightRemoteUnstaking {{ id: {}, amount: {}, user: {}, validator: {} }}",
+                    id, amount, user, validator
+                )
             }
         }
     }

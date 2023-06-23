@@ -5,7 +5,6 @@ use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeI
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::contract::multitest_utils::CodeId as NativeStakingProxyCodeId;
 use mesh_vault::contract::multitest_utils::{CodeId as VaultCodeId, VaultContractProxy};
-use mesh_vault::contract::test_utils::VaultApi;
 use mesh_vault::msg::StakingInitInfo;
 
 use mesh_sync::Tx;
@@ -132,13 +131,13 @@ fn staking() {
         )
         .call(users[0])
         .unwrap();
-
-    let last_tx = get_last_pending_tx_id(&vault).unwrap();
-    // Hardcoded commit_tx call (lack of IBC support yet)
-    vault
-        .vault_api_proxy()
-        .commit_tx(last_tx)
-        .call(contract.contract_addr.as_str())
+    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    println!("last_external_staking_tx: {:?}", last_external_staking_tx);
+    contract
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     vault
@@ -152,11 +151,9 @@ fn staking() {
         )
         .call(users[0])
         .unwrap();
-
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
+    contract
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     vault
@@ -170,11 +167,9 @@ fn staking() {
         )
         .call(users[0])
         .unwrap();
-
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
+    contract
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     vault
@@ -188,11 +183,9 @@ fn staking() {
         )
         .call(users[1])
         .unwrap();
-
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
+    contract
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     vault
@@ -206,10 +199,9 @@ fn staking() {
         )
         .call(users[1])
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
+    contract
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     // All tokens should be only on the vault contract
@@ -288,10 +280,12 @@ fn staking() {
 }
 
 #[track_caller]
-fn get_last_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
-    let txs = vault.all_pending_txs_desc(None, None).unwrap().txs;
+fn get_last_external_staking_pending_tx_id(contract: &ExternalStakingContractProxy) -> Option<u64> {
+    let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(|tx| match tx {
         Tx::InFlightStaking { id, .. } => *id,
+        Tx::InFlightRemoteStaking { id, .. } => *id,
+        Tx::InFlightRemoteUnstaking { id, .. } => *id,
     })
 }
 
@@ -345,12 +339,12 @@ fn unstaking() {
         )
         .call(users[0])
         .unwrap();
-    let last_tx = get_last_pending_tx_id(&vault).unwrap();
-    // Hardcoded commit_tx call (lack of IBC support yet)
-    vault
-        .vault_api_proxy()
-        .commit_tx(last_tx)
-        .call(contract.contract_addr.as_str())
+    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     vault
@@ -364,10 +358,10 @@ fn unstaking() {
         )
         .call(users[0])
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
+    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     vault
@@ -381,10 +375,10 @@ fn unstaking() {
         )
         .call(users[1])
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
+    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     // Properly unstake some tokens
@@ -394,15 +388,27 @@ fn unstaking() {
         .unstake(validators[0].to_string(), coin(20, OSMO))
         .call(users[0])
         .unwrap();
+    contract
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
 
     contract
         .unstake(validators[0].to_string(), coin(30, OSMO))
         .call(users[0])
         .unwrap();
+    contract
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
 
     contract
         .unstake(validators[0].to_string(), coin(60, OSMO))
         .call(users[1])
+        .unwrap();
+    contract
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     // Trying some unstakes over what is staken fails
@@ -499,10 +505,18 @@ fn unstaking() {
         .unstake(validators[0].to_owned(), coin(70, OSMO))
         .call(users[0])
         .unwrap();
+    contract
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
 
     contract
         .unstake(validators[1].to_owned(), coin(90, OSMO))
         .call(users[0])
+        .unwrap();
+    contract
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     // Verify proper stake values
@@ -645,11 +659,12 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
-    // Hardcoded commit_tx call (lack of IBC support yet)
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
+    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     vault
@@ -663,10 +678,9 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
+    contract
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     vault
@@ -680,10 +694,9 @@ fn distribution() {
         )
         .call(users[1])
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
+    contract
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     // Start with equal distribution:
@@ -884,6 +897,10 @@ fn distribution() {
         .unstake(validators[0].to_owned(), coin(100, OSMO))
         .call(users[1])
         .unwrap();
+    contract
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
 
     // Staking also changes weights - now validators[1] also splits rewards:
     // 1/4 for users[0]
@@ -901,6 +918,10 @@ fn distribution() {
             .unwrap(),
         )
         .call(users[1])
+        .unwrap();
+    contract
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     // Check if messing up with weights didn't affect withdrawable
@@ -999,10 +1020,18 @@ fn distribution() {
         .unstake(validators[0].to_owned(), coin(50, OSMO))
         .call(users[0])
         .unwrap();
+    contract
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
 
     contract
         .unstake(validators[0].to_owned(), coin(100, OSMO))
         .call(users[1])
+        .unwrap();
+    contract
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
         .unwrap();
 
     // Distribute 12 tokens to validator[0]:

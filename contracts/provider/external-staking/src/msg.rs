@@ -94,3 +94,10 @@ pub struct UsersResponse {
 pub struct PendingRewards {
     pub amount: Coin,
 }
+
+pub type TxResponse = mesh_sync::Tx;
+
+#[cw_serde]
+pub struct AllTxsResponse {
+    pub txs: Vec<TxResponse>,
+}
