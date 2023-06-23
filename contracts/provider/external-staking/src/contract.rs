@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     coin, coins, ensure, ensure_eq, from_binary, Addr, BankMsg, Binary, Coin, Decimal, DepsMut,
-    Order, Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
+    Env, Order, Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -106,78 +106,64 @@ impl ExternalStakingContract<'_> {
         Ok(Response::new())
     }
 
-    /// Commits a pending stake.
-    /// Must be called by the IBC callback handler on successful remote staking.
-    #[msg(exec)]
-    fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            // Load tx
-            let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
-            println!("tx: {:?}", tx);
+    pub(crate) fn commit_stake(&self, deps: DepsMut, tx_id: u64) -> Result<WasmMsg, ContractError> {
+        // Load tx
+        let tx = self.pending_txs.load(deps.storage, tx_id)?;
+        println!("tx: {:?}", tx);
 
-            // TODO: Verify tx comes from the right context
-            // Verify tx is the right type
-            ensure!(
-                matches!(tx, Tx::InFlightRemoteStaking { .. }),
-                ContractError::WrongTypeTx(tx_id, tx)
-            );
+        // TODO: Verify tx comes from the right context
+        // Verify tx is the right type
+        ensure!(
+            matches!(tx, Tx::InFlightRemoteStaking { .. }),
+            ContractError::WrongTypeTx(tx_id, tx)
+        );
 
-            let (tx_amount, tx_user, tx_validator) = match tx {
-                Tx::InFlightRemoteStaking {
-                    amount,
-                    user,
-                    validator,
-                    ..
-                } => (amount, user, validator),
-                _ => unreachable!(),
-            };
+        let (tx_amount, tx_user, tx_validator) = match tx {
+            Tx::InFlightRemoteStaking {
+                amount,
+                user,
+                validator,
+                ..
+            } => (amount, user, validator),
+            _ => unreachable!(),
+        };
 
-            // Load stake
-            let mut stake_lock = self
-                .stakes
-                .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
+        // Load stake
+        let mut stake_lock = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
 
-            // Load distribution
-            let mut distribution = self
-                .distribution
-                .may_load(ctx.deps.storage, &tx_validator)?
-                .unwrap_or_default();
+        // Load distribution
+        let mut distribution = self
+            .distribution
+            .may_load(deps.storage, &tx_validator)?
+            .unwrap_or_default();
 
-            // Commit amount (need to unlock it first)
-            stake_lock.unlock_write()?;
-            let stake = stake_lock.write()?;
-            stake.stake += tx_amount;
+        // Commit amount (need to unlock it first)
+        stake_lock.unlock_write()?;
+        let stake = stake_lock.write()?;
+        stake.stake += tx_amount;
 
-            // Commit distribution (need to unlock it first)
-            // Distribution alignment
-            stake
-                .points_alignment
-                .stake_increased(tx_amount, distribution.points_per_stake);
-            distribution.total_stake += tx_amount;
+        // Commit distribution (need to unlock it first)
+        // Distribution alignment
+        stake
+            .points_alignment
+            .stake_increased(tx_amount, distribution.points_per_stake);
+        distribution.total_stake += tx_amount;
 
-            // Save stake
-            self.stakes
-                .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
+        // Save stake
+        self.stakes
+            .save(deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
 
-            // Save distribution
-            self.distribution
-                .save(ctx.deps.storage, &tx_validator, &distribution)?;
+        // Save distribution
+        self.distribution
+            .save(deps.storage, &tx_validator, &distribution)?;
 
-            // Remove tx
-            self.pending_txs.remove(ctx.deps.storage, tx_id);
+        // Remove tx
+        self.pending_txs.remove(deps.storage, tx_id);
 
-            // Call commit hook on vault
-            let cfg = self.config.load(ctx.deps.storage)?;
-            let msg = cfg.vault.commit_tx(tx_id)?;
-            println!("msg: {:?}", msg);
-            Ok(Response::new().add_message(msg))
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
+        // Call commit hook on vault
+        let cfg = self.config.load(deps.storage)?;
+        let msg = cfg.vault.commit_tx(tx_id)?;
+        Ok(msg)
     }
 
     /// In test code, this is called from test_rollback_stake.
@@ -224,6 +210,22 @@ impl ExternalStakingContract<'_> {
         let cfg = self.config.load(deps.storage)?;
         let msg = cfg.vault.rollback_tx(tx_id)?;
         Ok(msg)
+    }
+
+    /// Commits a pending stake.
+    /// Must be called by the IBC callback handler on successful remote staking.
+    #[msg(exec)]
+    fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
+        #[cfg(test)]
+        {
+            let msg = self.commit_stake(ctx.deps, tx_id)?;
+            Ok(Response::new().add_message(msg))
+        }
+        #[cfg(not(test))]
+        {
+            let _ = (ctx, tx_id);
+            Err(ContractError::Unauthorized {})
+        }
     }
 
     /// Rollbacks a pending stake.
@@ -317,84 +319,75 @@ impl ExternalStakingContract<'_> {
         Ok(resp)
     }
 
-    /// Commits a pending unstake.
-    /// Must be called by the IBC callback handler on successful remote unstaking.
-    #[msg(exec)]
-    fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            use crate::state::PendingUnbond;
+    pub(crate) fn commit_unstake(
+        &self,
+        deps: DepsMut,
+        env: Env,
+        tx_id: u64,
+    ) -> Result<(), ContractError> {
+        use crate::state::PendingUnbond;
 
-            // Load tx
-            let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
+        // Load tx
+        let tx = self.pending_txs.load(deps.storage, tx_id)?;
 
-            // TODO: Verify tx comes from the right context
-            // Verify tx is of the right type
-            ensure!(
-                matches!(tx, Tx::InFlightRemoteUnstaking { .. }),
-                ContractError::WrongTypeTx(tx_id, tx)
-            );
+        // TODO: Verify tx comes from the right context
+        // Verify tx is of the right type
+        ensure!(
+            matches!(tx, Tx::InFlightRemoteUnstaking { .. }),
+            ContractError::WrongTypeTx(tx_id, tx)
+        );
 
-            let (tx_amount, tx_user, tx_validator) = match tx {
-                Tx::InFlightRemoteUnstaking {
-                    amount,
-                    user,
-                    validator,
-                    ..
-                } => (amount, user, validator),
-                _ => unreachable!(),
-            };
+        let (tx_amount, tx_user, tx_validator) = match tx {
+            Tx::InFlightRemoteUnstaking {
+                amount,
+                user,
+                validator,
+                ..
+            } => (amount, user, validator),
+            _ => unreachable!(),
+        };
 
-            let config = self.config.load(ctx.deps.storage)?;
+        let config = self.config.load(deps.storage)?;
 
-            // Load stake
-            let mut stake_lock = self
-                .stakes
-                .load(ctx.deps.storage, (&tx_user, &tx_validator))?;
+        // Load stake
+        let mut stake_lock = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
 
-            // Load distribution
-            let mut distribution = self
-                .distribution
-                .may_load(ctx.deps.storage, &tx_validator)?
-                .unwrap_or_default();
+        // Load distribution
+        let mut distribution = self
+            .distribution
+            .may_load(deps.storage, &tx_validator)?
+            .unwrap_or_default();
 
-            // Commit amount (need to unlock it first)
-            stake_lock.unlock_write()?;
-            let stake = stake_lock.write()?;
-            stake.stake -= tx_amount;
+        // Commit amount (need to unlock it first)
+        stake_lock.unlock_write()?;
+        let stake = stake_lock.write()?;
+        stake.stake -= tx_amount;
 
-            // FIXME? Release period being computed after successful IBC tx
-            let release_at = ctx.env.block.time.plus_seconds(config.unbonding_period);
-            let unbond = PendingUnbond {
-                amount: tx_amount,
-                release_at,
-            };
-            stake.pending_unbonds.push(unbond);
+        // FIXME? Release period being computed after successful IBC tx
+        let release_at = env.block.time.plus_seconds(config.unbonding_period);
+        let unbond = PendingUnbond {
+            amount: tx_amount,
+            release_at,
+        };
+        stake.pending_unbonds.push(unbond);
 
-            // Distribution alignment
-            stake
-                .points_alignment
-                .stake_decreased(tx_amount, distribution.points_per_stake);
-            distribution.total_stake -= tx_amount;
+        // Distribution alignment
+        stake
+            .points_alignment
+            .stake_decreased(tx_amount, distribution.points_per_stake);
+        distribution.total_stake -= tx_amount;
 
-            // Save stake
-            self.stakes
-                .save(ctx.deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
+        // Save stake
+        self.stakes
+            .save(deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
 
-            // Save distribution
-            self.distribution
-                .save(ctx.deps.storage, &tx_validator, &distribution)?;
+        // Save distribution
+        self.distribution
+            .save(deps.storage, &tx_validator, &distribution)?;
 
-            // Remove tx
-            self.pending_txs.remove(ctx.deps.storage, tx_id);
-
-            Ok(Response::new())
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
+        // Remove tx
+        self.pending_txs.remove(deps.storage, tx_id);
+        Ok(())
     }
 
     /// In test code, this is called from test_rollback_unstake.
@@ -432,6 +425,22 @@ impl ExternalStakingContract<'_> {
         // Remove tx
         self.pending_txs.remove(deps.storage, tx_id);
         Ok(())
+    }
+
+    /// Commits a pending unstake.
+    /// Must be called by the IBC callback handler on successful remote unstaking.
+    #[msg(exec)]
+    fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
+        #[cfg(test)]
+        {
+            self.commit_unstake(ctx.deps, ctx.env, tx_id)?;
+            Ok(Response::new())
+        }
+        #[cfg(not(test))]
+        {
+            let _ = (ctx, tx_id);
+            Err(ContractError::Unauthorized {})
+        }
     }
 
     /// Rollbacks a pending unstake.

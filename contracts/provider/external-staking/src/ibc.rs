@@ -8,8 +8,8 @@ use cosmwasm_std::{
 };
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
-    ack_success, validate_channel_order, AddValidator, AddValidatorsAck, ConsumerPacket,
-    ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
+    ack_success, validate_channel_order, AckWrapper, AddValidator, AddValidatorsAck,
+    ConsumerPacket, ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
 };
 
 use crate::{
@@ -161,11 +161,54 @@ pub fn ibc_packet_receive(
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// never should be called as we do not send packets
 pub fn ibc_packet_ack(
-    _deps: DepsMut,
-    _env: Env,
-    _msg: IbcPacketAckMsg,
+    deps: DepsMut,
+    env: Env,
+    msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    Ok(IbcBasicResponse::new().add_attribute("action", "ibc_packet_ack"))
+    let packet: ProviderPacket = from_slice(&msg.original_packet.data)?;
+    let contract = ExternalStakingContract::new();
+    let ack: AckWrapper = from_slice(&msg.acknowledgement.data)?;
+    let mut resp = IbcBasicResponse::new();
+
+    match (packet, ack) {
+        (ProviderPacket::Stake { tx_id, .. }, AckWrapper::Result(_)) => {
+            let msg = contract.commit_stake(deps, tx_id)?;
+            resp = resp
+                .add_message(msg)
+                .add_attribute("success", "true")
+                .add_attribute("tx_id", tx_id.to_string());
+        }
+        (ProviderPacket::Stake { tx_id, .. }, AckWrapper::Error(e)) => {
+            let msg = contract.rollback_stake(deps, tx_id)?;
+            resp = resp
+                .add_message(msg)
+                .add_attribute("error", e)
+                .add_attribute("tx_id", tx_id.to_string());
+        }
+        (ProviderPacket::Unstake { tx_id, .. }, AckWrapper::Result(_)) => {
+            contract.commit_unstake(deps, env, tx_id)?;
+            resp = resp
+                .add_attribute("success", "true")
+                .add_attribute("tx_id", tx_id.to_string());
+        }
+        (ProviderPacket::Unstake { tx_id, .. }, AckWrapper::Error(e)) => {
+            contract.rollback_unstake(deps, tx_id)?;
+            resp = resp
+                .add_attribute("error", e)
+                .add_attribute("tx_id", tx_id.to_string());
+        }
+    }
+
+    // Question: do we need a special event with all this info on error?
+
+    //         // Provide info to find the actual packet.
+    //         let event = Event::new("mesh_ibc_error")
+    //             .add_attribute("error", e)
+    //             .add_attribute("channel", msg.original_packet.src.channel_id)
+    //             .add_attribute("sequence", msg.original_packet.sequence.to_string());
+    //         resp = resp.add_event(event);
+    //     }
+    Ok(resp)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
