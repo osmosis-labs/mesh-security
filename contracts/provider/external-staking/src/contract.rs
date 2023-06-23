@@ -114,6 +114,7 @@ impl ExternalStakingContract<'_> {
         {
             // Load tx
             let tx = self.pending_txs.load(ctx.deps.storage, tx_id)?;
+            println!("tx: {:?}", tx);
 
             // TODO: Verify tx comes from the right context
             // Verify tx is the right type
@@ -169,6 +170,7 @@ impl ExternalStakingContract<'_> {
             // Call commit hook on vault
             let cfg = self.config.load(ctx.deps.storage)?;
             let msg = cfg.vault.commit_tx(tx_id)?;
+            println!("msg: {:?}", msg);
             Ok(Response::new().add_message(msg))
         }
         #[cfg(not(test))]
@@ -279,6 +281,7 @@ impl ExternalStakingContract<'_> {
         let tx_id = self.next_tx_id(ctx.deps.storage)?;
 
         // Save tx
+        #[allow(clippy::redundant_clone)]
         let new_tx = Tx::InFlightRemoteUnstaking {
             id: tx_id,
             amount: amount.amount,
@@ -805,6 +808,7 @@ pub mod cross_staking {
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake_lock)?;
 
             // Save tx
+            #[allow(clippy::redundant_clone)]
             let new_tx = Tx::InFlightRemoteStaking {
                 id: tx_id,
                 amount: amount.amount,

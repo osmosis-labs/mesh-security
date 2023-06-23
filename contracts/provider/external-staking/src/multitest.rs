@@ -5,7 +5,6 @@ use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeI
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::contract::multitest_utils::CodeId as NativeStakingProxyCodeId;
 use mesh_vault::contract::multitest_utils::{CodeId as VaultCodeId, VaultContractProxy};
-use mesh_vault::contract::test_utils::VaultApi;
 use mesh_vault::msg::StakingInitInfo;
 
 use mesh_sync::Tx;
@@ -132,16 +131,10 @@ fn staking() {
         )
         .call(users[0])
         .unwrap();
-    // TODO: Hardcoded vault's commit_tx call (lack of IBC support yet)
-    let last_tx = get_last_vault_pending_tx_id(&vault).unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(last_tx)
-        .call(contract.contract_addr.as_str())
-        .unwrap();
     // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     contract
         .test_commit_stake(last_external_staking_tx)
         .call("test")
@@ -158,13 +151,6 @@ fn staking() {
         )
         .call(users[0])
         .unwrap();
-
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
-        .unwrap();
-
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
@@ -181,13 +167,6 @@ fn staking() {
         )
         .call(users[0])
         .unwrap();
-
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
-        .unwrap();
-
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
@@ -204,13 +183,6 @@ fn staking() {
         )
         .call(users[1])
         .unwrap();
-
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
-        .unwrap();
-
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
@@ -227,12 +199,6 @@ fn staking() {
         )
         .call(users[1])
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
-        .unwrap();
-
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
@@ -314,16 +280,6 @@ fn staking() {
 }
 
 #[track_caller]
-fn get_last_vault_pending_tx_id(vault: &VaultContractProxy) -> Option<u64> {
-    let txs = vault.all_pending_txs_desc(None, None).unwrap().txs;
-    txs.first().map(|tx| match tx {
-        Tx::InFlightStaking { id, .. } => *id,
-        Tx::InFlightRemoteStaking { id, .. } => *id,
-        Tx::InFlightRemoteUnstaking { id, .. } => *id,
-    })
-}
-
-#[track_caller]
 fn get_last_external_staking_pending_tx_id(contract: &ExternalStakingContractProxy) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(|tx| match tx {
@@ -383,13 +339,6 @@ fn unstaking() {
         )
         .call(users[0])
         .unwrap();
-    // TODO: Hardcoded vault's commit_tx call (lack of IBC support yet)
-    let last_tx = get_last_vault_pending_tx_id(&vault).unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(last_tx)
-        .call(contract.contract_addr.as_str())
-        .unwrap();
     // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
@@ -409,11 +358,6 @@ fn unstaking() {
         )
         .call(users[0])
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
-        .unwrap();
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_stake(last_external_staking_tx)
@@ -430,11 +374,6 @@ fn unstaking() {
             .unwrap(),
         )
         .call(users[1])
-        .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
         .unwrap();
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
@@ -720,12 +659,6 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
-    // TODO: Hardcoded vault's commit_tx call (lack of IBC support yet)
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
-        .unwrap();
     // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
@@ -745,11 +678,6 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
-        .unwrap();
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
@@ -765,11 +693,6 @@ fn distribution() {
             .unwrap(),
         )
         .call(users[1])
-        .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
         .unwrap();
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
@@ -995,11 +918,6 @@ fn distribution() {
             .unwrap(),
         )
         .call(users[1])
-        .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_vault_pending_tx_id(&vault).unwrap())
-        .call(contract.contract_addr.as_str())
         .unwrap();
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
