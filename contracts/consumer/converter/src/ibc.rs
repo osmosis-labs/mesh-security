@@ -11,7 +11,7 @@ use cw_storage_plus::Item;
 
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, ProtocolVersion,
-    ProviderPacket, StakeAck, UnstakeAck, PROTOCOL_NAME,
+    ProviderPacket, StakeAck, TransferRewardsAck, UnstakeAck, PROTOCOL_NAME,
 };
 
 use crate::{contract::ConverterContract, error::ContractError};
@@ -174,6 +174,15 @@ pub fn ibc_packet_receive(
                 .add_submessages(response.messages)
                 .add_events(response.events)
                 .add_attributes(response.attributes)
+        }
+        ProviderPacket::TransferRewards {
+            rewards,
+            recipient,
+            staker: _,
+        } => {
+            let msg = contract.transfer_rewards(deps.as_ref(), recipient, rewards)?;
+            let ack = ack_success(&TransferRewardsAck {})?;
+            IbcReceiveResponse::new().set_ack(ack).add_message(msg)
         }
     };
     Ok(res)

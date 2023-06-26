@@ -194,6 +194,21 @@ pub fn ibc_packet_ack(
                 .add_attribute("error", e)
                 .add_attribute("tx_id", tx_id.to_string());
         }
+        (ProviderPacket::TransferRewards { .. }, AckWrapper::Result(_)) => {
+            // do nothing, funds already transferred
+        }
+        (
+            ProviderPacket::TransferRewards {
+                rewards, staker, ..
+            },
+            AckWrapper::Error(e),
+        ) => {
+            // TODO: rollback the transfer by reducing the withdrawn amount for this staker
+            let _ = (rewards, staker);
+            resp = resp
+                .add_attribute("error", e)
+                .add_attribute("packet", msg.original_packet.sequence.to_string());
+        }
     }
 
     // Question: do we need a special event with all this info on error?
@@ -228,6 +243,13 @@ pub fn ibc_packet_timeout(
         ProviderPacket::Unstake { tx_id, .. } => {
             contract.rollback_unstake(deps, tx_id)?;
             resp = resp.add_attribute("tx_id", tx_id.to_string());
+        }
+        ProviderPacket::TransferRewards {
+            rewards, staker, ..
+        } => {
+            // TODO: rollback the transfer by reducing the withdrawn amount for this staker
+            let _ = (rewards, staker);
+            resp = resp.add_attribute("packet", msg.packet.sequence.to_string());
         }
     };
     Ok(resp)
