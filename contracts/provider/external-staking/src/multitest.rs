@@ -599,6 +599,7 @@ fn unstaking() {
 fn distribution() {
     let owner = "owner";
     let users = ["user1", "user2"];
+    let remote = ["remote1", "remote2"];
 
     let app = MtApp::new(|router, _api, storage| {
         router
@@ -703,16 +704,14 @@ fn distribution() {
     // 20 tokens for users[0]
     // 30 tokens for users[1]
     contract
-        .distribute_rewards(validators[0].to_owned())
-        .with_funds(&coins(50, STAR))
+        .distribute_rewards(validators[0].to_owned(), coin(50, STAR))
         .call(owner)
         .unwrap();
 
     // Only users[0] stakes on validators[1]
     // 30 tokens for users[1]
     contract
-        .distribute_rewards(validators[1].to_owned())
-        .with_funds(&coins(30, STAR))
+        .distribute_rewards(validators[1].to_owned(), coin(30, STAR))
         .call(owner)
         .unwrap();
 
@@ -737,29 +736,18 @@ fn distribution() {
         .unwrap();
     assert_eq!(rewards.amount.amount.u128(), 0);
 
-    // Distributed funds should be on the staking contract
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_all_balances(contract.contract_addr.clone())
-            .unwrap(),
-        coins(80, STAR)
-    );
-
     // Some more distribution, this time not divisible by total staken tokens
     // 28 tokens for users[0]
     // 42 tokens for users[1]
     // 1 token is not distributed
     contract
-        .distribute_rewards(validators[0].to_owned())
-        .with_funds(&coins(71, STAR))
+        .distribute_rewards(validators[0].to_owned(), coin(71, STAR))
         .call(owner)
         .unwrap();
 
     // Distribution in invalid coin should fail
     contract
-        .distribute_rewards(validators[1].to_owned())
-        .with_funds(&coins(100, OSMO))
+        .distribute_rewards(validators[1].to_owned(), coin(100, OSMO))
         .call(owner)
         .unwrap_err();
 
@@ -786,22 +774,22 @@ fn distribution() {
 
     // Withdraw rewards
     contract
-        .withdraw_rewards(validators[0].to_owned())
+        .withdraw_rewards(validators[0].to_owned(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
 
     contract
-        .withdraw_rewards(validators[1].to_owned())
+        .withdraw_rewards(validators[1].to_owned(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
 
     contract
-        .withdraw_rewards(validators[0].to_owned())
+        .withdraw_rewards(validators[0].to_owned(), remote[1].to_owned())
         .call(users[1])
         .unwrap();
 
     contract
-        .withdraw_rewards(validators[1].to_owned())
+        .withdraw_rewards(validators[1].to_owned(), remote[1].to_owned())
         .call(users[1])
         .unwrap();
 
@@ -826,7 +814,9 @@ fn distribution() {
         .unwrap();
     assert_eq!(rewards.amount.amount.u128(), 0);
 
-    // Rewads should be on users accounts
+    // TODO: change this to somehow assert ibc packets
+    /*
+    // Rewards should be on users accounts
     assert_eq!(
         app.app()
             .wrap()
@@ -846,6 +836,7 @@ fn distribution() {
             .u128(),
         72
     );
+    */
 
     // Anothed distribution - making it equal
     // 4 on users[0]
@@ -853,8 +844,7 @@ fn distribution() {
     //
     // The additional 1 token is leftover after previous allocation
     contract
-        .distribute_rewards(validators[0].to_owned())
-        .with_funds(&coins(9, STAR))
+        .distribute_rewards(validators[0].to_owned(), coin(9, STAR))
         .call(owner)
         .unwrap();
 
@@ -874,8 +864,7 @@ fn distribution() {
     // 4 on users[0] (+ ~0.4)
     // 6 on users[1] (+ ~0.6)
     contract
-        .distribute_rewards(validators[0].to_owned())
-        .with_funds(&coins(11, STAR))
+        .distribute_rewards(validators[0].to_owned(), coin(11, STAR))
         .call(owner)
         .unwrap();
 
@@ -883,8 +872,7 @@ fn distribution() {
     //
     // 11 on users[0]
     contract
-        .distribute_rewards(validators[1].to_owned())
-        .with_funds(&coins(11, STAR))
+        .distribute_rewards(validators[1].to_owned(), coin(11, STAR))
         .call(owner)
         .unwrap();
 
@@ -949,8 +937,7 @@ fn distribution() {
     // 10 on users[0] (~0.4 still not distributed)
     // 10 on users[1] (~0.6 still not distributed)
     contract
-        .distribute_rewards(validators[0].to_owned())
-        .with_funds(&coins(20, STAR))
+        .distribute_rewards(validators[0].to_owned(), coin(20, STAR))
         .call(owner)
         .unwrap();
 
@@ -958,8 +945,7 @@ fn distribution() {
     // 10 on users[1]
     // 30 on users[2]
     contract
-        .distribute_rewards(validators[1].to_owned())
-        .with_funds(&coins(40, STAR))
+        .distribute_rewards(validators[1].to_owned(), coin(40, STAR))
         .call(owner)
         .unwrap();
 
@@ -990,8 +976,7 @@ fn distribution() {
     // 3 for users[1] (+ ~0.5 from this distribution + ~0.6 accumulated -> ~1.1 tokens, we give one
     //   back leaving ~0.1 accumulated)
     contract
-        .distribute_rewards(validators[0].to_owned())
-        .with_funds(&coins(5, STAR))
+        .distribute_rewards(validators[0].to_owned(), coin(5, STAR))
         .call(owner)
         .unwrap();
 
@@ -1039,8 +1024,7 @@ fn distribution() {
     // 7 + 1 = 8 to users[0] (~0.9 accumulated + ~0.2 = ~1.1 leftover, 1.0 payed back, ~0.1 accumulated)
     // 4 to users[0] (~0.1 accumulated + ~0.8 -> leaving at ~0.9)
     contract
-        .distribute_rewards(validators[0].to_owned())
-        .with_funds(&coins(12, STAR))
+        .distribute_rewards(validators[0].to_owned(), coin(12, STAR))
         .call(owner)
         .unwrap();
 
@@ -1056,12 +1040,12 @@ fn distribution() {
 
     // Withdraw only by users[0]
     contract
-        .withdraw_rewards(validators[0].to_owned())
+        .withdraw_rewards(validators[0].to_owned(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
 
     contract
-        .withdraw_rewards(validators[1].to_owned())
+        .withdraw_rewards(validators[1].to_owned(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
 
@@ -1086,9 +1070,11 @@ fn distribution() {
         .unwrap();
     assert_eq!(rewards.amount.amount.u128(), 30);
 
+    // TODO: update for IBC
     // Balances was previously:
     // 78 on users[0] - now witdrawing 28 from validators[0] and 21 from validators[1]
     // 72 on users[1] - should be the same
+    /*
     assert_eq!(
         app.app()
             .wrap()
@@ -1119,6 +1105,7 @@ fn distribution() {
             .u128(),
         60
     );
+    */
 
     // Final distribution - 10 tokens to both validators
     // 6 tokens to users[0] via validators[0] (leftover as it was)
@@ -1126,14 +1113,12 @@ fn distribution() {
     // 2 tokens to users[0] via validators[1] (~0.5 leftover)
     // 7 tokens to users[1] via validators[1] (~0.5 lefover)
     contract
-        .distribute_rewards(validators[0].to_owned())
-        .with_funds(&coins(10, STAR))
+        .distribute_rewards(validators[0].to_owned(), coin(10, STAR))
         .call(owner)
         .unwrap();
 
     contract
-        .distribute_rewards(validators[1].to_owned())
-        .with_funds(&coins(10, STAR))
+        .distribute_rewards(validators[1].to_owned(), coin(10, STAR))
         .call(owner)
         .unwrap();
 
@@ -1160,26 +1145,28 @@ fn distribution() {
 
     // And try to withdraw all, previous balances:
     contract
-        .withdraw_rewards(validators[0].to_string())
+        .withdraw_rewards(validators[0].to_string(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
 
     contract
-        .withdraw_rewards(validators[1].to_string())
+        .withdraw_rewards(validators[1].to_string(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
 
     contract
-        .withdraw_rewards(validators[0].to_string())
+        .withdraw_rewards(validators[0].to_string(), remote[1].to_owned())
         .call(users[1])
         .unwrap();
 
     contract
-        .withdraw_rewards(validators[1].to_string())
+        .withdraw_rewards(validators[1].to_string(), remote[1].to_owned())
         .call(users[1])
         .unwrap();
 
-    // Varyfying accounts, previous states:
+    // TODO: update to use IBC packet updates
+    /*
+    // Verifying accounts, previous states:
     // 127 on users[0] - now withdrawn 6 from validators[0] and 2 from validators[1]
     // 72 on users[1] - now withdrawn 33 from validators[0] and 37 from validators[1]
     assert_eq!(
@@ -1212,4 +1199,5 @@ fn distribution() {
             .u128(),
         2
     );
+    */
 }
