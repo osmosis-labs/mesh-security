@@ -22,12 +22,12 @@ const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.10.0";
 const MIN_IBC_PROTOCOL_VERSION: &str = "0.10.0";
 
 // IBC specific state
-const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
+pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 
 // Let those validator syncs take a day...
 const DEFAULT_TIMEOUT: u64 = 24 * 60 * 60;
 
-fn packet_timeout(env: &Env) -> IbcTimeout {
+pub fn packet_timeout(env: &Env) -> IbcTimeout {
     // No idea about their blocktime, but 24 hours ahead of our view of the clock
     // should be decently in the future.
     let timeout = env.block.time.plus_seconds(DEFAULT_TIMEOUT);

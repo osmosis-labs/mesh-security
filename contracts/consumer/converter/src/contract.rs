@@ -1,10 +1,11 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Reply,
-    Response, SubMsg, SubMsgResponse, WasmMsg,
+    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, IbcMsg,
+    Reply, Response, SubMsg, SubMsgResponse, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
-use cw_utils::{nonpayable, parse_instantiate_response_data};
+use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
+use mesh_apis::ibc::ConsumerPacket;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
@@ -13,6 +14,7 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
+use crate::ibc::{packet_timeout, IBC_CHANNEL};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -265,11 +267,28 @@ impl ConverterApi for ConverterContract<'_> {
     type Error = ContractError;
 
     /// Rewards tokens (in native staking denom) are sent alongside the message, and should be distributed to all
-    /// stakers who staked on this validator.
+    /// stakers who staked on this validator. This is tracked on the provider, so we send an IBC packet there.
     #[msg(exec)]
     fn distribute_reward(&self, ctx: ExecCtx, validator: String) -> Result<Response, Self::Error> {
-        let _ = (ctx, validator);
-        todo!();
+        let config = self.config.load(ctx.deps.storage)?;
+        let denom = config.local_denom;
+        let amount = must_pay(&ctx.info, &denom)?;
+        let rewards = Coin { denom, amount };
+
+        let event = Event::new("distribute_reward")
+            .add_attribute("validator", &validator)
+            .add_attribute("amount", amount.to_string());
+
+        // Create a packet for the provider, informing of distribution
+        let packet = ConsumerPacket::Distribute { validator, rewards };
+        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+        let msg = IbcMsg::SendPacket {
+            channel_id: channel.endpoint.channel_id,
+            data: to_binary(&packet)?,
+            timeout: packet_timeout(&ctx.env),
+        };
+
+        Ok(Response::new().add_message(msg).add_event(event))
     }
 
     /// This is a batch for of distribute_reward, including the payment for multiple validators.
@@ -280,10 +299,21 @@ impl ConverterApi for ConverterContract<'_> {
     #[msg(exec)]
     fn distribute_rewards(
         &self,
-        ctx: ExecCtx,
+        mut ctx: ExecCtx,
         payments: Vec<RewardInfo>,
     ) -> Result<Response, Self::Error> {
-        let _ = (ctx, payments);
-        todo!();
+        // TODO: Optimize this, when we actually get such calls
+        let mut resp = Response::new();
+        for RewardInfo { validator, reward } in payments {
+            let mut sub_ctx = ctx.branch();
+            sub_ctx.info.funds[0].amount = reward;
+            let r = self.distribute_reward(sub_ctx, validator)?;
+            // put all values on the parent one
+            resp = resp
+                .add_submessages(r.messages)
+                .add_attributes(r.attributes)
+                .add_events(r.events);
+        }
+        Ok(resp)
     }
 }
