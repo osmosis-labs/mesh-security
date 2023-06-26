@@ -106,12 +106,13 @@ impl ExternalStakingContract<'_> {
         Ok(Response::new())
     }
 
+    /// In test code, this is called from test_commit_stake.
+    /// In non-test code, this is called from ibc_packet_ack
     pub(crate) fn commit_stake(&self, deps: DepsMut, tx_id: u64) -> Result<WasmMsg, ContractError> {
         // Load tx
         let tx = self.pending_txs.load(deps.storage, tx_id)?;
-        println!("tx: {:?}", tx);
 
-        // Verify tx is the right type
+        // Verify tx is of the right type
         ensure!(
             matches!(tx, Tx::InFlightRemoteStaking { .. }),
             ContractError::WrongTypeTx(tx_id, tx)
@@ -174,7 +175,7 @@ impl ExternalStakingContract<'_> {
         // Load tx
         let tx = self.pending_txs.load(deps.storage, tx_id)?;
 
-        // Verify tx is the right type
+        // Verify tx is of the right type
         ensure!(
             matches!(tx, Tx::InFlightRemoteStaking { .. }),
             ContractError::WrongTypeTx(tx_id, tx)
@@ -210,7 +211,7 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Commits a pending stake.
-    /// Must be called by the IBC callback handler on successful remote staking.
+    /// Method used for tests only.
     #[msg(exec)]
     fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(test)]
@@ -226,7 +227,7 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Rollbacks a pending stake.
-    /// Must be called by the IBC callback handler on failed remote staking.
+    /// Method used for tests only.
     #[msg(exec)]
     fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(test)]
@@ -316,6 +317,8 @@ impl ExternalStakingContract<'_> {
         Ok(resp)
     }
 
+    /// In test code, this is called from test_commit_unstake.
+    /// Method used for tests only.
     pub(crate) fn commit_unstake(
         &self,
         deps: DepsMut,
@@ -424,7 +427,7 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Commits a pending unstake.
-    /// Must be called by the IBC callback handler on successful remote unstaking.
+    /// Method used for tests only.
     #[msg(exec)]
     fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(test)]
@@ -440,7 +443,7 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Rollbacks a pending unstake.
-    /// Must be called by the IBC callback handler on failed remote unstaking.
+    /// Method used for tests only.
     #[msg(exec)]
     fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(test)]
@@ -822,10 +825,7 @@ pub mod cross_staking {
             };
             self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
 
-            let mut resp = Response::new()
-                .add_attribute("action", "receive_virtual_stake")
-                .add_attribute("owner", owner)
-                .add_attribute("amount", amount.amount.to_string());
+            let mut resp = Response::new();
 
             // add ibc packet if we are ibc enabled (skip in tests)
             #[cfg(not(test))]
@@ -833,7 +833,7 @@ pub mod cross_staking {
                 let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
                 let packet = ProviderPacket::Stake {
                     validator: msg.validator,
-                    stake: amount,
+                    stake: amount.clone(),
                     tx_id,
                 };
                 let msg = IbcMsg::SendPacket {
@@ -844,8 +844,11 @@ pub mod cross_staking {
                 resp = resp.add_message(msg);
             }
 
-            // This is later so `mut resp` is valid in test and non-test code
-            resp = resp.add_attribute("tx_id", tx_id.to_string());
+            resp = resp
+                .add_attribute("action", "receive_virtual_stake")
+                .add_attribute("owner", owner)
+                .add_attribute("amount", amount.amount.to_string())
+                .add_attribute("tx_id", tx_id.to_string());
 
             Ok(resp)
         }

@@ -470,6 +470,9 @@ impl VaultContract<'_> {
     ///
     /// Config is taken in argument as it sometimes is used outside of this function, so
     /// we want to avoid double-fetching it
+    ///
+    /// Remote indicates if the stake is remote or local. Remote staking involves transaction
+    /// processing.
     fn stake(
         &self,
         ctx: &mut ExecCtx,
@@ -507,18 +510,16 @@ impl VaultContract<'_> {
 
         ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
-        // Write lock it if remote stake
         if remote {
+            // Write lock it if remote stake
             lien_lock.lock_write()?;
             user_lock.lock_write()?;
-        }
-        self.liens
-            .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien_lock)?;
 
-        self.users
-            .save(ctx.deps.storage, &ctx.info.sender, &user_lock)?;
+            self.liens
+                .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien_lock)?;
+            self.users
+                .save(ctx.deps.storage, &ctx.info.sender, &user_lock)?;
 
-        if remote {
             // Create new tx
             let tx_id = self.next_tx_id(ctx.deps.storage)?;
 
@@ -532,6 +533,10 @@ impl VaultContract<'_> {
             self.pending.txs.save(ctx.deps.storage, tx_id, &new_tx)?;
             Ok(tx_id)
         } else {
+            self.liens
+                .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien_lock)?;
+            self.users
+                .save(ctx.deps.storage, &ctx.info.sender, &user_lock)?;
             Ok(0)
         }
     }
@@ -541,7 +546,7 @@ impl VaultContract<'_> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
 
-        // Verify tx comes from the right contract, and is the right type
+        // Verify tx comes from the right contract, and is of the right type
         ensure!(
             match tx.clone() {
                 InFlightStaking { lienholder, .. } => {
@@ -556,14 +561,10 @@ impl VaultContract<'_> {
             ContractError::WrongTypeTx(tx_id, tx)
         );
 
-        let (_tx_amount, _tx_slashable, tx_user, tx_lienholder) = match tx {
+        let (tx_user, tx_lienholder) = match tx {
             InFlightStaking {
-                amount,
-                slashable,
-                user,
-                lienholder,
-                ..
-            } => (amount, slashable, user, lienholder),
+                user, lienholder, ..
+            } => (user, lienholder),
             _ => unreachable!(),
         };
 
@@ -594,7 +595,7 @@ impl VaultContract<'_> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
 
-        // Verify tx comes from the right contract, and is the right type
+        // Verify tx comes from the right contract, and is of the right type
         ensure!(
             match tx.clone() {
                 InFlightStaking { lienholder, .. } => {
