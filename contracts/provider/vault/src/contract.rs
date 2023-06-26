@@ -19,9 +19,9 @@ use sylvia::{contract, schemars};
 use crate::error::ContractError;
 use crate::msg;
 use crate::msg::{
-    AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllTxsResponse,
-    AllTxsResponseItem, ConfigResponse, LienInfo, MaybeAccountResponse, StakingInitInfo,
-    TxResponse,
+    AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
+    AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, MaybeAccountResponse,
+    StakingInitInfo, TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
@@ -270,7 +270,6 @@ impl VaultContract<'_> {
             .unwrap_or_default();
         match user_lock.read() {
             Ok(user_info) => Ok(MaybeAccountResponse::Account(AccountResponse {
-                user: account.to_string(),
                 denom,
                 bonded: user_info.collateral,
                 free: user_info.free_collateral(),
@@ -384,14 +383,19 @@ impl VaultContract<'_> {
             })
             .map(|account| {
                 account.map(|(addr, account_lock)| match account_lock.read() {
-                    Ok(user_info) => Ok(MaybeAccountResponse::Account(AccountResponse {
+                    Ok(user_info) => Ok(AllAccountsResponseItem {
                         user: addr.to_string(),
-                        denom: denom.clone(),
-                        bonded: user_info.collateral,
-                        free: user_info.free_collateral(),
-                    })),
-                    Err(_) => Ok(msg::MaybeAccountResponse::Locked {
+                        account: MaybeAccountResponse::Account(AccountResponse {
+                            denom: denom.clone(),
+                            bonded: user_info.collateral,
+                            free: user_info.free_collateral(),
+                        }),
+                    }),
+                    Err(_) => Ok(msg::AllAccountsResponseItem {
                         user: addr.to_string(),
+                        account: MaybeAccountResponse::Locked {
+                            user: addr.to_string(),
+                        },
                     }),
                 })?
             })

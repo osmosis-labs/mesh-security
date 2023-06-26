@@ -34,7 +34,6 @@ impl MaybeAccountResponse {
 
 #[cw_serde]
 pub struct AccountResponse {
-    pub user: String,
     // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
     pub denom: String,
     pub bonded: Uint128,
@@ -43,7 +42,13 @@ pub struct AccountResponse {
 
 #[cw_serde]
 pub struct AllAccountsResponse {
-    pub accounts: Vec<MaybeAccountResponse>,
+    pub accounts: Vec<AllAccountsResponseItem>,
+}
+
+#[cw_serde]
+pub struct AllAccountsResponseItem {
+    pub user: String,
+    pub account: MaybeAccountResponse,
 }
 
 #[cw_serde]
