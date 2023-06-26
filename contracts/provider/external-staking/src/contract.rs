@@ -822,10 +822,7 @@ pub mod cross_staking {
             };
             self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
 
-            let mut resp = Response::new()
-                .add_attribute("action", "receive_virtual_stake")
-                .add_attribute("owner", owner)
-                .add_attribute("amount", amount.amount.to_string());
+            let mut resp = Response::new();
 
             // add ibc packet if we are ibc enabled (skip in tests)
             #[cfg(not(test))]
@@ -833,7 +830,7 @@ pub mod cross_staking {
                 let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
                 let packet = ProviderPacket::Stake {
                     validator: msg.validator,
-                    stake: amount,
+                    stake: amount.clone(),
                     tx_id,
                 };
                 let msg = IbcMsg::SendPacket {
@@ -844,8 +841,11 @@ pub mod cross_staking {
                 resp = resp.add_message(msg);
             }
 
-            // This is later so `mut resp` is valid in test and non-test code
-            resp = resp.add_attribute("tx_id", tx_id.to_string());
+            resp = resp
+                .add_attribute("action", "receive_virtual_stake")
+                .add_attribute("owner", owner)
+                .add_attribute("amount", amount.amount.to_string())
+                .add_attribute("tx_id", tx_id.to_string());
 
             Ok(resp)
         }
