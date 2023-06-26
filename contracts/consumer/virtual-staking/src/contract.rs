@@ -2,16 +2,18 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use cosmwasm_std::{
-    coin, ensure_eq, entry_point, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Response, SubMsg,
-    Uint128,
+    coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
+    DistributionMsg, Env, Event, Reply, Response, StdResult, SubMsg, SubMsgResponse, Uint128,
+    WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::nonpayable;
+use mesh_apis::converter_api;
 use mesh_bindings::{
     TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
 };
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::virtual_staking_api::{self, SudoMsg, VirtualStakingApi};
@@ -89,12 +91,12 @@ impl VirtualStakingContract<'_> {
      */
     fn handle_epoch(
         &self,
-        deps: DepsMut<VirtualStakeCustomQuery>,
+        mut deps: DepsMut<VirtualStakeCustomQuery>,
         env: Env,
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         // withdraw rewards
         let bonded = self.bonded.load(deps.storage)?;
-        let withdraw = withdraw_reward_msgs(&bonded);
+        let withdraw = withdraw_reward_msgs(deps.branch(), &bonded);
         let resp = Response::new().add_submessages(withdraw);
 
         let bond =
@@ -131,6 +133,58 @@ impl VirtualStakingContract<'_> {
 
         Ok(resp)
     }
+
+    #[msg(reply)]
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+        match (reply.id, reply.result.into_result()) {
+            (REPLY_REWARDS_ID, Ok(result)) => self.reply_rewards(ctx.deps, ctx.env, result),
+            (REPLY_REWARDS_ID, Err(e)) => {
+                // Ignore errors, so the rest doesn't fail, but report them.
+                let evt = Event::new("rewards_error").add_attribute("error", e);
+                // We also need to pop the REWARD_TARGETS so it doesn't get out of sync
+                let _ = pop_target(ctx.deps)?;
+                Ok(Response::new().add_event(evt))
+            }
+            (id, _) => Err(ContractError::InvalidReplyId(id)),
+        }
+    }
+
+    /// This is called on each successful withdrawal
+    fn reply_rewards(
+        &self,
+        mut deps: DepsMut,
+        env: Env,
+        _reply: SubMsgResponse,
+    ) -> Result<Response, ContractError> {
+        // Find the validator to assign the rewards to
+        let target = pop_target(deps.branch())?;
+
+        // Find all the tokens received here (consider it rewards to that validator)
+        let cfg = self.config.load(deps.storage)?;
+        let reward = deps
+            .querier
+            .query_balance(env.contract.address, cfg.denom)?;
+        if reward.amount.is_zero() {
+            return Ok(Response::new());
+        }
+
+        // Send them to the converter, assigned to proper validator
+        let msg = converter_api::ExecMsg::DistributeReward { validator: target };
+        let msg = WasmMsg::Execute {
+            contract_addr: cfg.converter.into_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![reward],
+        };
+        let resp = Response::new().add_message(msg);
+        Ok(resp)
+    }
+}
+
+fn pop_target(deps: DepsMut) -> StdResult<String> {
+    let mut targets = REWARD_TARGETS.load(deps.storage)?;
+    let target = targets.pop().unwrap();
+    REWARD_TARGETS.save(deps.storage, &targets)?;
+    Ok(target)
 }
 
 fn calculate_rebalance(
@@ -168,15 +222,33 @@ fn calculate_rebalance(
     msgs
 }
 
-// TODO: each submsg should have a callback to this contract to trigger sending the rewards to converter
-// This will be done in a future PR
-fn withdraw_reward_msgs(bonded: &[(String, Uint128)]) -> Vec<SubMsg<VirtualStakeCustomMsg>> {
+const REWARD_TARGETS: Item<Vec<String>> = Item::new("reward_targets");
+const REPLY_REWARDS_ID: u64 = 1;
+
+/// Each of these messages will need to get a callback to distribute received rewards to the proper validator
+/// To manage that, we store a queue of validators in an Item, one item for each SubMsg, and read them in reply.
+/// Look at reply implementation that uses the value set here.
+fn withdraw_reward_msgs<T: CustomQuery>(
+    deps: DepsMut<T>,
+    bonded: &[(String, Uint128)],
+) -> Vec<SubMsg<VirtualStakeCustomMsg>> {
+    // We need to make a list, so we know where to send the rewards later (reversed, so we can pop off the top)
+    let targets = bonded
+        .iter()
+        .map(|(v, _)| v.clone())
+        .rev()
+        .collect::<Vec<_>>();
+    REWARD_TARGETS.save(deps.storage, &targets).unwrap();
+
     bonded
         .iter()
         .map(|(validator, _)| {
-            SubMsg::new(DistributionMsg::WithdrawDelegatorReward {
-                validator: validator.clone(),
-            })
+            SubMsg::reply_always(
+                DistributionMsg::WithdrawDelegatorReward {
+                    validator: validator.clone(),
+                },
+                REPLY_REWARDS_ID,
+            )
         })
         .collect()
 }
