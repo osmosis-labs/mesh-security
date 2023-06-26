@@ -896,9 +896,7 @@ fn stake_cross_txs() {
     // Cannot query account while pending
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
-        MaybeAccountResponse::Locked {
-            user: user.to_owned()
-        }
+        MaybeAccountResponse::Locked {}
     ); // write locked
        // Cannot query claims while pending
        // TODO: locked enum not error
@@ -923,9 +921,7 @@ fn stake_cross_txs() {
         vec![
             AllAccountsResponseItem {
                 user: user.to_string(),
-                account: MaybeAccountResponse::Locked {
-                    user: user.to_string()
-                }
+                account: MaybeAccountResponse::Locked {}
             },
             AllAccountsResponseItem {
                 user: user2.to_string(),

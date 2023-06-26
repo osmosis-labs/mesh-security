@@ -274,9 +274,7 @@ impl VaultContract<'_> {
                 bonded: user_info.collateral,
                 free: user_info.free_collateral(),
             })),
-            Err(_) => Ok(msg::MaybeAccountResponse::Locked {
-                user: account.to_string(),
-            }),
+            Err(_) => Ok(msg::MaybeAccountResponse::Locked {}),
         }
     }
 
@@ -393,9 +391,7 @@ impl VaultContract<'_> {
                     }),
                     Err(_) => Ok(msg::AllAccountsResponseItem {
                         user: addr.to_string(),
-                        account: MaybeAccountResponse::Locked {
-                            user: addr.to_string(),
-                        },
+                        account: MaybeAccountResponse::Locked {},
                     }),
                 })?
             })

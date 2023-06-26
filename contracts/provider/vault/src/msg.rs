@@ -19,7 +19,7 @@ pub struct StakingInitInfo {
 #[cw_serde]
 pub enum MaybeAccountResponse {
     Account(AccountResponse),
-    Locked { user: String },
+    Locked {},
 }
 
 impl MaybeAccountResponse {
@@ -27,7 +27,7 @@ impl MaybeAccountResponse {
     pub fn unwrap(self) -> AccountResponse {
         match self {
             Account(acct) => acct,
-            Locked { user } => panic!("AccountResponse for {user} is locked"),
+            Locked {} => panic!("Account is locked"),
         }
     }
 }
