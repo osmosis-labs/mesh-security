@@ -16,7 +16,23 @@ pub struct StakingInitInfo {
 }
 
 #[cw_serde]
-pub struct AccountResponse {
+pub enum AccountResponse {
+    Unlocked(UnlockedAccountResponse),
+    Locked {},
+}
+
+impl AccountResponse {
+    /// Designed for test code, unwrap the Unlocked variant or panic
+    pub fn unlocked(self) -> UnlockedAccountResponse {
+        match self {
+            AccountResponse::Unlocked(acct) => acct,
+            _ => panic!("AccountResponse was locked"),
+        }
+    }
+}
+
+#[cw_serde]
+pub struct UnlockedAccountResponse {
     // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
     pub denom: String,
     pub bonded: Uint128,
@@ -31,6 +47,7 @@ pub struct AllAccountsResponse {
 #[cw_serde]
 pub struct AllAccountsResponseItem {
     pub account: String,
+    // TODO: embed AccountResponse here
     // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
     pub denom: String,
     pub bonded: Uint128,

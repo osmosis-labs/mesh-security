@@ -1,11 +1,13 @@
 mod cross_staking;
 mod local_staking;
 
+use crate::contract;
 use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
-use crate::msg::{AllAccountsResponseItem, LienInfo, StakingInitInfo};
-use crate::{contract, msg::AccountResponse};
+use crate::msg::{
+    AccountResponse, AllAccountsResponseItem, LienInfo, StakingInitInfo, UnlockedAccountResponse,
+};
 use cosmwasm_std::StdError::GenericErr;
 use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
@@ -76,8 +78,8 @@ fn bonding() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::zero(),
             free: Uint128::zero(),
@@ -94,8 +96,8 @@ fn bonding() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(100),
             free: Uint128::new(100),
@@ -122,8 +124,8 @@ fn bonding() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(250),
             free: Uint128::new(250),
@@ -147,8 +149,8 @@ fn bonding() {
 
     vault.unbond(coin(200, OSMO)).call(user).unwrap();
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(50),
             free: Uint128::new(50),
@@ -170,8 +172,8 @@ fn bonding() {
 
     vault.unbond(coin(20, OSMO)).call(user).unwrap();
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(30),
             free: Uint128::new(30),
@@ -240,8 +242,8 @@ fn stake_local() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -272,8 +274,8 @@ fn stake_local() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -308,8 +310,8 @@ fn stake_local() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(50),
@@ -364,8 +366,8 @@ fn stake_local() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(100),
@@ -403,8 +405,8 @@ fn stake_local() {
         .call(owner)
         .unwrap();
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -502,8 +504,8 @@ fn stake_cross() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -545,10 +547,10 @@ fn stake_cross() {
         .call(cross_staking.contract_addr.as_str())
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user.to_owned()).unwrap().unlocked();
     assert_eq!(
         acc,
-        AccountResponse {
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -591,10 +593,10 @@ fn stake_cross() {
         .call(cross_staking.contract_addr.as_str())
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user.to_owned()).unwrap().unlocked();
     assert_eq!(
         acc,
-        AccountResponse {
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(50),
@@ -652,10 +654,10 @@ fn stake_cross() {
         .call(owner)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user.to_owned()).unwrap().unlocked();
     assert_eq!(
         acc,
-        AccountResponse {
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(100),
@@ -693,10 +695,10 @@ fn stake_cross() {
         .call(owner)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user.to_owned()).unwrap().unlocked();
     assert_eq!(
         acc,
-        AccountResponse {
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -790,8 +792,8 @@ fn stake_cross_txs() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -806,8 +808,8 @@ fn stake_cross_txs() {
         .call(user2)
         .unwrap();
     assert_eq!(
-        vault.account(user2.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user2.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(500),
             free: Uint128::new(500),
@@ -892,11 +894,12 @@ fn stake_cross_txs() {
     assert_eq!(first_id, first_tx);
 
     // Cannot query account while pending
-    assert!(matches!(
-        vault.account(user.to_owned()).unwrap_err(),
-        ContractError::Std(GenericErr { .. })
-    )); // write locked
-        // Cannot query claims while pending
+    assert_eq!(
+        vault.account(user.to_owned()).unwrap(),
+        AccountResponse::Locked {}
+    ); // write locked
+       // Cannot query claims while pending
+       // TODO: locked enum not error
     assert!(matches!(
         vault
             .account_claims(user.to_owned(), None, None)
@@ -924,10 +927,10 @@ fn stake_cross_txs() {
     );
 
     // Can query the other account
-    let acc = vault.account(user2.to_owned()).unwrap();
+    let acc = vault.account(user2.to_owned()).unwrap().unlocked();
     assert_eq!(
         acc,
-        AccountResponse {
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(500),
             free: Uint128::new(400),
@@ -951,10 +954,10 @@ fn stake_cross_txs() {
         .unwrap();
 
     // Can query account now
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user.to_owned()).unwrap().unlocked();
     assert_eq!(
         acc,
-        AccountResponse {
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -1024,8 +1027,8 @@ fn stake_cross_rollback_tx() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -1062,10 +1065,10 @@ fn stake_cross_rollback_tx() {
         .is_empty());
 
     // Funds are restored
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user.to_owned()).unwrap().unlocked();
     assert_eq!(
         acc,
-        AccountResponse {
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -1183,8 +1186,8 @@ fn multiple_stakes() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(1000),
             free: Uint128::new(700),
@@ -1244,8 +1247,8 @@ fn multiple_stakes() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
-        AccountResponse {
+        vault.account(user.to_owned()).unwrap().unlocked(),
+        UnlockedAccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(1000),
             free: Uint128::new(430),

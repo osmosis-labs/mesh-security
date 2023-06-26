@@ -20,6 +20,7 @@ use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
     AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, StakingInitInfo, TxResponse,
+    UnlockedAccountResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
@@ -262,13 +263,16 @@ impl VaultContract<'_> {
             .users
             .may_load(ctx.deps.storage, &account)?
             .unwrap_or_default();
-        let user = user_lock.read()?;
+        let user = match user_lock.read() {
+            Ok(user) => user,
+            Err(_) => return Ok(AccountResponse::Locked {}),
+        };
 
-        let resp = AccountResponse {
+        let resp = AccountResponse::Unlocked(UnlockedAccountResponse {
             denom,
             bonded: user.collateral,
             free: user.free_collateral(),
-        };
+        });
 
         Ok(resp)
     }
