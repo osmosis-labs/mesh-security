@@ -17,9 +17,11 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
+use crate::msg;
 use crate::msg::{
-    AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
-    AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, StakingInitInfo, TxResponse,
+    AccountClaimsResponse, AllAccountsResponse, AllAccountsResponseItem, AllTxsResponse,
+    AllTxsResponseItem, ConfigResponse, LienInfo, MaybeAccountResponse, StakingInitInfo,
+    TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
@@ -254,7 +256,11 @@ impl VaultContract<'_> {
     }
 
     #[msg(query)]
-    fn account(&self, ctx: QueryCtx, account: String) -> Result<AccountResponse, ContractError> {
+    fn account(
+        &self,
+        ctx: QueryCtx,
+        account: String,
+    ) -> Result<MaybeAccountResponse, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let account = ctx.deps.api.addr_validate(&account)?;
 
@@ -262,15 +268,14 @@ impl VaultContract<'_> {
             .users
             .may_load(ctx.deps.storage, &account)?
             .unwrap_or_default();
-        let user = user_lock.read()?;
-
-        let resp = AccountResponse {
-            denom,
-            bonded: user.collateral,
-            free: user.free_collateral(),
-        };
-
-        Ok(resp)
+        match user_lock.read() {
+            Ok(user_info) => Ok(MaybeAccountResponse::new_unlocked(
+                &denom,
+                user_info.collateral,
+                user_info.free_collateral(),
+            )),
+            Err(_) => Ok(msg::MaybeAccountResponse::Locked {}),
+        }
     }
 
     #[msg(query)]
@@ -370,21 +375,24 @@ impl VaultContract<'_> {
                         account_lock
                             .read()
                             .map(|account| !with_collateral || !account.collateral.is_zero()) // Skip zero collateral
-                            // FIXME: Don't skip write-locked accounts (map to `MaybeAccount` wrapper)
-                            .unwrap_or(false) // Skip write-locked accounts
+                            .unwrap_or(true)
                     })
                     .unwrap_or(false) // Skip other errors
             })
             .map(|account| {
-                account.map(|(addr, account_lock)| {
-                    account_lock.read().map(|account| {
-                        Ok(AllAccountsResponseItem {
-                            account: addr.into(),
-                            denom: denom.clone(),
-                            bonded: account.collateral,
-                            free: account.free_collateral(),
-                        })
-                    })?
+                account.map(|(addr, account_lock)| match account_lock.read() {
+                    Ok(user_info) => Ok(AllAccountsResponseItem {
+                        user: addr.to_string(),
+                        account: MaybeAccountResponse::new_unlocked(
+                            &denom,
+                            user_info.collateral,
+                            user_info.free_collateral(),
+                        ),
+                    }),
+                    Err(_) => Ok(msg::AllAccountsResponseItem {
+                        user: addr.to_string(),
+                        account: MaybeAccountResponse::Locked {},
+                    }),
                 })?
             })
             .take(limit)
