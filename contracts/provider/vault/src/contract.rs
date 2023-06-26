@@ -19,9 +19,9 @@ use sylvia::{contract, schemars};
 use crate::error::ContractError;
 use crate::msg;
 use crate::msg::{
-    AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
-    AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienInfo, MaybeAccountResponse,
-    StakingInitInfo, TxResponse,
+    AccountClaimsResponse, AllAccountsResponse, AllAccountsResponseItem, AllTxsResponse,
+    AllTxsResponseItem, ConfigResponse, LienInfo, MaybeAccountResponse, StakingInitInfo,
+    TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
@@ -269,11 +269,11 @@ impl VaultContract<'_> {
             .may_load(ctx.deps.storage, &account)?
             .unwrap_or_default();
         match user_lock.read() {
-            Ok(user_info) => Ok(MaybeAccountResponse::Account(AccountResponse {
-                denom,
-                bonded: user_info.collateral,
-                free: user_info.free_collateral(),
-            })),
+            Ok(user_info) => Ok(MaybeAccountResponse::new_unlocked(
+                &denom,
+                user_info.collateral,
+                user_info.free_collateral(),
+            )),
             Err(_) => Ok(msg::MaybeAccountResponse::Locked {}),
         }
     }
@@ -383,11 +383,11 @@ impl VaultContract<'_> {
                 account.map(|(addr, account_lock)| match account_lock.read() {
                     Ok(user_info) => Ok(AllAccountsResponseItem {
                         user: addr.to_string(),
-                        account: MaybeAccountResponse::Account(AccountResponse {
-                            denom: denom.clone(),
-                            bonded: user_info.collateral,
-                            free: user_info.free_collateral(),
-                        }),
+                        account: MaybeAccountResponse::new_unlocked(
+                            &denom,
+                            user_info.collateral,
+                            user_info.free_collateral(),
+                        ),
                     }),
                     Err(_) => Ok(msg::AllAccountsResponseItem {
                         user: addr.to_string(),

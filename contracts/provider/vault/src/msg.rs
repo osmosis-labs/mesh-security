@@ -23,6 +23,13 @@ pub enum MaybeAccountResponse {
 }
 
 impl MaybeAccountResponse {
+    pub fn new_unlocked(denom: &str, bonded: Uint128, free: Uint128) -> Self {
+        Account(AccountResponse {
+            denom: denom.to_owned(),
+            bonded,
+            free,
+        })
+    }
     /// Designed for test code, unwrap or panic if Locked
     pub fn unwrap(self) -> AccountResponse {
         match self {

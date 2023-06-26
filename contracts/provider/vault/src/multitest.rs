@@ -925,11 +925,11 @@ fn stake_cross_txs() {
             },
             AllAccountsResponseItem {
                 user: user2.to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(500),
-                    free: Uint128::new(400),
-                }),
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(500),
+                    Uint128::new(400)
+                ),
             },
         ]
     );
@@ -1368,11 +1368,7 @@ fn all_users_fetching() {
         accounts.accounts,
         [AllAccountsResponseItem {
             user: users[0].to_string(),
-            account: MaybeAccountResponse::Account(AccountResponse {
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(100),
-                free: Uint128::new(100),
-            })
+            account: MaybeAccountResponse::new_unlocked(OSMO, Uint128::new(100), Uint128::new(100)),
         }]
     );
 
@@ -1381,11 +1377,7 @@ fn all_users_fetching() {
         accounts.accounts,
         [AllAccountsResponseItem {
             user: users[0].to_string(),
-            account: MaybeAccountResponse::Account(AccountResponse {
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(100),
-                free: Uint128::new(100),
-            })
+            account: MaybeAccountResponse::new_unlocked(OSMO, Uint128::new(100), Uint128::new(100),)
         }]
     );
 
@@ -1403,19 +1395,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(100),
-                    free: Uint128::new(100),
-                })
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(100),
+                    Uint128::new(100),
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(200),
-                    free: Uint128::new(200),
-                })
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(200),
+                    Uint128::new(200),
+                )
             }
         ]
     );
@@ -1426,19 +1418,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(100),
-                    free: Uint128::new(100),
-                })
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(100),
+                    Uint128::new(100),
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(200),
-                    free: Uint128::new(200),
-                })
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(200),
+                    Uint128::new(200),
+                )
             }
         ]
     );
@@ -1453,19 +1445,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(50),
-                    free: Uint128::new(50),
-                })
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(50),
+                    Uint128::new(50),
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(200),
-                    free: Uint128::new(200),
-                })
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(200),
+                    Uint128::new(200),
+                )
             }
         ]
     );
@@ -1476,19 +1468,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(50),
-                    free: Uint128::new(50),
-                })
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(50),
+                    Uint128::new(50),
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(200),
-                    free: Uint128::new(200),
-                })
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(200),
+                    Uint128::new(200),
+                )
             }
         ]
     );
@@ -1502,19 +1494,15 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(50),
-                    free: Uint128::new(50),
-                })
+                account: MaybeAccountResponse::new_unlocked(
+                    OSMO,
+                    Uint128::new(50),
+                    Uint128::new(50),
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::Account(AccountResponse {
-                    denom: OSMO.to_owned(),
-                    bonded: Uint128::new(0),
-                    free: Uint128::new(0),
-                })
+                account: MaybeAccountResponse::new_unlocked(OSMO, Uint128::new(0), Uint128::new(0),)
             }
         ]
     );
@@ -1524,11 +1512,7 @@ fn all_users_fetching() {
         accounts.accounts,
         [AllAccountsResponseItem {
             user: users[0].to_string(),
-            account: MaybeAccountResponse::Account(AccountResponse {
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(50),
-                free: Uint128::new(50),
-            })
+            account: MaybeAccountResponse::new_unlocked(OSMO, Uint128::new(50), Uint128::new(50),)
         },]
     );
 }
