@@ -28,6 +28,16 @@ pub enum ProviderPacket {
         /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
         tx_id: u64,
     },
+    /// This is part of the rewards protocol
+    TransferRewards {
+        /// Amount previously received by ConsumerPacket::Distribute
+        rewards: Coin,
+        /// A valid address on the consumer chain to receive these rewards
+        recipient: String,
+        /// A valid address on the provider chain where these rewards come from.
+        /// This is used to revert the transaction on error ack or timeout.
+        staker: String,
+    },
 }
 
 /// Ack sent for ProviderPacket::Stake
@@ -44,6 +54,10 @@ pub struct UnstakeAck {
     pub tx_id: u64,
 }
 
+/// Ack sent for ProviderPacket::TransferRewards
+#[cw_serde]
+pub struct TransferRewardsAck {}
+
 /// These are messages sent from consumer -> provider
 /// ibc_packet_receive in external-staking must handle them all.
 #[cw_serde]
@@ -56,6 +70,15 @@ pub enum ConsumerPacket {
     /// but when it is no longer a valid target to delegate to.
     /// It contains a list of `valoper_address` to be removed
     RemoveValidators(Vec<String>),
+    /*
+    /// This is part of the rewards protocol
+    Distribute {
+        /// The validator whose stakers should receive these rewards
+        validator: String,
+        /// The amount of rewards held on the consumer side to be released later
+        rewards: Coin,
+    },
+    */
 }
 
 #[cw_serde]
@@ -86,8 +109,12 @@ pub struct AddValidatorsAck {}
 #[cw_serde]
 pub struct RemoveValidatorsAck {}
 
+/// Ack sent for ConsumerPacket::Distribute
+#[cw_serde]
+pub struct DistributeAck {}
+
 /// This is a generic ICS acknowledgement format.
-/// Proto defined here: https://github.com/cosmos/cosmos-sdk/blob/v0.42.0/proto/ibc/core/channel/v1/channel.proto#L141-L147
+/// Protobuf defined here: https://github.com/cosmos/cosmos-sdk/blob/v0.42.0/proto/ibc/core/channel/v1/channel.proto#L141-L147
 /// This is compatible with the JSON serialization.
 /// Wasmd uses this same wrapper for unhandled errors.
 #[cw_serde]

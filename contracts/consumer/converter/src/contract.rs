@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, Coin, Decimal, Deps, DepsMut, Event, Reply, Response, SubMsg,
-    SubMsgResponse, WasmMsg,
+    ensure_eq, to_binary, Addr, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Reply, Response,
+    SubMsg, SubMsgResponse, WasmMsg, BankMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -228,6 +228,34 @@ impl ConverterContract<'_> {
             denom: config.local_denom,
             amount: converted,
         })
+    }
+
+    pub(crate) fn transfer_rewards(
+        &self,
+        deps: Deps,
+        recipient: String,
+        rewards: Coin,
+    ) -> Result<CosmosMsg, ContractError> {
+        // ensure the address is proper
+        let recipient = deps.api.addr_validate(&recipient)?;
+
+        // ensure this is the reward denom (same as staking denom)
+        let config = self.config.load(deps.storage)?;
+        ensure_eq!(
+            config.local_denom,
+            rewards.denom,
+            ContractError::WrongDenom {
+                sent: rewards.denom,
+                expected: config.local_denom
+            }
+        );
+
+        // send the coins
+        let msg = BankMsg::Send {
+            to_address: recipient.into(),
+            amount: vec![rewards],
+        };
+        Ok(msg.into())
     }
 }
 
