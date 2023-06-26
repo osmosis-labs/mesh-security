@@ -55,6 +55,7 @@ pub struct AllAccountsResponse {
 #[cw_serde]
 pub struct AllAccountsResponseItem {
     pub user: String,
+    #[serde(flatten)]
     pub account: MaybeAccountResponse,
 }
 
