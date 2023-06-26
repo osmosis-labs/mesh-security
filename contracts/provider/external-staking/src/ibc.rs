@@ -9,7 +9,7 @@ use cosmwasm_std::{
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, AddValidatorsAck,
-    ConsumerPacket, ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
+    ConsumerPacket, DistributeAck, ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
 };
 
 use crate::contract::ExternalStakingContract;
@@ -123,7 +123,7 @@ pub fn ibc_packet_receive(
     // We also don't care about packet sequence as this is fully commutative.
     let contract = ExternalStakingContract::new();
     let packet: ConsumerPacket = from_slice(&msg.packet.data)?;
-    let ack = match packet {
+    let resp = match packet {
         ConsumerPacket::AddValidators(to_add) => {
             for AddValidator {
                 valoper,
@@ -141,18 +141,26 @@ pub fn ibc_packet_receive(
                     .val_set
                     .add_validator(deps.storage, &valoper, update)?;
             }
-            ack_success(&AddValidatorsAck {})?
+            let ack = ack_success(&AddValidatorsAck {})?;
+            IbcReceiveResponse::new().set_ack(ack)
         }
         ConsumerPacket::RemoveValidators(to_remove) => {
             for valoper in to_remove {
                 contract.val_set.remove_validator(deps.storage, &valoper)?;
             }
-            ack_success(&RemoveValidatorsAck {})?
+            let ack = ack_success(&RemoveValidatorsAck {})?;
+            IbcReceiveResponse::new().set_ack(ack)
+        }
+        ConsumerPacket::Distribute { validator, rewards } => {
+            let contract = ExternalStakingContract::new();
+            let evt = contract.do_distribute_rewards(deps, validator, rewards)?;
+            let ack = ack_success(&DistributeAck {})?;
+            IbcReceiveResponse::new().set_ack(ack).add_event(evt)
         }
     };
 
     // return empty success ack
-    Ok(IbcReceiveResponse::new().set_ack(ack))
+    Ok(resp)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Reply, Response,
-    SubMsg, SubMsgResponse, WasmMsg, BankMsg,
+    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Reply,
+    Response, SubMsg, SubMsgResponse, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;

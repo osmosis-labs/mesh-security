@@ -1,10 +1,10 @@
 use cosmwasm_std::{
-    coin, coins, ensure, ensure_eq, from_binary, Addr, BankMsg, Binary, Coin, Decimal, DepsMut,
-    Env, Order, Response, StdError, StdResult, Storage, Uint128, Uint256, WasmMsg,
+    coin, ensure, ensure_eq, from_binary, Addr, Binary, Coin, Decimal, DepsMut, Env, Event, Order,
+    Response, StdError, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
-use cw_utils::must_pay;
+use cw_utils::PaymentError;
 use mesh_apis::cross_staking_api::{self, CrossStakingApi};
 use mesh_apis::ibc::AddValidator;
 use mesh_apis::local_staking_api::MaxSlashResponse;
@@ -554,20 +554,46 @@ impl ExternalStakingContract<'_> {
         Ok(resp)
     }
 
-    /// Distributes reward among users staking via particular validator. Distribution is performend
-    /// proportionally to amount of tokens staken by user.
     #[msg(exec)]
     pub fn distribute_rewards(
         &self,
         ctx: ExecCtx,
         validator: String,
+        rewards: Coin,
     ) -> Result<Response, ContractError> {
-        let config = self.config.load(ctx.deps.storage)?;
-        let amount = must_pay(&ctx.info, &config.rewards_denom)?;
+        #[cfg(test)]
+        {
+            let event = self.do_distribute_rewards(ctx.deps, validator, rewards)?;
+            Ok(Response::new().add_event(event))
+        }
+        #[cfg(not(test))]
+        {
+            let _ = (ctx, validator, rewards);
+            panic!("This message is only available in test mode");
+        }
+    }
+
+    /// Distributes reward among users staking via particular validator. Distribution is performed
+    /// proportionally to amount of tokens staked by user.
+    /// This is called by IBC packets in real code, but also exposed in a test only message "distribute_rewards"
+    pub(crate) fn do_distribute_rewards(
+        &self,
+        deps: DepsMut,
+        validator: String,
+        rewards: Coin,
+    ) -> Result<Event, ContractError> {
+        // check we have the proper denom
+        let config = self.config.load(deps.storage)?;
+        ensure_eq!(
+            rewards.denom,
+            config.rewards_denom,
+            PaymentError::MissingDenom(rewards.denom)
+        );
+        let amount = rewards.amount;
 
         let mut distribution = self
             .distribution
-            .may_load(ctx.deps.storage, &validator)?
+            .may_load(deps.storage, &validator)?
             .unwrap_or_default();
 
         let total_stake = Uint256::from(distribution.total_stake);
@@ -579,15 +605,13 @@ impl ExternalStakingContract<'_> {
         distribution.points_per_stake += points_per_stake;
 
         self.distribution
-            .save(ctx.deps.storage, &validator, &distribution)?;
+            .save(deps.storage, &validator, &distribution)?;
 
-        let resp = Response::new()
-            .add_attribute("action", "distribute_rewards")
-            .add_attribute("sender", ctx.info.sender.into_string())
+        let event = Event::new("distribute_rewards")
             .add_attribute("validator", validator)
             .add_attribute("amount", amount.to_string());
 
-        Ok(resp)
+        Ok(event)
     }
 
     /// Withdraw rewards from staking via given validator
@@ -596,6 +620,8 @@ impl ExternalStakingContract<'_> {
         &self,
         ctx: ExecCtx,
         validator: String,
+        /// Address on the consumer side to receive the rewards
+        remote_recipient: String,
     ) -> Result<Response, ContractError> {
         let mut stake_lock = self
             .stakes
@@ -611,10 +637,12 @@ impl ExternalStakingContract<'_> {
 
         let amount = Self::calculate_reward(stake, &distribution)?;
 
+        #[allow(clippy::needless_borrow)]
         let mut resp = Response::new()
             .add_attribute("action", "withdraw_rewards")
             .add_attribute("owner", ctx.info.sender.to_string())
             .add_attribute("validator", &validator)
+            .add_attribute("recipient", &remote_recipient)
             .add_attribute("amount", amount.to_string());
 
         if !amount.is_zero() {
@@ -626,13 +654,34 @@ impl ExternalStakingContract<'_> {
                 &stake_lock,
             )?;
 
-            let config = self.config.load(ctx.deps.storage)?;
-            let send_msg = BankMsg::Send {
-                to_address: ctx.info.sender.into_string(),
-                amount: coins(amount.u128(), config.rewards_denom),
-            };
+            #[cfg(not(test))]
+            {
+                let config = self.config.load(ctx.deps.storage)?;
+                let rewards = coin(amount.u128(), config.rewards_denom);
+                // Send IBC Packet over the wire
+                let packet = ProviderPacket::TransferRewards {
+                    rewards,
+                    recipient: remote_recipient,
+                    staker: ctx.info.sender.into(),
+                };
 
-            resp = resp.add_message(send_msg);
+                // TODO: error on None (use load) once we have better test setup
+                let channel_id = IBC_CHANNEL
+                    .may_load(ctx.deps.storage)?
+                    .map(|ch| ch.endpoint.channel_id)
+                    .unwrap_or_else(|| "channel-69".to_string());
+                let send_msg = IbcMsg::SendPacket {
+                    channel_id,
+                    data: to_binary(&packet)?,
+                    timeout: packet_timeout(&ctx.env),
+                };
+                resp = resp.add_message(send_msg);
+            }
+            #[cfg(test)]
+            {
+                // just to avoid clippy complaint about mut above
+                resp = resp.add_attribute("test", "test");
+            }
         }
 
         Ok(resp)

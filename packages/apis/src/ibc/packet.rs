@@ -64,7 +64,6 @@ pub enum ConsumerPacket {
     /// but when it is no longer a valid target to delegate to.
     /// It contains a list of `valoper_address` to be removed
     RemoveValidators(Vec<String>),
-    /*
     /// This is part of the rewards protocol
     Distribute {
         /// The validator whose stakers should receive these rewards
@@ -72,7 +71,6 @@ pub enum ConsumerPacket {
         /// The amount of rewards held on the consumer side to be released later
         rewards: Coin,
     },
-    */
 }
 
 #[cw_serde]
