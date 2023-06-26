@@ -1,3 +1,4 @@
+use crate::msg::MaybeAccountResponse::{Account, Locked};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Binary, Uint128};
 use mesh_sync::Tx;
@@ -16,23 +17,24 @@ pub struct StakingInitInfo {
 }
 
 #[cw_serde]
-pub enum AccountResponse {
-    Unlocked(UnlockedAccountResponse),
-    Locked {},
+pub enum MaybeAccountResponse {
+    Account(AccountResponse),
+    Locked { user: String },
 }
 
-impl AccountResponse {
-    /// Designed for test code, unwrap the Unlocked variant or panic
-    pub fn unlocked(self) -> UnlockedAccountResponse {
+impl MaybeAccountResponse {
+    /// Designed for test code, unwrap or panic if Locked
+    pub fn unwrap(self) -> AccountResponse {
         match self {
-            AccountResponse::Unlocked(acct) => acct,
-            _ => panic!("AccountResponse was locked"),
+            Account(acct) => acct,
+            Locked { user } => panic!("AccountResponse for {user} is locked"),
         }
     }
 }
 
 #[cw_serde]
-pub struct UnlockedAccountResponse {
+pub struct AccountResponse {
+    pub user: String,
     // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
     pub denom: String,
     pub bonded: Uint128,
@@ -41,17 +43,7 @@ pub struct UnlockedAccountResponse {
 
 #[cw_serde]
 pub struct AllAccountsResponse {
-    pub accounts: Vec<AllAccountsResponseItem>,
-}
-
-#[cw_serde]
-pub struct AllAccountsResponseItem {
-    pub account: String,
-    // TODO: embed AccountResponse here
-    // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
-    pub denom: String,
-    pub bonded: Uint128,
-    pub free: Uint128,
+    pub accounts: Vec<MaybeAccountResponse>,
 }
 
 #[cw_serde]
