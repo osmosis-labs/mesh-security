@@ -5,7 +5,9 @@ use crate::contract;
 use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
-use crate::msg::{AccountResponse, LienInfo, MaybeAccountResponse, StakingInitInfo};
+use crate::msg::{
+    AccountResponse, AllAccountsResponseItem, LienInfo, MaybeAccountResponse, StakingInitInfo,
+};
 use cosmwasm_std::StdError::GenericErr;
 use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
@@ -78,7 +80,6 @@ fn bonding() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::zero(),
             free: Uint128::zero(),
@@ -97,7 +98,6 @@ fn bonding() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(100),
             free: Uint128::new(100),
@@ -126,7 +126,6 @@ fn bonding() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(250),
             free: Uint128::new(250),
@@ -152,7 +151,6 @@ fn bonding() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(50),
             free: Uint128::new(50),
@@ -176,7 +174,6 @@ fn bonding() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(30),
             free: Uint128::new(30),
@@ -247,7 +244,6 @@ fn stake_local() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -280,7 +276,6 @@ fn stake_local() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -317,7 +312,6 @@ fn stake_local() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(50),
@@ -374,7 +368,6 @@ fn stake_local() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(100),
@@ -414,7 +407,6 @@ fn stake_local() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -514,7 +506,6 @@ fn stake_cross() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -560,7 +551,6 @@ fn stake_cross() {
     assert_eq!(
         acc,
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -607,7 +597,6 @@ fn stake_cross() {
     assert_eq!(
         acc,
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(50),
@@ -669,7 +658,6 @@ fn stake_cross() {
     assert_eq!(
         acc,
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(100),
@@ -711,7 +699,6 @@ fn stake_cross() {
     assert_eq!(
         acc,
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -807,7 +794,6 @@ fn stake_cross_txs() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -824,7 +810,6 @@ fn stake_cross_txs() {
     assert_eq!(
         vault.account(user2.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user2.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(500),
             free: Uint128::new(500),
@@ -936,15 +921,20 @@ fn stake_cross_txs() {
     assert_eq!(
         accounts.accounts,
         vec![
-            MaybeAccountResponse::Locked {
+            AllAccountsResponseItem {
                 user: user.to_string(),
+                account: MaybeAccountResponse::Locked {
+                    user: user.to_string()
+                }
             },
-            MaybeAccountResponse::Account(AccountResponse {
+            AllAccountsResponseItem {
                 user: user2.to_string(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(500),
-                free: Uint128::new(400),
-            }),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(500),
+                    free: Uint128::new(400),
+                }),
+            },
         ]
     );
 
@@ -953,7 +943,6 @@ fn stake_cross_txs() {
     assert_eq!(
         acc,
         AccountResponse {
-            user: user2.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(500),
             free: Uint128::new(400),
@@ -981,7 +970,6 @@ fn stake_cross_txs() {
     assert_eq!(
         acc,
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(200),
@@ -1053,7 +1041,6 @@ fn stake_cross_rollback_tx() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -1094,7 +1081,6 @@ fn stake_cross_rollback_tx() {
     assert_eq!(
         acc,
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: Uint128::new(300),
@@ -1214,7 +1200,6 @@ fn multiple_stakes() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(1000),
             free: Uint128::new(700),
@@ -1276,7 +1261,6 @@ fn multiple_stakes() {
     assert_eq!(
         vault.account(user.to_owned()).unwrap().unwrap(),
         AccountResponse {
-            user: user.to_string(),
             denom: OSMO.to_owned(),
             bonded: Uint128::new(1000),
             free: Uint128::new(430),
@@ -1386,23 +1370,27 @@ fn all_users_fetching() {
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
         accounts.accounts,
-        [MaybeAccountResponse::Account(AccountResponse {
-            user: users[0].to_owned(),
-            denom: OSMO.to_owned(),
-            bonded: Uint128::new(100),
-            free: Uint128::new(100),
-        })]
+        [AllAccountsResponseItem {
+            user: users[0].to_string(),
+            account: MaybeAccountResponse::Account(AccountResponse {
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(100),
+                free: Uint128::new(100),
+            })
+        }]
     );
 
     let accounts = vault.all_accounts(true, None, None).unwrap();
     assert_eq!(
         accounts.accounts,
-        [MaybeAccountResponse::Account(AccountResponse {
-            user: users[0].to_owned(),
-            denom: OSMO.to_owned(),
-            bonded: Uint128::new(100),
-            free: Uint128::new(100),
-        })]
+        [AllAccountsResponseItem {
+            user: users[0].to_string(),
+            account: MaybeAccountResponse::Account(AccountResponse {
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(100),
+                free: Uint128::new(100),
+            })
+        }]
     );
 
     // Second user bonds - we want to see him
@@ -1417,18 +1405,22 @@ fn all_users_fetching() {
     assert_eq!(
         accounts.accounts,
         [
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[0].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(100),
-                free: Uint128::new(100),
-            }),
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[1].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(200),
-                free: Uint128::new(200),
-            })
+            AllAccountsResponseItem {
+                user: users[0].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(100),
+                    free: Uint128::new(100),
+                })
+            },
+            AllAccountsResponseItem {
+                user: users[1].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(200),
+                    free: Uint128::new(200),
+                })
+            }
         ]
     );
 
@@ -1436,18 +1428,22 @@ fn all_users_fetching() {
     assert_eq!(
         accounts.accounts,
         [
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[0].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(100),
-                free: Uint128::new(100),
-            }),
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[1].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(200),
-                free: Uint128::new(200),
-            })
+            AllAccountsResponseItem {
+                user: users[0].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(100),
+                    free: Uint128::new(100),
+                })
+            },
+            AllAccountsResponseItem {
+                user: users[1].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(200),
+                    free: Uint128::new(200),
+                })
+            }
         ]
     );
 
@@ -1459,18 +1455,22 @@ fn all_users_fetching() {
     assert_eq!(
         accounts.accounts,
         [
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[0].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(50),
-                free: Uint128::new(50),
-            }),
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[1].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(200),
-                free: Uint128::new(200),
-            })
+            AllAccountsResponseItem {
+                user: users[0].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(50),
+                    free: Uint128::new(50),
+                })
+            },
+            AllAccountsResponseItem {
+                user: users[1].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(200),
+                    free: Uint128::new(200),
+                })
+            }
         ]
     );
 
@@ -1478,51 +1478,61 @@ fn all_users_fetching() {
     assert_eq!(
         accounts.accounts,
         [
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[0].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(50),
-                free: Uint128::new(50),
-            }),
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[1].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(200),
-                free: Uint128::new(200),
-            })
+            AllAccountsResponseItem {
+                user: users[0].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(50),
+                    free: Uint128::new(50),
+                })
+            },
+            AllAccountsResponseItem {
+                user: users[1].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(200),
+                    free: Uint128::new(200),
+                })
+            }
         ]
     );
 
-    // Unbondning all the collateral hids the user when the collateral flag is set
+    // Unbonding all the collateral hides the user when the collateral flag is set
     vault.unbond(coin(200, OSMO)).call(users[1]).unwrap();
 
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
         accounts.accounts,
         [
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[0].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(50),
-                free: Uint128::new(50),
-            }),
-            MaybeAccountResponse::Account(AccountResponse {
-                user: users[1].to_owned(),
-                denom: OSMO.to_owned(),
-                bonded: Uint128::new(0),
-                free: Uint128::new(0),
-            })
+            AllAccountsResponseItem {
+                user: users[0].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(50),
+                    free: Uint128::new(50),
+                })
+            },
+            AllAccountsResponseItem {
+                user: users[1].to_string(),
+                account: MaybeAccountResponse::Account(AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(0),
+                    free: Uint128::new(0),
+                })
+            }
         ]
     );
 
     let accounts = vault.all_accounts(true, None, None).unwrap();
     assert_eq!(
         accounts.accounts,
-        [MaybeAccountResponse::Account(AccountResponse {
-            user: users[0].to_owned(),
-            denom: OSMO.to_owned(),
-            bonded: Uint128::new(50),
-            free: Uint128::new(50),
-        }),]
+        [AllAccountsResponseItem {
+            user: users[0].to_string(),
+            account: MaybeAccountResponse::Account(AccountResponse {
+                denom: OSMO.to_owned(),
+                bonded: Uint128::new(50),
+                free: Uint128::new(50),
+            })
+        },]
     );
 }
