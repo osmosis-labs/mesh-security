@@ -159,7 +159,7 @@ impl ConverterContract<'_> {
     }
 
     /// This is called by ibc_packet_receive.
-    /// It is pulled out into a method, so it can also be called by sudo for testing
+    /// It is pulled out into a method, so it can also be called by test_stake for testing
     pub(crate) fn stake(
         &self,
         deps: DepsMut,
@@ -183,7 +183,7 @@ impl ConverterContract<'_> {
     }
 
     /// This is called by ibc_packet_receive.
-    /// It is pulled out into a method, so it can also be called by sudo for testing
+    /// It is pulled out into a method, so it can also be called by test_unstake for testing
     pub(crate) fn unstake(
         &self,
         deps: DepsMut,
@@ -217,7 +217,7 @@ impl ConverterContract<'_> {
             }
         );
 
-        // get the price value (usage is a bit clunky, need use trait and cannot chain Remote::new() with .querier())
+        // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
         use price_feed_api::Querier;
         let remote = price_feed_api::Remote::new(config.price_feed);
