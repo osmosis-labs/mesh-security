@@ -546,7 +546,7 @@ impl VaultContract<'_> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
 
-        // Verify tx comes from the right contract, and is the right type
+        // Verify tx comes from the right contract, and is of the right type
         ensure!(
             match tx.clone() {
                 InFlightStaking { lienholder, .. } => {
@@ -561,14 +561,10 @@ impl VaultContract<'_> {
             ContractError::WrongTypeTx(tx_id, tx)
         );
 
-        let (_tx_amount, _tx_slashable, tx_user, tx_lienholder) = match tx {
+        let (tx_user, tx_lienholder) = match tx {
             InFlightStaking {
-                amount,
-                slashable,
-                user,
-                lienholder,
-                ..
-            } => (amount, slashable, user, lienholder),
+                user, lienholder, ..
+            } => (user, lienholder),
             _ => unreachable!(),
         };
 
@@ -599,7 +595,7 @@ impl VaultContract<'_> {
         // Load tx
         let tx = self.pending.txs.load(ctx.deps.storage, tx_id)?;
 
-        // Verify tx comes from the right contract, and is the right type
+        // Verify tx comes from the right contract, and is of the right type
         ensure!(
             match tx.clone() {
                 InFlightStaking { lienholder, .. } => {
