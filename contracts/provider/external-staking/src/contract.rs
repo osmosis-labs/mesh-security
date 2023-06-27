@@ -663,13 +663,14 @@ impl ExternalStakingContract<'_> {
                     rewards,
                     recipient: remote_recipient,
                     staker: ctx.info.sender.into(),
+                    validator,
                 };
 
                 // TODO: error on None (use load) once we have better test setup
                 let channel_id = IBC_CHANNEL
                     .may_load(ctx.deps.storage)?
                     .map(|ch| ch.endpoint.channel_id)
-                    .unwrap_or_else(|| "channel-69".to_string());
+                    .unwrap_or_else(|| "channel-72".to_string());
                 let send_msg = IbcMsg::SendPacket {
                     channel_id,
                     data: to_binary(&packet)?,
@@ -685,6 +686,22 @@ impl ExternalStakingContract<'_> {
         }
 
         Ok(resp)
+    }
+
+    pub(crate) fn unwithdraw_rewards(
+        &self,
+        deps: DepsMut,
+        sender: &Addr,
+        validator: &str,
+        amount: Uint128,
+    ) -> Result<(), ContractError> {
+        let mut stake_lock = self.stakes.load(deps.storage, (sender, validator))?;
+        let stake = stake_lock.write()?;
+        stake.withdrawn_funds += amount;
+        self.stakes
+            .save(deps.storage, (sender, validator), &stake_lock)?;
+
+        Ok(())
     }
 
     /// Queries for contract configuration
