@@ -569,7 +569,7 @@ impl ExternalStakingContract<'_> {
         #[cfg(not(test))]
         {
             let _ = (ctx, validator, rewards);
-            panic!("This message is only available in test mode");
+            Err(ContractError::Unauthorized)
         }
     }
 
@@ -637,6 +637,7 @@ impl ExternalStakingContract<'_> {
 
         let amount = Self::calculate_reward(stake, &distribution)?;
 
+        #[allow(unused_mut)]
         #[allow(clippy::needless_borrow)]
         let mut resp = Response::new()
             .add_attribute("action", "withdraw_rewards")
@@ -666,22 +667,13 @@ impl ExternalStakingContract<'_> {
                     validator,
                 };
 
-                // TODO: error on None (use load) once we have better test setup
-                let channel_id = IBC_CHANNEL
-                    .may_load(ctx.deps.storage)?
-                    .map(|ch| ch.endpoint.channel_id)
-                    .unwrap_or_else(|| "channel-72".to_string());
+                let channel_id = IBC_CHANNEL.load(ctx.deps.storage)?.endpoint.channel_id;
                 let send_msg = IbcMsg::SendPacket {
                     channel_id,
                     data: to_binary(&packet)?,
                     timeout: packet_timeout(&ctx.env),
                 };
                 resp = resp.add_message(send_msg);
-            }
-            #[cfg(test)]
-            {
-                // just to avoid clippy complaint about mut above
-                resp = resp.add_attribute("test", "test");
             }
         }
 
