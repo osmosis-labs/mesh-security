@@ -331,7 +331,6 @@ impl ExternalStakingContract<'_> {
         let tx_id = self.next_tx_id(ctx.deps.storage)?;
 
         // Save tx
-        #[allow(clippy::redundant_clone)]
         let new_tx = Tx::InFlightRemoteUnstaking {
             id: tx_id,
             amount: amount.amount,
@@ -340,29 +339,32 @@ impl ExternalStakingContract<'_> {
         };
         self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
 
+        #[allow(unused_mut)]
         let mut resp = Response::new()
             .add_attribute("action", "unstake")
-            .add_attribute("amount", amount.amount.to_string());
+            .add_attribute("amount", amount.amount.to_string())
+            .add_attribute("owner", ctx.info.sender);
 
-        // add ibc packet if we are ibc enabled (skip in tests)
+        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+        let packet = ProviderPacket::Unstake {
+            validator,
+            unstake: amount,
+            tx_id,
+        };
+        let msg = IbcMsg::SendPacket {
+            channel_id: channel.endpoint.channel_id,
+            data: to_binary(&packet)?,
+            timeout: packet_timeout(&ctx.env),
+        };
+        // send packet if we are ibc enabled (skip in tests)
         #[cfg(not(test))]
         {
-            let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
-            let packet = ProviderPacket::Unstake {
-                validator,
-                unstake: amount,
-                tx_id,
-            };
-            let msg = IbcMsg::SendPacket {
-                channel_id: channel.endpoint.channel_id,
-                data: to_binary(&packet)?,
-                timeout: packet_timeout(&ctx.env),
-            };
             resp = resp.add_message(msg);
         }
-
-        // put this later so compiler doens't complain about mut in test mode
-        resp = resp.add_attribute("owner", ctx.info.sender);
+        #[cfg(test)]
+        {
+            let _ = msg;
+        }
 
         Ok(resp)
     }
@@ -1071,7 +1073,6 @@ pub mod cross_staking {
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake_lock)?;
 
             // Save tx
-            #[allow(clippy::redundant_clone)]
             let new_tx = Tx::InFlightRemoteStaking {
                 id: tx_id,
                 amount: amount.amount,
@@ -1082,21 +1083,25 @@ pub mod cross_staking {
 
             let mut resp = Response::new();
 
+            let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+            let packet = ProviderPacket::Stake {
+                validator: msg.validator,
+                stake: amount.clone(),
+                tx_id,
+            };
+            let msg = IbcMsg::SendPacket {
+                channel_id: channel.endpoint.channel_id,
+                data: to_binary(&packet)?,
+                timeout: packet_timeout(&ctx.env),
+            };
             // add ibc packet if we are ibc enabled (skip in tests)
             #[cfg(not(test))]
             {
-                let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
-                let packet = ProviderPacket::Stake {
-                    validator: msg.validator,
-                    stake: amount.clone(),
-                    tx_id,
-                };
-                let msg = IbcMsg::SendPacket {
-                    channel_id: channel.endpoint.channel_id,
-                    data: to_binary(&packet)?,
-                    timeout: packet_timeout(&ctx.env),
-                };
                 resp = resp.add_message(msg);
+            }
+            #[cfg(test)]
+            {
+                let _ = msg;
             }
 
             resp = resp
