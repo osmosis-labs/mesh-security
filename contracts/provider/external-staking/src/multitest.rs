@@ -773,9 +773,19 @@ fn distribution() {
         .withdraw_rewards(validators[0].to_owned(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_withdraw_rewards(tx_id)
+        .call(users[0])
+        .unwrap();
 
     contract
         .withdraw_rewards(validators[1].to_owned(), remote[0].to_owned())
+        .call(users[0])
+        .unwrap();
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
 
@@ -783,11 +793,20 @@ fn distribution() {
         .withdraw_rewards(validators[0].to_owned(), remote[1].to_owned())
         .call(users[1])
         .unwrap();
-
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
-        .withdraw_rewards(validators[1].to_owned(), remote[1].to_owned())
+        .test_commit_withdraw_rewards(tx_id)
         .call(users[1])
         .unwrap();
+
+    // error if 0 rewards available
+    let err = contract
+        .withdraw_rewards(validators[1].to_owned(), remote[1].to_owned())
+        .call(users[1])
+        .unwrap_err();
+    assert_eq!(err, ContractError::NoRewards);
+    let tx_id = get_last_external_staking_pending_tx_id(&contract);
+    assert_eq!(tx_id, None);
 
     // Rewards should not be withdrawable anymore
     let rewards = contract
@@ -1039,10 +1058,31 @@ fn distribution() {
         .withdraw_rewards(validators[0].to_owned(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_withdraw_rewards(tx_id)
+        .call(users[0])
+        .unwrap();
 
     contract
         .withdraw_rewards(validators[1].to_owned(), remote[0].to_owned())
         .call(users[0])
+        .unwrap();
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_withdraw_rewards(tx_id)
+        .call(users[0])
+        .unwrap();
+
+    // Rollback on users[1]
+    contract
+        .withdraw_rewards(validators[0].to_owned(), "bad_value".to_owned())
+        .call(users[1])
+        .unwrap();
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_rollback_withdraw_rewards(tx_id)
+        .call(users[1])
         .unwrap();
 
     // Check withdrawals and accounts
@@ -1144,9 +1184,19 @@ fn distribution() {
         .withdraw_rewards(validators[0].to_string(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_withdraw_rewards(tx_id)
+        .call(users[0])
+        .unwrap();
 
     contract
         .withdraw_rewards(validators[1].to_string(), remote[0].to_owned())
+        .call(users[0])
+        .unwrap();
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
 
@@ -1154,10 +1204,20 @@ fn distribution() {
         .withdraw_rewards(validators[0].to_string(), remote[1].to_owned())
         .call(users[1])
         .unwrap();
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_withdraw_rewards(tx_id)
+        .call(users[0])
+        .unwrap();
 
     contract
         .withdraw_rewards(validators[1].to_string(), remote[1].to_owned())
         .call(users[1])
+        .unwrap();
+    let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
+    contract
+        .test_commit_withdraw_rewards(tx_id)
+        .call(users[0])
         .unwrap();
 
     // TODO: update to use IBC packet updates

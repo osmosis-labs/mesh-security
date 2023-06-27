@@ -34,10 +34,8 @@ pub enum ProviderPacket {
         rewards: Coin,
         /// A valid address on the consumer chain to receive these rewards
         recipient: String,
-        /// Staker and validator are only used to revert the tx on the provider side.
-        /// TODO: make a proper pending tx type and use a tx_id here
-        staker: String,
-        validator: String,
+        /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
+        tx_id: u64,
     },
 }
 
