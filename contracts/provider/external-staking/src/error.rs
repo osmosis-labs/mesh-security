@@ -33,8 +33,11 @@ pub enum ContractError {
     #[error("Not enough tokens released, up to {0} can be claimed")]
     NotEnoughRelease(Uint128),
 
-    #[error("Validator for user missmatch, {0} expected")]
+    #[error("Validator for user mismatch, {0} expected")]
     InvalidValidator(String),
+
+    #[error("Cannot stake to {0}, not listed as an active validator on consumer")]
+    ValidatorNotActive(String),
 
     #[error("Contract already has an open IBC channel")]
     IbcChannelAlreadyOpen,

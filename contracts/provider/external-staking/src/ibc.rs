@@ -12,12 +12,10 @@ use mesh_apis::ibc::{
     ConsumerPacket, ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
 };
 
-use crate::{
-    contract::ExternalStakingContract,
-    crdt::{CrdtState, ValUpdate},
-    error::ContractError,
-    msg::AuthorizedEndpoint,
-};
+use crate::contract::ExternalStakingContract;
+use crate::crdt::ValUpdate;
+use crate::error::ContractError;
+use crate::msg::AuthorizedEndpoint;
 
 /// This is the maximum version of the Mesh Security protocol that we support
 const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "1.0.0";
@@ -26,11 +24,7 @@ const MIN_IBC_PROTOCOL_VERSION: &str = "1.0.0";
 
 // IBC specific state
 pub const AUTH_ENDPOINT: Item<AuthorizedEndpoint> = Item::new("auth_endpoint");
-
-// TODO: expected endpoint
 pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
-
-pub const VAL_CRDT: CrdtState = CrdtState::new();
 
 // If we don't hear anything within 10 minutes, let's abort, for better UX
 // This is long enough to allow some clock drift between chains
@@ -127,6 +121,7 @@ pub fn ibc_packet_receive(
 ) -> Result<IbcReceiveResponse, ContractError> {
     // There is only one channel, so we don't need to switch.
     // We also don't care about packet sequence as this is fully commutative.
+    let contract = ExternalStakingContract::new();
     let packet: ConsumerPacket = from_slice(&msg.packet.data)?;
     let ack = match packet {
         ConsumerPacket::AddValidators(to_add) => {
@@ -142,13 +137,15 @@ pub fn ibc_packet_receive(
                     start_height,
                     start_time,
                 };
-                VAL_CRDT.add_validator(deps.storage, &valoper, update)?;
+                contract
+                    .val_set
+                    .add_validator(deps.storage, &valoper, update)?;
             }
             ack_success(&AddValidatorsAck {})?
         }
         ConsumerPacket::RemoveValidators(to_remove) => {
             for valoper in to_remove {
-                VAL_CRDT.remove_validator(deps.storage, &valoper)?;
+                contract.val_set.remove_validator(deps.storage, &valoper)?;
             }
             ack_success(&RemoveValidatorsAck {})?
         }
