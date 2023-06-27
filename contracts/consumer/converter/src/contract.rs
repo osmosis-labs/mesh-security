@@ -40,11 +40,11 @@ impl ConverterContract<'_> {
         }
     }
 
-    // TODO: there is a chicken and egg problem here.
-    // converter needs fixed address for virtual stake contract
-    // virtual stake contract needs fixed address for converter
-    // (Price feed can be made first and then converter second, that is no issue)
-    /// The caller of the instantiation will be the converter contract
+    /// We must first instantiate the price feed contract, then the converter contract.
+    /// The converter will then instantiate a virtual staking contract to work with it,
+    /// as they both need references to each other. The admin of the virtual staking
+    /// contract is taken as an explicit argument.
+    ///
     /// Discount is applied to foreign tokens after adjusting foreign/native price,
     /// such that 0.3 discount means foreign assets have 70% of their value
     #[msg(instantiate)]
@@ -58,12 +58,17 @@ impl ConverterContract<'_> {
         admin: Option<String>,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
+        // valdiate args
+        if discount > Decimal::one() {
+            return Err(ContractError::InvalidDiscount);
+        }
+        if remote_denom.is_empty() {
+            return Err(ContractError::InvalidDenom(remote_denom));
+        }
         let config = Config {
             price_feed: ctx.deps.api.addr_validate(&price_feed)?,
-            // TODO: better error if discount greater than 1 (this will panic)
             price_adjustment: Decimal::one() - discount,
             local_denom: ctx.deps.querier.query_bonded_denom()?,
-            // TODO: validation here? Just that it is non-empty?
             remote_denom,
         };
         self.config.save(ctx.deps.storage, &config)?;
