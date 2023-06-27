@@ -316,11 +316,7 @@ fn staking() {
 #[track_caller]
 fn get_last_external_staking_pending_tx_id(contract: &ExternalStakingContractProxy) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
-    txs.first().map(|tx| match tx {
-        Tx::InFlightStaking { id, .. } => *id,
-        Tx::InFlightRemoteStaking { id, .. } => *id,
-        Tx::InFlightRemoteUnstaking { id, .. } => *id,
-    })
+    txs.first().map(Tx::id)
 }
 
 #[test]
