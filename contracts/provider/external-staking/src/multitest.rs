@@ -1,6 +1,7 @@
 use anyhow::Result as AnyResult;
 
 use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal};
+use mesh_apis::ibc::AddValidator;
 use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::contract::multitest_utils::CodeId as NativeStakingProxyCodeId;
@@ -102,6 +103,15 @@ fn staking() {
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
+    // set these validators to be active
+    for val in validators {
+        let activate = AddValidator::mock(val);
+        contract
+            .test_set_active_validator(activate)
+            .call("test")
+            .unwrap();
+    }
+
     // Bond tokens
     vault
         .bond()
@@ -114,6 +124,23 @@ fn staking() {
         .with_funds(&coins(300, OSMO))
         .call(users[1])
         .unwrap();
+
+    /*
+    // Fail to stake on non-registered validator
+    let msg = to_binary(&ReceiveVirtualStake {
+        validator: "unknown".to_string(),
+    })
+    .unwrap();
+    println!("START");
+    // FIXME: Sylvia panics here, with this line in ExecProxy::call
+    //             .map_err(|err| err.downcast().unwrap())
+    // Note that the error didn't happen in vault, but in a SubMsg, so this should be some StdError not ContractError...
+    let res = vault
+        .stake_remote(contract.contract_addr.to_string(), coin(100, OSMO), msg)
+        .call(users[0]);
+    println!("GOT: {:?}", res);
+    assert!(res.is_err());
+    */
 
     // Perform couple stakes
     // users[0] stakes 200 on validators[0] in 2 batches
@@ -310,6 +337,15 @@ fn unstaking() {
     let validators = ["validator1", "validator2"];
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    // set these validators to be active
+    for val in validators {
+        let activate = AddValidator::mock(val);
+        contract
+            .test_set_active_validator(activate)
+            .call("test")
+            .unwrap();
+    }
 
     // Bond and stake tokens
     //
@@ -625,6 +661,15 @@ fn distribution() {
     let validators = ["validator1", "validator2"];
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    // set these validators to be active
+    for val in validators {
+        let activate = AddValidator::mock(val);
+        contract
+            .test_set_active_validator(activate)
+            .call("test")
+            .unwrap();
+    }
 
     // Bond and stake tokens
     //

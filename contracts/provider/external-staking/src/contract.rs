@@ -6,6 +6,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
 use cw_utils::must_pay;
 use mesh_apis::cross_staking_api::{self, CrossStakingApi};
+use mesh_apis::ibc::AddValidator;
 use mesh_apis::local_staking_api::MaxSlashResponse;
 use mesh_apis::vault_api::VaultApiHelper;
 use mesh_sync::Lockable;
@@ -241,6 +242,38 @@ impl ExternalStakingContract<'_> {
         #[cfg(not(test))]
         {
             let _ = (ctx, tx_id);
+            Err(ContractError::Unauthorized {})
+        }
+    }
+
+    /// Rollbacks a pending stake.
+    /// Method used for tests only.
+    #[msg(exec)]
+    fn test_set_active_validator(
+        &self,
+        ctx: ExecCtx,
+        validator: AddValidator,
+    ) -> Result<Response, ContractError> {
+        #[cfg(test)]
+        {
+            let AddValidator {
+                valoper,
+                pub_key,
+                start_height,
+                start_time,
+            } = validator;
+            let update = crate::crdt::ValUpdate {
+                pub_key,
+                start_height,
+                start_time,
+            };
+            self.val_set
+                .add_validator(ctx.deps.storage, &valoper, update)?;
+            Ok(Response::new())
+        }
+        #[cfg(not(test))]
+        {
+            let _ = (ctx, validator);
             Err(ContractError::Unauthorized {})
         }
     }
