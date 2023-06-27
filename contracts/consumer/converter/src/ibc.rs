@@ -185,9 +185,7 @@ pub fn ibc_packet_receive(
                 .add_attributes(response.attributes)
         }
         ProviderPacket::TransferRewards {
-            rewards,
-            recipient,
-            staker: _,
+            rewards, recipient, ..
         } => {
             let msg = contract.transfer_rewards(deps.as_ref(), recipient, rewards)?;
             let ack = ack_success(&TransferRewardsAck {})?;
