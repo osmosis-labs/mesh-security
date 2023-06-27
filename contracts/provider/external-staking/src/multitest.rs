@@ -66,7 +66,10 @@ fn setup<'app>(
 
 #[test]
 fn instantiate() {
-    let app = App::default();
+    let mt_app = cw_multi_test::AppBuilder::new()
+        .with_ibc(cw_multi_test::IbcAcceptingModule)
+        .build(|_, _, _| {});
+    let app = App::new(mt_app);
 
     let owner = "owner";
     let users = ["user1"];

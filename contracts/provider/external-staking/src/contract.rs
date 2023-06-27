@@ -11,11 +11,8 @@ use mesh_apis::vault_api::VaultApiHelper;
 use mesh_sync::Lockable;
 
 // IBC sending is disabled in tests...
-#[cfg(not(test))]
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
-#[cfg(not(test))]
 use cosmwasm_std::{to_binary, IbcMsg};
-#[cfg(not(test))]
 use mesh_apis::ibc::ProviderPacket;
 
 use sylvia::contract;
@@ -102,6 +99,17 @@ impl ExternalStakingContract<'_> {
 
         remote_contact.validate()?;
         crate::ibc::AUTH_ENDPOINT.save(ctx.deps.storage, &remote_contact)?;
+
+        #[cfg(test)]
+        {
+            // we set this up, so we can run normal logic to send ibc msg in test code (that has no ibc handshake)
+            let channel = cosmwasm_std::testing::mock_ibc_channel(
+                "channel-172",
+                cosmwasm_std::IbcOrder::Unordered,
+                "VERSION",
+            );
+            IBC_CHANNEL.save(ctx.deps.storage, &channel)?;
+        }
 
         Ok(Response::new())
     }
@@ -292,27 +300,22 @@ impl ExternalStakingContract<'_> {
 
         let mut resp = Response::new()
             .add_attribute("action", "unstake")
-            .add_attribute("amount", amount.amount.to_string());
+            .add_attribute("amount", amount.amount.to_string())
+            .add_attribute("owner", ctx.info.sender);
 
-        // add ibc packet if we are ibc enabled (skip in tests)
-        #[cfg(not(test))]
-        {
-            let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
-            let packet = ProviderPacket::Unstake {
-                validator,
-                unstake: amount,
-                tx_id,
-            };
-            let msg = IbcMsg::SendPacket {
-                channel_id: channel.endpoint.channel_id,
-                data: to_binary(&packet)?,
-                timeout: packet_timeout(&ctx.env),
-            };
-            resp = resp.add_message(msg);
-        }
-
-        // put this later so compiler doens't complain about mut in test mode
-        resp = resp.add_attribute("owner", ctx.info.sender);
+        // send ibc packet to unstake (msg ignored in tests)
+        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+        let packet = ProviderPacket::Unstake {
+            validator,
+            unstake: amount,
+            tx_id,
+        };
+        let msg = IbcMsg::SendPacket {
+            channel_id: channel.endpoint.channel_id,
+            data: to_binary(&packet)?,
+            timeout: packet_timeout(&ctx.env),
+        };
+        resp = resp.add_message(msg);
 
         Ok(resp)
     }
@@ -594,7 +597,6 @@ impl ExternalStakingContract<'_> {
 
         let amount = Self::calculate_reward(stake, &distribution)?;
 
-        #[allow(clippy::needless_borrow)]
         let mut resp = Response::new()
             .add_attribute("action", "withdraw_rewards")
             .add_attribute("owner", ctx.info.sender.to_string())
@@ -611,35 +613,23 @@ impl ExternalStakingContract<'_> {
                 &stake_lock,
             )?;
 
-            #[cfg(not(test))]
-            {
-                let config = self.config.load(ctx.deps.storage)?;
-                let rewards = coin(amount.u128(), config.rewards_denom);
-                // Send IBC Packet over the wire
-                let packet = ProviderPacket::TransferRewards {
-                    rewards,
-                    recipient: remote_recipient,
-                    staker: ctx.info.sender.into(),
-                    validator,
-                };
+            let config = self.config.load(ctx.deps.storage)?;
+            let rewards = coin(amount.u128(), config.rewards_denom);
+            // Send IBC Packet over the wire
+            let packet = ProviderPacket::TransferRewards {
+                rewards,
+                recipient: remote_recipient,
+                staker: ctx.info.sender.into(),
+                validator,
+            };
 
-                // TODO: error on None (use load) once we have better test setup
-                let channel_id = IBC_CHANNEL
-                    .may_load(ctx.deps.storage)?
-                    .map(|ch| ch.endpoint.channel_id)
-                    .unwrap_or_else(|| "channel-72".to_string());
-                let send_msg = IbcMsg::SendPacket {
-                    channel_id,
-                    data: to_binary(&packet)?,
-                    timeout: packet_timeout(&ctx.env),
-                };
-                resp = resp.add_message(send_msg);
-            }
-            #[cfg(test)]
-            {
-                // just to avoid clippy complaint about mut above
-                resp = resp.add_attribute("test", "test");
-            }
+            let channel_id = IBC_CHANNEL.load(ctx.deps.storage)?.endpoint.channel_id;
+            let send_msg = IbcMsg::SendPacket {
+                channel_id,
+                data: to_binary(&packet)?,
+                timeout: packet_timeout(&ctx.env),
+            };
+            resp = resp.add_message(send_msg);
         }
 
         Ok(resp)
