@@ -14,7 +14,7 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
-use crate::ibc::{packet_timeout, IBC_CHANNEL};
+use crate::ibc::{packet_timeout_rewards, IBC_CHANNEL};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -269,15 +269,19 @@ impl ConverterApi for ConverterContract<'_> {
     /// Rewards tokens (in native staking denom) are sent alongside the message, and should be distributed to all
     /// stakers who staked on this validator. This is tracked on the provider, so we send an IBC packet there.
     #[msg(exec)]
-    fn distribute_reward(&self, ctx: ExecCtx, validator: String) -> Result<Response, Self::Error> {
+    fn distribute_reward(
+        &self,
+        mut ctx: ExecCtx,
+        validator: String,
+    ) -> Result<Response, Self::Error> {
         let config = self.config.load(ctx.deps.storage)?;
         let denom = config.local_denom;
-        let amount = must_pay(&ctx.info, &denom)?;
-        let rewards = Coin { denom, amount };
+        must_pay(&ctx.info, &denom)?;
+        let rewards = ctx.info.funds.remove(0);
 
         let event = Event::new("distribute_reward")
             .add_attribute("validator", &validator)
-            .add_attribute("amount", amount.to_string());
+            .add_attribute("amount", rewards.amount.to_string());
 
         // Create a packet for the provider, informing of distribution
         let packet = ConsumerPacket::Distribute { validator, rewards };
@@ -285,13 +289,13 @@ impl ConverterApi for ConverterContract<'_> {
         let msg = IbcMsg::SendPacket {
             channel_id: channel.endpoint.channel_id,
             data: to_binary(&packet)?,
-            timeout: packet_timeout(&ctx.env),
+            timeout: packet_timeout_rewards(&ctx.env),
         };
 
         Ok(Response::new().add_message(msg).add_event(event))
     }
 
-    /// This is a batch for of distribute_reward, including the payment for multiple validators.
+    /// This is a batch form of distribute_reward, including the payment for multiple validators.
     /// This is more efficient than calling distribute_reward multiple times, but also more complex.
     ///
     /// info.funds sent along with the message should be the sum of all rewards for all validators,
