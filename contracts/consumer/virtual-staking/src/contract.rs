@@ -139,10 +139,12 @@ impl VirtualStakingContract<'_> {
         match (reply.id, reply.result.into_result()) {
             (REPLY_REWARDS_ID, Ok(result)) => self.reply_rewards(ctx.deps, ctx.env, result),
             (REPLY_REWARDS_ID, Err(e)) => {
+                // We need to pop the REWARD_TARGETS so it doesn't get out of sync
+                let target = pop_target(ctx.deps)?;
                 // Ignore errors, so the rest doesn't fail, but report them.
-                let evt = Event::new("rewards_error").add_attribute("error", e);
-                // We also need to pop the REWARD_TARGETS so it doesn't get out of sync
-                let _ = pop_target(ctx.deps)?;
+                let evt = Event::new("rewards_error")
+                    .add_attribute("error", e)
+                    .add_attribute("target", target);
                 Ok(Response::new().add_event(evt))
             }
             (id, _) => Err(ContractError::InvalidReplyId(id)),

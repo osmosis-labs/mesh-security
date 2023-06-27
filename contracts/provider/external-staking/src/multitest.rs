@@ -756,14 +756,14 @@ fn distribution() {
     // 20 tokens for users[0]
     // 30 tokens for users[1]
     contract
-        .distribute_rewards(validators[0].to_owned(), coin(50, STAR))
+        .test_distribute_rewards(validators[0].to_owned(), coin(50, STAR))
         .call(owner)
         .unwrap();
 
     // Only users[0] stakes on validators[1]
     // 30 tokens for users[0]
     contract
-        .distribute_rewards(validators[1].to_owned(), coin(30, STAR))
+        .test_distribute_rewards(validators[1].to_owned(), coin(30, STAR))
         .call(owner)
         .unwrap();
 
@@ -819,13 +819,13 @@ fn distribution() {
     // 42 tokens for users[1]
     // 1 token is not distributed
     contract
-        .distribute_rewards(validators[0].to_owned(), coin(71, STAR))
+        .test_distribute_rewards(validators[0].to_owned(), coin(71, STAR))
         .call(owner)
         .unwrap();
 
     // Distribution in invalid coin should fail
     contract
-        .distribute_rewards(validators[1].to_owned(), coin(100, OSMO))
+        .test_distribute_rewards(validators[1].to_owned(), coin(100, OSMO))
         .call(owner)
         .unwrap_err();
 
@@ -922,7 +922,7 @@ fn distribution() {
     //
     // The additional 1 token is leftover after previous allocation
     contract
-        .distribute_rewards(validators[0].to_owned(), coin(9, STAR))
+        .test_distribute_rewards(validators[0].to_owned(), coin(9, STAR))
         .call(owner)
         .unwrap();
 
@@ -942,7 +942,7 @@ fn distribution() {
     // 4 on users[0] (+ ~0.4)
     // 6 on users[1] (+ ~0.6)
     contract
-        .distribute_rewards(validators[0].to_owned(), coin(11, STAR))
+        .test_distribute_rewards(validators[0].to_owned(), coin(11, STAR))
         .call(owner)
         .unwrap();
 
@@ -950,7 +950,7 @@ fn distribution() {
     //
     // 11 on users[0]
     contract
-        .distribute_rewards(validators[1].to_owned(), coin(11, STAR))
+        .test_distribute_rewards(validators[1].to_owned(), coin(11, STAR))
         .call(owner)
         .unwrap();
 
@@ -1015,7 +1015,7 @@ fn distribution() {
     // 10 on users[0] (~0.4 still not distributed)
     // 10 on users[1] (~0.6 still not distributed)
     contract
-        .distribute_rewards(validators[0].to_owned(), coin(20, STAR))
+        .test_distribute_rewards(validators[0].to_owned(), coin(20, STAR))
         .call(owner)
         .unwrap();
 
@@ -1023,7 +1023,7 @@ fn distribution() {
     // 10 on users[1]
     // 30 on users[2]
     contract
-        .distribute_rewards(validators[1].to_owned(), coin(40, STAR))
+        .test_distribute_rewards(validators[1].to_owned(), coin(40, STAR))
         .call(owner)
         .unwrap();
 
@@ -1054,7 +1054,7 @@ fn distribution() {
     // 3 for users[1] (+ ~0.5 from this distribution + ~0.6 accumulated -> ~1.1 tokens, we give one
     //   back leaving ~0.1 accumulated)
     contract
-        .distribute_rewards(validators[0].to_owned(), coin(5, STAR))
+        .test_distribute_rewards(validators[0].to_owned(), coin(5, STAR))
         .call(owner)
         .unwrap();
 
@@ -1102,7 +1102,7 @@ fn distribution() {
     // 7 + 1 = 8 to users[0] (~0.9 accumulated + ~0.2 = ~1.1 leftover, 1.0 payed back, ~0.1 accumulated)
     // 4 to users[0] (~0.1 accumulated + ~0.8 -> leaving at ~0.9)
     contract
-        .distribute_rewards(validators[0].to_owned(), coin(12, STAR))
+        .test_distribute_rewards(validators[0].to_owned(), coin(12, STAR))
         .call(owner)
         .unwrap();
 
@@ -1191,12 +1191,12 @@ fn distribution() {
     // 2 tokens to users[0] via validators[1] (~0.5 leftover)
     // 7 tokens to users[1] via validators[1] (~0.5 lefover)
     contract
-        .distribute_rewards(validators[0].to_owned(), coin(10, STAR))
+        .test_distribute_rewards(validators[0].to_owned(), coin(10, STAR))
         .call(owner)
         .unwrap();
 
     contract
-        .distribute_rewards(validators[1].to_owned(), coin(10, STAR))
+        .test_distribute_rewards(validators[1].to_owned(), coin(10, STAR))
         .call(owner)
         .unwrap();
 

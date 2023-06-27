@@ -555,7 +555,7 @@ impl ExternalStakingContract<'_> {
     }
 
     #[msg(exec)]
-    pub fn distribute_rewards(
+    pub fn test_distribute_rewards(
         &self,
         ctx: ExecCtx,
         validator: String,
@@ -563,7 +563,7 @@ impl ExternalStakingContract<'_> {
     ) -> Result<Response, ContractError> {
         #[cfg(test)]
         {
-            let event = self.do_distribute_rewards(ctx.deps, validator, rewards)?;
+            let event = self.distribute_rewards(ctx.deps, validator, rewards)?;
             Ok(Response::new().add_event(event))
         }
         #[cfg(not(test))]
@@ -575,8 +575,8 @@ impl ExternalStakingContract<'_> {
 
     /// Distributes reward among users staking via particular validator. Distribution is performed
     /// proportionally to amount of tokens staked by user.
-    /// This is called by IBC packets in real code, but also exposed in a test only message "distribute_rewards"
-    pub(crate) fn do_distribute_rewards(
+    /// This is called by IBC packets in real code, but also exposed in a test only message "test_distribute_rewards"
+    pub(crate) fn distribute_rewards(
         &self,
         deps: DepsMut,
         validator: String,
