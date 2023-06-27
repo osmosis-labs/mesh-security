@@ -42,7 +42,7 @@ This is such an edge case on which side of the epoch they fall, and both decisio
 However, in order to favor the approach of database consistency, we will use the "read committed" approach, and only count rewards
 after a successful ACK.
 
-## Proposed Implementations
+## Possible Implementations
 
 As mentioned above, the general protocol design supports multiple bridges,
 and the external staking contract need not be aware of the bridge used.
@@ -133,3 +133,23 @@ packets over multiple channels.
 The biggest question is whether the functionality change is acceptable (or even desirable). Note that this will make restaking the
 reward tokens easier, while making selling them on the provider chain harder. This may be a good thing (in the eyes of the
 consumer chain at least), as it encourages longer-term holders.
+
+## Selected Implementation
+
+To reduce external dependencies and to encourage restaking of the consumer staking rewards,
+we are selecting the last option for MVP, adding one more message to the control channel.
+This is part of the `mesh-security 1.0.0` IBC implementation. If there is a change in the reward distribution mechanism, it would likely be breaking and would bump the IBC protocol to v2.0.0.
+
+This involves two new packet variants, one on each side. The Consumer side has a new variant
+`ConsumerPacket::DistributeRewards { validator, rewards }`, which specifies the reward `Coin`
+that should be distributed among all stakers on the given validators. It is up to the
+`external-staking` contract to determine how to release it, but the `converter` contract
+must guarantee to hold `rewards` tokens in reserve to be released by future IBC packets
+on this channel.
+
+The provider side has a new variant `ProviderPacket::TransferFunds {}` which specifies the
+among and the recipient address on the consumer chain. If the converter contract hold those
+tokens in reserve (always in the case of a correct provider chain), it must release
+them to the given address. The consumer chain must be designed to handle rollbacks here
+on any error (especially due to invalid recipient address that cannot be validated on the
+provider side).
