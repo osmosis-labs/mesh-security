@@ -202,21 +202,12 @@ pub fn ibc_packet_ack(
                 .add_attribute("error", e)
                 .add_attribute("tx_id", tx_id.to_string());
         }
-        (ProviderPacket::TransferRewards { .. }, AckWrapper::Result(_)) => {
-            // do nothing, funds already transferred
+        (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Result(_)) => {
+            // Any events to add?
+            contract.commit_withdraw_rewards(deps, tx_id)?;
         }
-        (
-            ProviderPacket::TransferRewards {
-                rewards,
-                staker,
-                validator,
-                ..
-            },
-            AckWrapper::Error(e),
-        ) => {
-            let staker = deps.api.addr_validate(&staker)?;
-            contract.unwithdraw_rewards(deps, &staker, &validator, rewards.amount)?;
-            let _ = (rewards, staker);
+        (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Error(e)) => {
+            contract.rollback_withdraw_rewards(deps, tx_id)?;
             resp = resp
                 .add_attribute("error", e)
                 .add_attribute("packet", msg.original_packet.sequence.to_string());
@@ -256,18 +247,9 @@ pub fn ibc_packet_timeout(
             contract.rollback_unstake(deps, tx_id)?;
             resp = resp.add_attribute("tx_id", tx_id.to_string());
         }
-        ProviderPacket::TransferRewards {
-            rewards,
-            staker,
-            validator,
-            ..
-        } => {
-            // rollback the transfer by reducing the withdrawn amount for this staker
-            let staker = deps.api.addr_validate(&staker)?;
-            contract.unwithdraw_rewards(deps, &staker, &validator, rewards.amount)?;
-            let _ = (rewards, staker);
-            resp = resp.add_attribute("packet", msg.packet.sequence.to_string());
-            resp = resp.add_attribute("packet", msg.packet.sequence.to_string());
+        ProviderPacket::TransferRewards { tx_id, .. } => {
+            contract.rollback_withdraw_rewards(deps, tx_id)?;
+            resp = resp.add_attribute("tx_id", tx_id.to_string());
         }
     };
     Ok(resp)

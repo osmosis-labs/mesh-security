@@ -12,12 +12,8 @@ use mesh_apis::vault_api::VaultApiHelper;
 use mesh_sync::Lockable;
 
 use crate::crdt::CrdtState;
-// IBC sending is disabled in tests...
-#[cfg(not(test))]
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
-#[cfg(not(test))]
 use cosmwasm_std::{to_binary, IbcMsg};
-#[cfg(not(test))]
 use mesh_apis::ibc::ProviderPacket;
 
 use sylvia::contract;
@@ -113,6 +109,17 @@ impl ExternalStakingContract<'_> {
 
         remote_contact.validate()?;
         crate::ibc::AUTH_ENDPOINT.save(ctx.deps.storage, &remote_contact)?;
+
+        // test code sets a channel, so we can closer approximate ibc in test code
+        #[cfg(test)]
+        {
+            let channel = cosmwasm_std::testing::mock_ibc_channel(
+                "channel-172",
+                cosmwasm_std::IbcOrder::Unordered,
+                "mesh-security",
+            );
+            crate::ibc::IBC_CHANNEL.save(ctx.deps.storage, &channel)?;
+        }
 
         Ok(Response::new())
     }
@@ -628,7 +635,7 @@ impl ExternalStakingContract<'_> {
             .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
             .unwrap_or_default();
 
-        let stake = stake_lock.write()?;
+        let stake = stake_lock.read()?;
 
         let distribution = self
             .distribution
@@ -637,8 +644,11 @@ impl ExternalStakingContract<'_> {
 
         let amount = Self::calculate_reward(stake, &distribution)?;
 
+        if amount.is_zero() {
+            return Err(ContractError::NoRewards);
+        }
+
         #[allow(unused_mut)]
-        #[allow(clippy::needless_borrow)]
         let mut resp = Response::new()
             .add_attribute("action", "withdraw_rewards")
             .add_attribute("owner", ctx.info.sender.to_string())
@@ -646,52 +656,149 @@ impl ExternalStakingContract<'_> {
             .add_attribute("recipient", &remote_recipient)
             .add_attribute("amount", amount.to_string());
 
-        if !amount.is_zero() {
-            stake.withdrawn_funds += amount;
+        // lock the stake. the withdrawn_funds will be updated on a commit,
+        // left unchanged on rollback
+        stake_lock.lock_write()?;
+        self.stakes.save(
+            ctx.deps.storage,
+            (&ctx.info.sender, &validator),
+            &stake_lock,
+        )?;
 
-            self.stakes.save(
-                ctx.deps.storage,
-                (&ctx.info.sender, &validator),
-                &stake_lock,
-            )?;
+        // prepare the pending tx
+        let tx_id = self.next_tx_id(ctx.deps.storage)?;
+        let new_tx = Tx::InFlightTransferFunds {
+            id: tx_id,
+            amount,
+            staker: ctx.info.sender,
+            validator,
+        };
+        self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
 
-            #[cfg(not(test))]
-            {
-                let config = self.config.load(ctx.deps.storage)?;
-                let rewards = coin(amount.u128(), config.rewards_denom);
-                // Send IBC Packet over the wire
-                let packet = ProviderPacket::TransferRewards {
-                    rewards,
-                    recipient: remote_recipient,
-                    staker: ctx.info.sender.into(),
-                    validator,
-                };
+        // Crate the IBC packet
+        let config = self.config.load(ctx.deps.storage)?;
+        let rewards = coin(amount.u128(), config.rewards_denom);
+        let packet = ProviderPacket::TransferRewards {
+            rewards,
+            recipient: remote_recipient,
+            tx_id,
+        };
+        let channel_id = IBC_CHANNEL.load(ctx.deps.storage)?.endpoint.channel_id;
+        let send_msg = IbcMsg::SendPacket {
+            channel_id,
+            data: to_binary(&packet)?,
+            timeout: packet_timeout(&ctx.env),
+        };
 
-                let channel_id = IBC_CHANNEL.load(ctx.deps.storage)?.endpoint.channel_id;
-                let send_msg = IbcMsg::SendPacket {
-                    channel_id,
-                    data: to_binary(&packet)?,
-                    timeout: packet_timeout(&ctx.env),
-                };
-                resp = resp.add_message(send_msg);
-            }
+        // TODO: send in test code when we can handle it
+        #[cfg(not(test))]
+        {
+            resp = resp.add_message(send_msg);
+        }
+        #[cfg(test)]
+        {
+            let _ = send_msg;
         }
 
         Ok(resp)
     }
 
-    pub(crate) fn unwithdraw_rewards(
+    #[msg(exec)]
+    fn test_commit_withdraw_rewards(
+        &self,
+        ctx: ExecCtx,
+        tx_id: u64,
+    ) -> Result<Response, ContractError> {
+        #[cfg(test)]
+        {
+            self.commit_withdraw_rewards(ctx.deps, tx_id)?;
+            Ok(Response::new())
+        }
+        #[cfg(not(test))]
+        {
+            let _ = (ctx, tx_id);
+            Err(ContractError::Unauthorized {})
+        }
+    }
+
+    #[msg(exec)]
+    fn test_rollback_withdraw_rewards(
+        &self,
+        ctx: ExecCtx,
+        tx_id: u64,
+    ) -> Result<Response, ContractError> {
+        #[cfg(test)]
+        {
+            self.rollback_withdraw_rewards(ctx.deps, tx_id)?;
+            Ok(Response::new())
+        }
+        #[cfg(not(test))]
+        {
+            let _ = (ctx, tx_id);
+            Err(ContractError::Unauthorized {})
+        }
+    }
+
+    pub(crate) fn rollback_withdraw_rewards(
         &self,
         deps: DepsMut,
-        sender: &Addr,
-        validator: &str,
-        amount: Uint128,
+        tx_id: u64,
     ) -> Result<(), ContractError> {
-        let mut stake_lock = self.stakes.load(deps.storage, (sender, validator))?;
+        // Load tx
+        let tx = self.pending_txs.load(deps.storage, tx_id)?;
+        self.pending_txs.remove(deps.storage, tx_id);
+
+        // Verify tx is of the right type and get data
+        let (_amount, staker, validator) = match tx {
+            Tx::InFlightTransferFunds {
+                amount,
+                staker,
+                validator,
+                ..
+            } => (amount, staker, validator),
+            _ => {
+                return Err(ContractError::WrongTypeTx(tx_id, tx));
+            }
+        };
+
+        // release the write lock and leave state unchanged
+        let mut stake_lock = self.stakes.load(deps.storage, (&staker, &validator))?;
+        stake_lock.unlock_write()?;
+        self.stakes
+            .save(deps.storage, (&staker, &validator), &stake_lock)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn commit_withdraw_rewards(
+        &self,
+        deps: DepsMut,
+        tx_id: u64,
+    ) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending_txs.load(deps.storage, tx_id)?;
+        self.pending_txs.remove(deps.storage, tx_id);
+
+        // Verify tx is of the right type and get data
+        let (amount, staker, validator) = match tx {
+            Tx::InFlightTransferFunds {
+                amount,
+                staker,
+                validator,
+                ..
+            } => (amount, staker, validator),
+            _ => {
+                return Err(ContractError::WrongTypeTx(tx_id, tx));
+            }
+        };
+
+        // release the write lock and update withdrawn_funds to hold this transfer
+        let mut stake_lock = self.stakes.load(deps.storage, (&staker, &validator))?;
+        stake_lock.unlock_write()?;
         let stake = stake_lock.write()?;
         stake.withdrawn_funds += amount;
         self.stakes
-            .save(deps.storage, (sender, validator), &stake_lock)?;
+            .save(deps.storage, (&staker, &validator), &stake_lock)?;
 
         Ok(())
     }
