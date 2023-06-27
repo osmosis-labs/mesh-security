@@ -78,6 +78,17 @@ pub struct AddValidator {
     pub start_time: u64,
 }
 
+impl AddValidator {
+    pub fn mock(valoper: &str) -> Self {
+        Self {
+            valoper: valoper.to_string(),
+            pub_key: "mock-pubkey".to_string(),
+            start_height: 12345,
+            start_time: 1687357499,
+        }
+    }
+}
+
 /// Ack sent for ConsumerPacket::AddValidators
 #[cw_serde]
 pub struct AddValidatorsAck {}

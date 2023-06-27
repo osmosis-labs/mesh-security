@@ -6,10 +6,12 @@ use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
 use cw_utils::must_pay;
 use mesh_apis::cross_staking_api::{self, CrossStakingApi};
+use mesh_apis::ibc::AddValidator;
 use mesh_apis::local_staking_api::MaxSlashResponse;
 use mesh_apis::vault_api::VaultApiHelper;
 use mesh_sync::Lockable;
 
+use crate::crdt::CrdtState;
 // IBC sending is disabled in tests...
 #[cfg(not(test))]
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
@@ -22,7 +24,6 @@ use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use crate::error::ContractError;
-use crate::ibc::VAL_CRDT;
 use crate::msg::{
     AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse, IbcChannelResponse,
     ListRemoteValidatorsResponse, PendingRewards, ReceiveVirtualStake, StakeInfo, StakesResponse,
@@ -53,6 +54,8 @@ pub struct ExternalStakingContract<'a> {
     /// Pending txs information
     pub tx_count: Item<'a, u64>,
     pub pending_txs: Map<'a, u64, Tx>,
+    /// Valset CRDT
+    pub val_set: CrdtState<'a>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -67,6 +70,7 @@ impl ExternalStakingContract<'_> {
             distribution: Map::new("distribution"),
             pending_txs: Map::new("pending_txs"),
             tx_count: Item::new("tx_count"),
+            val_set: CrdtState::new(),
         }
     }
 
@@ -238,6 +242,38 @@ impl ExternalStakingContract<'_> {
         #[cfg(not(test))]
         {
             let _ = (ctx, tx_id);
+            Err(ContractError::Unauthorized {})
+        }
+    }
+
+    /// Rollbacks a pending stake.
+    /// Method used for tests only.
+    #[msg(exec)]
+    fn test_set_active_validator(
+        &self,
+        ctx: ExecCtx,
+        validator: AddValidator,
+    ) -> Result<Response, ContractError> {
+        #[cfg(test)]
+        {
+            let AddValidator {
+                valoper,
+                pub_key,
+                start_height,
+                start_time,
+            } = validator;
+            let update = crate::crdt::ValUpdate {
+                pub_key,
+                start_height,
+                start_time,
+            };
+            self.val_set
+                .add_validator(ctx.deps.storage, &valoper, update)?;
+            Ok(Response::new())
+        }
+        #[cfg(not(test))]
+        {
+            let _ = (ctx, validator);
             Err(ContractError::Unauthorized {})
         }
     }
@@ -629,7 +665,8 @@ impl ExternalStakingContract<'_> {
     ) -> Result<ListRemoteValidatorsResponse, ContractError> {
         let limit = limit.unwrap_or(100) as usize;
         let validators =
-            VAL_CRDT.list_active_validators(ctx.deps.storage, start_after.as_deref(), limit)?;
+            self.val_set
+                .list_active_validators(ctx.deps.storage, start_after.as_deref(), limit)?;
         Ok(ListRemoteValidatorsResponse { validators })
     }
 
@@ -796,6 +833,7 @@ pub mod cross_staking {
             let config = self.config.load(ctx.deps.storage)?;
             ensure_eq!(ctx.info.sender, config.vault.0, ContractError::Unauthorized);
 
+            // sending proper denom
             ensure_eq!(
                 amount.denom,
                 config.denom,
@@ -804,7 +842,14 @@ pub mod cross_staking {
 
             let owner = ctx.deps.api.addr_validate(&owner)?;
 
+            // parse and validate message
             let msg: ReceiveVirtualStake = from_binary(&msg)?;
+            if !self
+                .val_set
+                .is_active_validator(ctx.deps.storage, &msg.validator)?
+            {
+                return Err(ContractError::ValidatorNotActive(msg.validator));
+            }
             let mut stake_lock = self
                 .stakes
                 .may_load(ctx.deps.storage, (&owner, &msg.validator))?
