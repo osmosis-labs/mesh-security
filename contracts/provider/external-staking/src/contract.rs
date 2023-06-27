@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     coin, coins, ensure, ensure_eq, from_binary, Addr, BankMsg, Binary, Coin, Decimal, DepsMut,
-    Env, Order, Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
+    Env, Order, Response, StdError, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -25,9 +25,9 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use crate::error::ContractError;
 use crate::msg::{
-    AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse, IbcChannelResponse,
-    ListRemoteValidatorsResponse, PendingRewards, ReceiveVirtualStake, StakeInfo, StakesResponse,
-    TxResponse,
+    AllPendingRewards, AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse,
+    IbcChannelResponse, ListRemoteValidatorsResponse, PendingRewards, ReceiveVirtualStake,
+    StakeInfo, StakesResponse, TxResponse, ValidatorPendingReward,
 };
 use crate::state::{Config, Distribution, Stake};
 use mesh_sync::Tx;
@@ -793,6 +793,46 @@ impl ExternalStakingContract<'_> {
         Ok(resp)
     }
 
+    /// Returns how much rewards are to be withdrawn by particular user, iterating over all validators.
+    /// This is like stakes is to stake query, but for rewards.
+    #[msg(query)]
+    pub fn all_pending_rewards(
+        &self,
+        ctx: QueryCtx,
+        user: String,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<AllPendingRewards, ContractError> {
+        let limit: usize = clamp_page_limit(limit);
+        let user = ctx.deps.api.addr_validate(&user)?;
+
+        let bound = start_after.as_deref().and_then(Bounder::exclusive_bound);
+
+        let config = self.config.load(ctx.deps.storage)?;
+
+        let rewards: Vec<_> = self
+            .stakes
+            .prefix(&user)
+            .range(ctx.deps.storage, bound, None, Order::Ascending)
+            .take(limit)
+            .map(|item| {
+                let (validator, stake_lock) = item?;
+                let stake = stake_lock.read()?;
+                let distribution = self
+                    .distribution
+                    .may_load(ctx.deps.storage, &validator)?
+                    .unwrap_or_default();
+                let amount = Self::calculate_reward(stake, &distribution)?;
+                Ok::<_, ContractError>(ValidatorPendingReward {
+                    validator,
+                    amount: coin(amount.u128(), &config.rewards_denom),
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(AllPendingRewards { rewards })
+    }
+
     /// Calculates reward for the user basing on the `Stake` he want to withdraw rewards from, and
     /// the corresponding validator `Distribution`.
     //
@@ -800,10 +840,7 @@ impl ExternalStakingContract<'_> {
     // could be enforced by taking user and validator in arguments, then fetching data, but
     // sometimes data are used also for different calculations so we want to avoid double
     // fetching.
-    fn calculate_reward(
-        stake: &Stake,
-        distribution: &Distribution,
-    ) -> Result<Uint128, ContractError> {
+    fn calculate_reward(stake: &Stake, distribution: &Distribution) -> Result<Uint128, StdError> {
         let points = distribution.points_per_stake * Uint256::from(stake.stake);
 
         let points = stake.points_alignment.align(points);

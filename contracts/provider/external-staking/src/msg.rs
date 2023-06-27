@@ -89,10 +89,22 @@ pub struct UsersResponse {
     pub users: Vec<UserInfo>,
 }
 
-/// Response for penging rewards query
+/// Response for pending rewards query on one validator
 #[cw_serde]
 pub struct PendingRewards {
     pub amount: Coin,
+}
+
+/// Response for pending rewards query on one validator
+#[cw_serde]
+pub struct AllPendingRewards {
+    pub rewards: Vec<ValidatorPendingReward>,
+}
+
+#[cw_serde]
+pub struct ValidatorPendingReward {
+    pub amount: Coin,
+    pub validator: String,
 }
 
 pub type TxResponse = mesh_sync::Tx;
