@@ -17,9 +17,9 @@ use mesh_apis::ibc::{
 use crate::{contract::ConverterContract, error::ContractError};
 
 /// This is the maximum version of the Mesh Security protocol that we support
-const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "1.0.0";
+const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.10.0";
 /// This is the minimum version that we are compatible with
-const MIN_IBC_PROTOCOL_VERSION: &str = "1.0.0";
+const MIN_IBC_PROTOCOL_VERSION: &str = "0.10.0";
 
 // IBC specific state
 const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
