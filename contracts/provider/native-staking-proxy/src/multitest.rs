@@ -68,6 +68,7 @@ fn setup<'app>(
         msg: to_binary(&mesh_native_staking::contract::InstantiateMsg {
             denom: OSMO.to_owned(),
             proxy_code_id: staking_proxy_code.code_id(),
+            max_slashing: Decimal::percent(5),
         })
         .unwrap(),
         label: None,

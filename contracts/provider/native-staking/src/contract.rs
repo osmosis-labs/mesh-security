@@ -1,4 +1,4 @@
-use cosmwasm_std::{from_slice, Addr, DepsMut, Reply, Response, SubMsgResponse};
+use cosmwasm_std::{from_slice, Addr, Decimal, DepsMut, Reply, Response, SubMsgResponse};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
@@ -17,9 +17,6 @@ pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const REPLY_ID_INSTANTIATE: u64 = 2;
-
-// TODO: Hardcoded for now. Revisit for v1.
-pub const MAX_SLASH_PERCENTAGE: u64 = 10;
 
 pub struct NativeStakingContract<'a> {
     pub config: Item<'a, Config>,
@@ -50,11 +47,17 @@ impl NativeStakingContract<'_> {
         ctx: InstantiateCtx,
         denom: String,
         proxy_code_id: u64,
+        max_slashing: Decimal,
     ) -> Result<Response, ContractError> {
+        if max_slashing > Decimal::one() {
+            return Err(ContractError::InvalidMaxSlashing);
+        }
+
         let config = Config {
             denom,
             proxy_code_id,
             vault: ctx.info.sender,
+            max_slashing,
         };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;

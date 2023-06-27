@@ -907,11 +907,10 @@ pub mod cross_staking {
 
         #[msg(query)]
         fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
-            let Config {
-                max_slashing: max_slash,
-                ..
-            } = self.config.load(ctx.deps.storage)?;
-            Ok(MaxSlashResponse { max_slash })
+            let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
+            Ok(MaxSlashResponse {
+                max_slash: max_slashing,
+            })
         }
     }
 }

@@ -39,6 +39,7 @@ fn setup<'app>(
     let native_staking_instantiate = NativeStakingInstantiateMsg {
         denom: OSMO.to_owned(),
         proxy_code_id: native_staking_proxy_code.code_id(),
+        max_slashing: Decimal::percent(5),
     };
 
     let staking_init = StakingInitInfo {

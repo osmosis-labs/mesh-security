@@ -1,4 +1,4 @@
-use cosmwasm_std::{ensure_eq, from_slice, to_binary, Binary, Decimal, Response, SubMsg, WasmMsg};
+use cosmwasm_std::{ensure_eq, from_slice, to_binary, Binary, Response, SubMsg, WasmMsg};
 use cw_utils::must_pay;
 use sylvia::types::QueryCtx;
 use sylvia::{contract, types::ExecCtx};
@@ -6,12 +6,13 @@ use sylvia::{contract, types::ExecCtx};
 #[allow(unused_imports)]
 use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
 
-use crate::contract::{NativeStakingContract, MAX_SLASH_PERCENTAGE, REPLY_ID_INSTANTIATE};
+use crate::contract::{NativeStakingContract, REPLY_ID_INSTANTIATE};
 use crate::error::ContractError;
 use crate::msg::StakeMsg;
 
 // FIXME: Move to sylvia contract macro
 use crate::contract::BoundQuerier;
+use crate::state::Config;
 
 #[contract]
 #[messages(local_staking_api as LocalStakingApi)]
@@ -79,9 +80,10 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     /// Returns the maximum percentage that can be slashed
     /// TODO: Any way to query this from the chain? Or we just pass in InstantiateMsg?
     #[msg(query)]
-    fn max_slash(&self, _ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
+    fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
+        let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
         Ok(MaxSlashResponse {
-            max_slash: Decimal::percent(MAX_SLASH_PERCENTAGE),
+            max_slash: max_slashing,
         })
     }
 }
