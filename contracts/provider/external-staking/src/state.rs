@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{BlockInfo, Timestamp, Uint128, Uint256};
+use cosmwasm_std::{BlockInfo, Decimal, Timestamp, Uint128, Uint256};
 use mesh_apis::vault_api::VaultApiHelper;
 
 use crate::points_alignment::PointsAlignment;
@@ -13,8 +13,10 @@ pub struct Config {
     pub rewards_denom: String,
     /// Vault contract address
     pub vault: VaultApiHelper,
-    /// Ubbounding period for claims in seconds
+    /// Unbounding period for claims in seconds
     pub unbonding_period: u64,
+    /// Max slash percentage (from InstantiateMsg, maybe later from the chain)
+    pub max_slashing: Decimal,
 }
 
 /// All single stake related information - entry per `(user, validator)` pair, including

@@ -21,6 +21,8 @@ use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo};
 const OSMO: &str = "osmo";
 const STAR: &str = "star";
 
+const SLASHING_PERCENTAGE: u64 = 10;
+
 // Shortcut setuping all needed contracts
 //
 // Returns vault and external staking proxies
@@ -59,6 +61,7 @@ fn setup<'app>(
             vault.contract_addr.to_string(),
             unbond_period,
             remote_contact,
+            Decimal::percent(SLASHING_PERCENTAGE),
         )
         .call(owner)?;
 
@@ -78,7 +81,7 @@ fn instantiate() {
     assert_eq!(stakes.stakes, []);
 
     let max_slash = contract.cross_staking_api_proxy().max_slash().unwrap();
-    assert_eq!(max_slash.max_slash, Decimal::percent(5));
+    assert_eq!(max_slash.max_slash, Decimal::percent(SLASHING_PERCENTAGE));
 }
 
 #[test]
