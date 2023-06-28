@@ -800,16 +800,6 @@ fn distribution() {
     let expected = vec![ValidatorPendingReward::new(validators[0], 30, STAR)];
     assert_eq!(all_rewards.rewards, expected);
 
-    // TODO: add new IBC-enabled form
-    // Distributed funds should be on the staking contract
-    // assert_eq!(
-    //     app.app()
-    //         .wrap()
-    //         .query_all_balances(contract.contract_addr.clone())
-    //         .unwrap(),
-    //     coins(80, STAR)
-    // );
-
     // Some more distribution, this time not divisible by total staken tokens
     // 28 tokens for users[0]
     // 42 tokens for users[1]
@@ -907,31 +897,7 @@ fn distribution() {
         .unwrap();
     assert_eq!(rewards.amount.amount.u128(), 0);
 
-    // TODO: change this to somehow assert ibc packets
-    /*
-    // Rewards should be on users accounts
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(users[0], STAR.to_owned())
-            .unwrap()
-            .amount
-            .u128(),
-        78
-    );
-
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(users[1], STAR.to_owned())
-            .unwrap()
-            .amount
-            .u128(),
-        72
-    );
-    */
-
-    // Anothed distribution - making it equal
+    // Another distribution - making it equal
     // 4 on users[0]
     // 6 on users[1]
     //
@@ -1184,43 +1150,6 @@ fn distribution() {
         .unwrap();
     assert_eq!(rewards.amount.amount.u128(), 30);
 
-    // TODO: update for IBC
-    // Balances was previously:
-    // 78 on users[0] - now witdrawing 28 from validators[0] and 21 from validators[1]
-    // 72 on users[1] - should be the same
-    /*
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(users[0], STAR.to_owned())
-            .unwrap()
-            .amount
-            .u128(),
-        127
-    );
-
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(users[1], STAR.to_owned())
-            .unwrap()
-            .amount
-            .u128(),
-        72
-    );
-
-    // On contract we keep 59 to be withdrawn by users[1] + 1 token of leftover
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(contract.contract_addr.to_string(), STAR.to_owned())
-            .unwrap()
-            .amount
-            .u128(),
-        60
-    );
-    */
-
     // Final distribution - 10 tokens to both validators
     // 6 tokens to users[0] via validators[0] (leftover as it was)
     // 4 tokens to users[1] via validators[0] (leftover as it was)
@@ -1315,41 +1244,4 @@ fn distribution() {
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
-
-    // TODO: update to use IBC packet updates
-    /*
-    // Verifying accounts, previous states:
-    // 127 on users[0] - now withdrawn 6 from validators[0] and 2 from validators[1]
-    // 72 on users[1] - now withdrawn 33 from validators[0] and 37 from validators[1]
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(users[0], STAR.to_owned())
-            .unwrap()
-            .amount
-            .u128(),
-        135
-    );
-
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(users[1], STAR.to_owned())
-            .unwrap()
-            .amount
-            .u128(),
-        142
-    );
-
-    // Both distributions have leftover - 2 tokens accumulated on staking contract
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(contract.contract_addr.to_string(), STAR.to_owned())
-            .unwrap()
-            .amount
-            .u128(),
-        2
-    );
-    */
 }
