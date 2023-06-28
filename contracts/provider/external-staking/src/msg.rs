@@ -125,6 +125,12 @@ impl ValidatorPendingRewards {
             rewards: Rewards(coin(amount, denom)),
         }
     }
+    pub fn new_locked(validator: impl Into<String>) -> Self {
+        Self {
+            validator: validator.into(),
+            rewards: Locked {},
+        }
+    }
 }
 
 pub type TxResponse = mesh_sync::Tx;
