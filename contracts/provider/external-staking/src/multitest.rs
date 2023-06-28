@@ -16,7 +16,7 @@ use sylvia::multitest::App;
 use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
-use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo};
+use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo, ValidatorPendingReward};
 
 const OSMO: &str = "osmo";
 const STAR: &str = "star";
@@ -761,7 +761,7 @@ fn distribution() {
         .unwrap();
 
     // Only users[0] stakes on validators[1]
-    // 30 tokens for users[1]
+    // 30 tokens for users[0]
     contract
         .distribute_rewards(validators[1].to_owned())
         .with_funds(&coins(30, STAR))
@@ -788,6 +788,22 @@ fn distribution() {
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap();
     assert_eq!(rewards.amount.amount.u128(), 0);
+
+    // Show all rewards skips validators that were never staked on
+    let all_rewards = contract
+        .all_pending_rewards(users[0].to_owned(), None, None)
+        .unwrap();
+    let expected = vec![
+        ValidatorPendingReward::new(validators[0], 20, STAR),
+        ValidatorPendingReward::new(validators[1], 30, STAR),
+    ];
+    assert_eq!(all_rewards.rewards, expected);
+
+    let all_rewards = contract
+        .all_pending_rewards(users[1].to_owned(), None, None)
+        .unwrap();
+    let expected = vec![ValidatorPendingReward::new(validators[0], 30, STAR)];
+    assert_eq!(all_rewards.rewards, expected);
 
     // Distributed funds should be on the staking contract
     assert_eq!(
@@ -1209,6 +1225,24 @@ fn distribution() {
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap();
     assert_eq!(rewards.amount.amount.u128(), 37);
+
+    let all_rewards = contract
+        .all_pending_rewards(users[0].to_owned(), None, None)
+        .unwrap();
+    let expected = vec![
+        ValidatorPendingReward::new(validators[0], 6, STAR),
+        ValidatorPendingReward::new(validators[1], 2, STAR),
+    ];
+    assert_eq!(all_rewards.rewards, expected);
+
+    let all_rewards = contract
+        .all_pending_rewards(users[1].to_owned(), None, None)
+        .unwrap();
+    let expected = vec![
+        ValidatorPendingReward::new(validators[0], 33, STAR),
+        ValidatorPendingReward::new(validators[1], 37, STAR),
+    ];
+    assert_eq!(all_rewards.rewards, expected);
 
     // And try to withdraw all, previous balances:
     contract

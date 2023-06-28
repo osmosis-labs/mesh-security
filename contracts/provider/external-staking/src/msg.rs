@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, IbcChannel, Uint128};
+use cosmwasm_std::{coin, Coin, IbcChannel, Uint128};
 
 use crate::{error::ContractError, state::Config};
 
@@ -89,10 +89,31 @@ pub struct UsersResponse {
     pub users: Vec<UserInfo>,
 }
 
-/// Response for penging rewards query
+/// Response for pending rewards query on one validator
 #[cw_serde]
 pub struct PendingRewards {
     pub amount: Coin,
+}
+
+/// Response for pending rewards query on all validator
+#[cw_serde]
+pub struct AllPendingRewards {
+    pub rewards: Vec<ValidatorPendingReward>,
+}
+
+#[cw_serde]
+pub struct ValidatorPendingReward {
+    pub validator: String,
+    pub amount: Coin,
+}
+
+impl ValidatorPendingReward {
+    pub fn new(validator: impl Into<String>, amount: u128, denom: impl Into<String>) -> Self {
+        Self {
+            amount: coin(amount, denom),
+            validator: validator.into(),
+        }
+    }
 }
 
 pub type TxResponse = mesh_sync::Tx;
