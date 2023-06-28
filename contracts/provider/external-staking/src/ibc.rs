@@ -18,9 +18,9 @@ use crate::error::ContractError;
 use crate::msg::AuthorizedEndpoint;
 
 /// This is the maximum version of the Mesh Security protocol that we support
-const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.10.0";
+const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.11.0";
 /// This is the minimum version that we are compatible with
-const MIN_IBC_PROTOCOL_VERSION: &str = "0.10.0";
+const MIN_IBC_PROTOCOL_VERSION: &str = "0.11.0";
 
 // IBC specific state
 pub const AUTH_ENDPOINT: Item<AuthorizedEndpoint> = Item::new("auth_endpoint");
