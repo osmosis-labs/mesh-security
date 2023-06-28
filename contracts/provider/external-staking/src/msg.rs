@@ -115,14 +115,14 @@ pub struct AllPendingRewards {
 #[cw_serde]
 pub struct ValidatorPendingRewards {
     pub validator: String,
-    pub amount: Coin,
+    pub rewards: MaybePendingRewards,
 }
 
 impl ValidatorPendingRewards {
     pub fn new(validator: impl Into<String>, amount: u128, denom: impl Into<String>) -> Self {
         Self {
-            amount: coin(amount, denom),
             validator: validator.into(),
+            rewards: Rewards(coin(amount, denom)),
         }
     }
 }
