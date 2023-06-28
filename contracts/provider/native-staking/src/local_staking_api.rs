@@ -78,7 +78,6 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     }
 
     /// Returns the maximum percentage that can be slashed
-    /// TODO: Any way to query this from the chain? Or we just pass in InstantiateMsg?
     #[msg(query)]
     fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
         let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
