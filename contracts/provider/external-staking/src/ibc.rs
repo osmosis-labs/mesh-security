@@ -9,7 +9,7 @@ use cosmwasm_std::{
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, AddValidatorsAck,
-    ConsumerPacket, ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
+    ConsumerPacket, DistributeAck, ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
 };
 
 use crate::contract::ExternalStakingContract;
@@ -123,7 +123,7 @@ pub fn ibc_packet_receive(
     // We also don't care about packet sequence as this is fully commutative.
     let contract = ExternalStakingContract::new();
     let packet: ConsumerPacket = from_slice(&msg.packet.data)?;
-    let ack = match packet {
+    let resp = match packet {
         ConsumerPacket::AddValidators(to_add) => {
             for AddValidator {
                 valoper,
@@ -141,18 +141,26 @@ pub fn ibc_packet_receive(
                     .val_set
                     .add_validator(deps.storage, &valoper, update)?;
             }
-            ack_success(&AddValidatorsAck {})?
+            let ack = ack_success(&AddValidatorsAck {})?;
+            IbcReceiveResponse::new().set_ack(ack)
         }
         ConsumerPacket::RemoveValidators(to_remove) => {
             for valoper in to_remove {
                 contract.val_set.remove_validator(deps.storage, &valoper)?;
             }
-            ack_success(&RemoveValidatorsAck {})?
+            let ack = ack_success(&RemoveValidatorsAck {})?;
+            IbcReceiveResponse::new().set_ack(ack)
+        }
+        ConsumerPacket::Distribute { validator, rewards } => {
+            let contract = ExternalStakingContract::new();
+            let evt = contract.distribute_rewards(deps, validator, rewards)?;
+            let ack = ack_success(&DistributeAck {})?;
+            IbcReceiveResponse::new().set_ack(ack).add_event(evt)
         }
     };
 
     // return empty success ack
-    Ok(IbcReceiveResponse::new().set_ack(ack))
+    Ok(resp)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -194,17 +202,17 @@ pub fn ibc_packet_ack(
                 .add_attribute("error", e)
                 .add_attribute("tx_id", tx_id.to_string());
         }
+        (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Result(_)) => {
+            // TODO: Any events to add?
+            contract.commit_withdraw_rewards(deps, tx_id)?;
+        }
+        (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Error(e)) => {
+            contract.rollback_withdraw_rewards(deps, tx_id)?;
+            resp = resp
+                .add_attribute("error", e)
+                .add_attribute("packet", msg.original_packet.sequence.to_string());
+        }
     }
-
-    // Question: do we need a special event with all this info on error?
-
-    //         // Provide info to find the actual packet.
-    //         let event = Event::new("mesh_ibc_error")
-    //             .add_attribute("error", e)
-    //             .add_attribute("channel", msg.original_packet.src.channel_id)
-    //             .add_attribute("sequence", msg.original_packet.sequence.to_string());
-    //         resp = resp.add_event(event);
-    //     }
     Ok(resp)
 }
 
@@ -227,6 +235,10 @@ pub fn ibc_packet_timeout(
         }
         ProviderPacket::Unstake { tx_id, .. } => {
             contract.rollback_unstake(deps, tx_id)?;
+            resp = resp.add_attribute("tx_id", tx_id.to_string());
+        }
+        ProviderPacket::TransferRewards { tx_id, .. } => {
+            contract.rollback_withdraw_rewards(deps, tx_id)?;
             resp = resp.add_attribute("tx_id", tx_id.to_string());
         }
     };

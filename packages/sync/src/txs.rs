@@ -16,7 +16,6 @@ pub enum Tx {
         /// Remote staking contract
         lienholder: Addr,
     },
-    // IBC flight
     InFlightRemoteStaking {
         /// Transaction id
         id: u64,
@@ -27,7 +26,6 @@ pub enum Tx {
         /// Remote validator
         validator: String,
     },
-    // IBC flight
     InFlightRemoteUnstaking {
         /// Transaction id
         id: u64,
@@ -37,47 +35,33 @@ pub enum Tx {
         user: Addr,
         /// Remote validator
         validator: String,
-    }, // TODO
-       // InFlightSlashing
+    },
+    /// This is stored on the provider side when releasing funds
+    InFlightTransferFunds {
+        id: u64,
+        /// Amount of rewards being withdrawn
+        amount: Uint128,
+        /// The staker sending the funds
+        staker: Addr,
+        /// The validator whose rewards they come from (to revert)
+        validator: String,
+    },
 }
 
-// Implement display for Tx
+impl Tx {
+    pub fn id(&self) -> u64 {
+        match self {
+            Tx::InFlightStaking { id, .. } => *id,
+            Tx::InFlightRemoteStaking { id, .. } => *id,
+            Tx::InFlightRemoteUnstaking { id, .. } => *id,
+            Tx::InFlightTransferFunds { id, .. } => *id,
+        }
+    }
+}
+
+// Use Debug output for display as well (simplify the previous hand-coding of that)
 impl std::fmt::Display for Tx {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Tx::InFlightStaking {
-                id,
-                amount,
-                slashable,
-                user,
-                lienholder,
-            } => {
-                write!(f, "InFlightStaking {{ id: {}, amount: {}, slashable: {}, user: {}, lienholder: {} }}", id, amount, slashable, user, lienholder)
-            }
-            Tx::InFlightRemoteStaking {
-                id,
-                amount,
-                user,
-                validator,
-            } => {
-                write!(
-                    f,
-                    "InFlightRemoteStaking {{ id: {}, amount: {}, user: {}, validator: {} }}",
-                    id, amount, user, validator
-                )
-            }
-            Tx::InFlightRemoteUnstaking {
-                id,
-                amount,
-                user,
-                validator,
-            } => {
-                write!(
-                    f,
-                    "InFlightRemoteUnstaking {{ id: {}, amount: {}, user: {}, validator: {} }}",
-                    id, amount, user, validator
-                )
-            }
-        }
+        write!(f, "{:?}", self)
     }
 }

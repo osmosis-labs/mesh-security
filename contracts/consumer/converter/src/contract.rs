@@ -1,10 +1,11 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, Coin, Decimal, Deps, DepsMut, Event, Reply, Response, SubMsg,
-    SubMsgResponse, WasmMsg,
+    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, IbcMsg,
+    Reply, Response, SubMsg, SubMsgResponse, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
-use cw_utils::{nonpayable, parse_instantiate_response_data};
+use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
+use mesh_apis::ibc::ConsumerPacket;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
@@ -13,6 +14,7 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
+use crate::ibc::{packet_timeout_rewards, IBC_CHANNEL};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -38,11 +40,11 @@ impl ConverterContract<'_> {
         }
     }
 
-    // TODO: there is a chicken and egg problem here.
-    // converter needs fixed address for virtual stake contract
-    // virtual stake contract needs fixed address for converter
-    // (Price feed can be made first and then converter second, that is no issue)
-    /// The caller of the instantiation will be the converter contract
+    /// We must first instantiate the price feed contract, then the converter contract.
+    /// The converter will then instantiate a virtual staking contract to work with it,
+    /// as they both need references to each other. The admin of the virtual staking
+    /// contract is taken as an explicit argument.
+    ///
     /// Discount is applied to foreign tokens after adjusting foreign/native price,
     /// such that 0.3 discount means foreign assets have 70% of their value
     #[msg(instantiate)]
@@ -56,12 +58,17 @@ impl ConverterContract<'_> {
         admin: Option<String>,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
+        // validate args
+        if discount > Decimal::one() {
+            return Err(ContractError::InvalidDiscount);
+        }
+        if remote_denom.is_empty() {
+            return Err(ContractError::InvalidDenom(remote_denom));
+        }
         let config = Config {
             price_feed: ctx.deps.api.addr_validate(&price_feed)?,
-            // TODO: better error if discount greater than 1 (this will panic)
             price_adjustment: Decimal::one() - discount,
             local_denom: ctx.deps.querier.query_bonded_denom()?,
-            // TODO: validation here? Just that it is non-empty?
             remote_denom,
         };
         self.config.save(ctx.deps.storage, &config)?;
@@ -229,6 +236,34 @@ impl ConverterContract<'_> {
             amount: converted,
         })
     }
+
+    pub(crate) fn transfer_rewards(
+        &self,
+        deps: Deps,
+        recipient: String,
+        rewards: Coin,
+    ) -> Result<CosmosMsg, ContractError> {
+        // ensure the address is proper
+        let recipient = deps.api.addr_validate(&recipient)?;
+
+        // ensure this is the reward denom (same as staking denom)
+        let config = self.config.load(deps.storage)?;
+        ensure_eq!(
+            config.local_denom,
+            rewards.denom,
+            ContractError::WrongDenom {
+                sent: rewards.denom,
+                expected: config.local_denom
+            }
+        );
+
+        // send the coins
+        let msg = BankMsg::Send {
+            to_address: recipient.into(),
+            amount: vec![rewards],
+        };
+        Ok(msg.into())
+    }
 }
 
 #[contract]
@@ -237,14 +272,35 @@ impl ConverterApi for ConverterContract<'_> {
     type Error = ContractError;
 
     /// Rewards tokens (in native staking denom) are sent alongside the message, and should be distributed to all
-    /// stakers who staked on this validator.
+    /// stakers who staked on this validator. This is tracked on the provider, so we send an IBC packet there.
     #[msg(exec)]
-    fn distribute_reward(&self, ctx: ExecCtx, validator: String) -> Result<Response, Self::Error> {
-        let _ = (ctx, validator);
-        todo!();
+    fn distribute_reward(
+        &self,
+        mut ctx: ExecCtx,
+        validator: String,
+    ) -> Result<Response, Self::Error> {
+        let config = self.config.load(ctx.deps.storage)?;
+        let denom = config.local_denom;
+        must_pay(&ctx.info, &denom)?;
+        let rewards = ctx.info.funds.remove(0);
+
+        let event = Event::new("distribute_reward")
+            .add_attribute("validator", &validator)
+            .add_attribute("amount", rewards.amount.to_string());
+
+        // Create a packet for the provider, informing of distribution
+        let packet = ConsumerPacket::Distribute { validator, rewards };
+        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+        let msg = IbcMsg::SendPacket {
+            channel_id: channel.endpoint.channel_id,
+            data: to_binary(&packet)?,
+            timeout: packet_timeout_rewards(&ctx.env),
+        };
+
+        Ok(Response::new().add_message(msg).add_event(event))
     }
 
-    /// This is a batch for of distribute_reward, including the payment for multiple validators.
+    /// This is a batch form of distribute_reward, including the payment for multiple validators.
     /// This is more efficient than calling distribute_reward multiple times, but also more complex.
     ///
     /// info.funds sent along with the message should be the sum of all rewards for all validators,
@@ -252,10 +308,21 @@ impl ConverterApi for ConverterContract<'_> {
     #[msg(exec)]
     fn distribute_rewards(
         &self,
-        ctx: ExecCtx,
+        mut ctx: ExecCtx,
         payments: Vec<RewardInfo>,
     ) -> Result<Response, Self::Error> {
-        let _ = (ctx, payments);
-        todo!();
+        // TODO: Optimize this, when we actually get such calls
+        let mut resp = Response::new();
+        for RewardInfo { validator, reward } in payments {
+            let mut sub_ctx = ctx.branch();
+            sub_ctx.info.funds[0].amount = reward;
+            let r = self.distribute_reward(sub_ctx, validator)?;
+            // put all values on the parent one
+            resp = resp
+                .add_submessages(r.messages)
+                .add_attributes(r.attributes)
+                .add_events(r.events);
+        }
+        Ok(resp)
     }
 }

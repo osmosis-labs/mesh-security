@@ -53,4 +53,7 @@ pub enum ContractError {
 
     #[error("The tx {0} exists but is of the wrong type: {1}")]
     WrongTypeTx(u64, Tx),
+
+    #[error("No staking rewards to be withdrawn")]
+    NoRewards,
 }
