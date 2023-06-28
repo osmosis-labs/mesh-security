@@ -6,9 +6,8 @@ simplifications used for MVP (testnet) or v1 (production-ready, feature-limited)
 as footnotes in the documents.
 
 ```mermaid
+%%{init: {'theme': 'forest'}}%%
 flowchart TD
-  %%{init: {'theme': 'forest'}}%%
-
   subgraph Osmosis
   A{{$OSMO}} -- User Deposit --> B(Vault);
   B -- $OSMO --> C(Local Staker);
@@ -25,18 +24,21 @@ flowchart TD
   end
 
   subgraph Juno
+  I(Price Oracle) -- price feed --> M;
+  J(Price Oracle) -- price feed --> N;
+
   M(Osmosis Converter) -- virtual stake --> O(Virtual Staking 1);
   N(Akash Converter) -- virtual stake --> P(Virtual Staking 2);
   O & P -- $JUNO --> Q[Native Staking];
   end
 
-  G -. IBC .-> R;
+  G -. IBC .-> T;
 
   subgraph Stargaze
-  R{{Osmosis Receiver}} -- virtual stake --> S(Virtual Staking);
-  S -- $STARS --> T[Native Staking];
+  S(Price Oracle) -- price feed --> T;
+  T{{Osmosis Converter}} -- virtual stake --> U(Virtual Staking);
+  U -- $STARS --> V[Native Staking];
   end
-
 ```
 
 You can get a good overview of the whole system flow in the above diagram.
@@ -93,6 +95,9 @@ the consumer chain can select appropriate values for each provider.
 This max cap can be updated by governance as needed, so if a lot more (or less) local
 tokens are staked, the max cap of the providers can be updated with a gov vote to
 keep them in reasonable limits.
+
+Please [look at the use cases](./UseCases.md) to see the use of max cap in some example scenarios
+to gain a better intuition of how it works.
 
 ### Failure Modes
 
@@ -174,7 +179,9 @@ such a condition without the Validators fault. It would require hacks deep into 
 (not the custom ABCI app) and a governance upgrade to direct the validators to use it, and we
 generally consider this unlikely (it has never been observed in 4+ years of the Cosmos).
 
-## Definitions
+## Glossary
+
+Some common terms are defined here, which may be used throughout the documentation.
 
 - **Pairing** - a trust relationship between two chains, such that one promises to lock up slashable
   stake, while the other leverages this promise to issue validation power in the dPoS system.
