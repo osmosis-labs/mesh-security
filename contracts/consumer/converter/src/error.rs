@@ -31,4 +31,10 @@ pub enum ContractError {
 
     #[error("Invalid reply id: {0}")]
     InvalidReplyId(u64),
+
+    #[error("Invalid discount, must be between 0.0 and 1.0")]
+    InvalidDiscount,
+
+    #[error("Invalid denom: {0}")]
+    InvalidDenom(String),
 }

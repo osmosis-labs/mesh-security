@@ -11,7 +11,7 @@ use cw_storage_plus::Item;
 
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, ProtocolVersion,
-    ProviderPacket, StakeAck, UnstakeAck, PROTOCOL_NAME,
+    ProviderPacket, StakeAck, TransferRewardsAck, UnstakeAck, PROTOCOL_NAME,
 };
 
 use crate::{contract::ConverterContract, error::ContractError};
@@ -22,15 +22,24 @@ const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.10.0";
 const MIN_IBC_PROTOCOL_VERSION: &str = "0.10.0";
 
 // IBC specific state
-const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
+pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 
 // Let those validator syncs take a day...
-const DEFAULT_TIMEOUT: u64 = 24 * 60 * 60;
+const DEFAULT_VALIDATOR_TIMEOUT: u64 = 24 * 60 * 60;
+// But reward messages should go faster or timeout
+const DEFAULT_REWARD_TIMEOUT: u64 = 60 * 60;
 
-fn packet_timeout(env: &Env) -> IbcTimeout {
+pub fn packet_timeout_validator(env: &Env) -> IbcTimeout {
     // No idea about their blocktime, but 24 hours ahead of our view of the clock
     // should be decently in the future.
-    let timeout = env.block.time.plus_seconds(DEFAULT_TIMEOUT);
+    let timeout = env.block.time.plus_seconds(DEFAULT_VALIDATOR_TIMEOUT);
+    IbcTimeout::with_timestamp(timeout)
+}
+
+pub fn packet_timeout_rewards(env: &Env) -> IbcTimeout {
+    // No idea about their blocktime, but 1 hour ahead of our view of the clock
+    // should be decently in the future.
+    let timeout = env.block.time.plus_seconds(DEFAULT_REWARD_TIMEOUT);
     IbcTimeout::with_timestamp(timeout)
 }
 
@@ -120,7 +129,7 @@ pub fn ibc_channel_connect(
     let msg = IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id,
         data: to_binary(&packet)?,
-        timeout: packet_timeout(&env),
+        timeout: packet_timeout_validator(&env),
     };
 
     Ok(IbcBasicResponse::new().add_message(msg))
@@ -175,6 +184,13 @@ pub fn ibc_packet_receive(
                 .add_events(response.events)
                 .add_attributes(response.attributes)
         }
+        ProviderPacket::TransferRewards {
+            rewards, recipient, ..
+        } => {
+            let msg = contract.transfer_rewards(deps.as_ref(), recipient, rewards)?;
+            let ack = ack_success(&TransferRewardsAck {})?;
+            IbcReceiveResponse::new().set_ack(ack).add_message(msg)
+        }
     };
     Ok(res)
 }
@@ -216,7 +232,7 @@ pub fn ibc_packet_timeout(
     let msg = IbcMsg::SendPacket {
         channel_id: msg.packet.src.channel_id,
         data: msg.packet.data,
-        timeout: packet_timeout(&env),
+        timeout: packet_timeout_validator(&env),
     };
     Ok(IbcBasicResponse::new().add_message(msg))
 }

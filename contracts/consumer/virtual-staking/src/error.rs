@@ -18,4 +18,7 @@ pub enum ContractError {
 
     #[error("Cannot unbond {1} tokens from validator {0}, not enough staked")]
     InsufficientBond(String, Uint128),
+
+    #[error("Invalid Reply ID. Don't recognize {0}")]
+    InvalidReplyId(u64),
 }

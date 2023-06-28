@@ -38,7 +38,7 @@ semver = "1.0.4"
 
 # dev deps
 anyhow        = "1"
-cw-multi-test = "0.16.4"
+cw-multi-test = "0.16.5"
 derivative    = "2"
 test-case     = "2.2.0"
 
