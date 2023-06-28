@@ -27,7 +27,7 @@ use crate::error::ContractError;
 use crate::msg::{
     AllPendingRewards, AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse,
     IbcChannelResponse, ListRemoteValidatorsResponse, MaybePendingRewards, ReceiveVirtualStake,
-    StakeInfo, StakesResponse, TxResponse, ValidatorPendingReward,
+    StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
 };
 use crate::state::{Config, Distribution, Stake};
 use mesh_sync::Tx;
@@ -832,7 +832,7 @@ impl ExternalStakingContract<'_> {
                     .may_load(ctx.deps.storage, &validator)?
                     .unwrap_or_default();
                 let amount = Self::calculate_reward(stake, &distribution)?;
-                Ok::<_, ContractError>(ValidatorPendingReward::new(
+                Ok::<_, ContractError>(ValidatorPendingRewards::new(
                     validator,
                     amount.u128(),
                     &config.rewards_denom,

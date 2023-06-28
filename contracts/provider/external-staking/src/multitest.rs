@@ -16,7 +16,7 @@ use sylvia::multitest::App;
 use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
-use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo, ValidatorPendingReward};
+use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo, ValidatorPendingRewards};
 
 const OSMO: &str = "osmo";
 const STAR: &str = "star";
@@ -798,15 +798,15 @@ fn distribution() {
         .all_pending_rewards(users[0].to_owned(), None, None)
         .unwrap();
     let expected = vec![
-        ValidatorPendingReward::new(validators[0], 20, STAR),
-        ValidatorPendingReward::new(validators[1], 30, STAR),
+        ValidatorPendingRewards::new(validators[0], 20, STAR),
+        ValidatorPendingRewards::new(validators[1], 30, STAR),
     ];
     assert_eq!(all_rewards.rewards, expected);
 
     let all_rewards = contract
         .all_pending_rewards(users[1].to_owned(), None, None)
         .unwrap();
-    let expected = vec![ValidatorPendingReward::new(validators[0], 30, STAR)];
+    let expected = vec![ValidatorPendingRewards::new(validators[0], 30, STAR)];
     assert_eq!(all_rewards.rewards, expected);
 
     // Distributed funds should be on the staking contract
@@ -1264,8 +1264,8 @@ fn distribution() {
         .all_pending_rewards(users[0].to_owned(), None, None)
         .unwrap();
     let expected = vec![
-        ValidatorPendingReward::new(validators[0], 6, STAR),
-        ValidatorPendingReward::new(validators[1], 2, STAR),
+        ValidatorPendingRewards::new(validators[0], 6, STAR),
+        ValidatorPendingRewards::new(validators[1], 2, STAR),
     ];
     assert_eq!(all_rewards.rewards, expected);
 
@@ -1273,8 +1273,8 @@ fn distribution() {
         .all_pending_rewards(users[1].to_owned(), None, None)
         .unwrap();
     let expected = vec![
-        ValidatorPendingReward::new(validators[0], 33, STAR),
-        ValidatorPendingReward::new(validators[1], 37, STAR),
+        ValidatorPendingRewards::new(validators[0], 33, STAR),
+        ValidatorPendingRewards::new(validators[1], 37, STAR),
     ];
     assert_eq!(all_rewards.rewards, expected);
 
