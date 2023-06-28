@@ -80,6 +80,7 @@ impl ExternalStakingContract<'_> {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[msg(instantiate)]
     pub fn instantiate(
         &self,
@@ -89,15 +90,21 @@ impl ExternalStakingContract<'_> {
         vault: String,
         unbonding_period: u64,
         remote_contact: crate::msg::AuthorizedEndpoint,
+        max_slashing: Decimal,
     ) -> Result<Response, ContractError> {
         let vault = ctx.deps.api.addr_validate(&vault)?;
         let vault = VaultApiHelper(vault);
+
+        if max_slashing > Decimal::one() {
+            return Err(ContractError::InvalidMaxSlashing);
+        }
 
         let config = Config {
             denom,
             rewards_denom,
             vault,
             unbonding_period,
+            max_slashing,
         };
 
         self.config.save(ctx.deps.storage, &config)?;
@@ -899,16 +906,11 @@ pub mod cross_staking {
         }
 
         #[msg(query)]
-        fn max_slash(&self, _ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
-            // TODO: Properly set this value
-            // Arbitrary value - only to make some testing possible
-            //
-            // Probably should be queried from remote chain
-            let resp = MaxSlashResponse {
-                max_slash: Decimal::percent(5),
-            };
-
-            Ok(resp)
+        fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
+            let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
+            Ok(MaxSlashResponse {
+                max_slash: max_slashing,
+            })
         }
     }
 }

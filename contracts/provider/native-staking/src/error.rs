@@ -21,4 +21,7 @@ pub enum ContractError {
 
     #[error("Missing instantiate reply data")]
     NoInstantiateData {},
+
+    #[error("You cannot use a max slashing rate over 1.0 (100%)")]
+    InvalidMaxSlashing,
 }
