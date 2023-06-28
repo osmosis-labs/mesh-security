@@ -58,7 +58,7 @@ impl ConverterContract<'_> {
         admin: Option<String>,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
-        // valdiate args
+        // validate args
         if discount > Decimal::one() {
             return Err(ContractError::InvalidDiscount);
         }

@@ -355,7 +355,8 @@ impl ExternalStakingContract<'_> {
             data: to_binary(&packet)?,
             timeout: packet_timeout(&ctx.env),
         };
-        // send packet if we are ibc enabled (skip in tests)
+        // send packet if we are ibc enabled
+        // TODO: send in test code when we can handle it
         #[cfg(not(test))]
         {
             resp = resp.add_message(msg);
@@ -750,13 +751,10 @@ impl ExternalStakingContract<'_> {
         self.pending_txs.remove(deps.storage, tx_id);
 
         // Verify tx is of the right type and get data
-        let (_amount, staker, validator) = match tx {
+        let (staker, validator) = match tx {
             Tx::InFlightTransferFunds {
-                amount,
-                staker,
-                validator,
-                ..
-            } => (amount, staker, validator),
+                staker, validator, ..
+            } => (staker, validator),
             _ => {
                 return Err(ContractError::WrongTypeTx(tx_id, tx));
             }

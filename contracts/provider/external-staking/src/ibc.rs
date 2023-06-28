@@ -203,7 +203,7 @@ pub fn ibc_packet_ack(
                 .add_attribute("tx_id", tx_id.to_string());
         }
         (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Result(_)) => {
-            // Any events to add?
+            // TODO: Any events to add?
             contract.commit_withdraw_rewards(deps, tx_id)?;
         }
         (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Error(e)) => {
@@ -213,16 +213,6 @@ pub fn ibc_packet_ack(
                 .add_attribute("packet", msg.original_packet.sequence.to_string());
         }
     }
-
-    // Question: do we need a special event with all this info on error?
-
-    //         // Provide info to find the actual packet.
-    //         let event = Event::new("mesh_ibc_error")
-    //             .add_attribute("error", e)
-    //             .add_attribute("channel", msg.original_packet.src.channel_id)
-    //             .add_attribute("sequence", msg.original_packet.sequence.to_string());
-    //         resp = resp.add_event(event);
-    //     }
     Ok(resp)
 }
 

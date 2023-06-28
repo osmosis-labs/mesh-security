@@ -147,7 +147,7 @@ that should be distributed among all stakers on the given validators. It is up t
 must guarantee to hold `rewards` tokens in reserve to be released by future IBC packets
 on this channel.
 
-The provider side has a new variant `ProviderPacket::TransferFunds {}` which specifies the
+The provider side has a new variant `ProviderPacket::TransferRewards {}` which specifies the
 among and the recipient address on the consumer chain. If the converter contract hold those
 tokens in reserve (always in the case of a correct provider chain), it must release
 them to the given address. The consumer chain must be designed to handle rollbacks here
