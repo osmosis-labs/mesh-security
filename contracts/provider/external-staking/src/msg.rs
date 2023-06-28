@@ -95,7 +95,7 @@ pub struct PendingRewards {
     pub amount: Coin,
 }
 
-/// Response for pending rewards query on one validator
+/// Response for pending rewards query on all validator
 #[cw_serde]
 pub struct AllPendingRewards {
     pub rewards: Vec<ValidatorPendingReward>,
@@ -103,12 +103,12 @@ pub struct AllPendingRewards {
 
 #[cw_serde]
 pub struct ValidatorPendingReward {
-    pub amount: Coin,
     pub validator: String,
+    pub amount: Coin,
 }
 
 impl ValidatorPendingReward {
-    pub fn new(amount: u128, denom: impl Into<String>, validator: impl Into<String>) -> Self {
+    pub fn new(validator: impl Into<String>, amount: u128, denom: impl Into<String>) -> Self {
         Self {
             amount: coin(amount, denom),
             validator: validator.into(),

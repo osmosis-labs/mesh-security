@@ -787,15 +787,15 @@ fn distribution() {
         .all_pending_rewards(users[0].to_owned(), None, None)
         .unwrap();
     let expected = vec![
-        ValidatorPendingReward::new(20, STAR, validators[0]),
-        ValidatorPendingReward::new(30, STAR, validators[1]),
+        ValidatorPendingReward::new(validators[0], 20, STAR),
+        ValidatorPendingReward::new(validators[1], 30, STAR),
     ];
     assert_eq!(all_rewards.rewards, expected);
 
     let all_rewards = contract
         .all_pending_rewards(users[1].to_owned(), None, None)
         .unwrap();
-    let expected = vec![ValidatorPendingReward::new(30, STAR, validators[0])];
+    let expected = vec![ValidatorPendingReward::new(validators[0], 30, STAR)];
     assert_eq!(all_rewards.rewards, expected);
 
     // Distributed funds should be on the staking contract
@@ -1223,8 +1223,8 @@ fn distribution() {
         .all_pending_rewards(users[0].to_owned(), None, None)
         .unwrap();
     let expected = vec![
-        ValidatorPendingReward::new(6, STAR, validators[0]),
-        ValidatorPendingReward::new(2, STAR, validators[1]),
+        ValidatorPendingReward::new(validators[0], 6, STAR),
+        ValidatorPendingReward::new(validators[1], 2, STAR),
     ];
     assert_eq!(all_rewards.rewards, expected);
 
@@ -1232,8 +1232,8 @@ fn distribution() {
         .all_pending_rewards(users[1].to_owned(), None, None)
         .unwrap();
     let expected = vec![
-        ValidatorPendingReward::new(33, STAR, validators[0]),
-        ValidatorPendingReward::new(37, STAR, validators[1]),
+        ValidatorPendingReward::new(validators[0], 33, STAR),
+        ValidatorPendingReward::new(validators[1], 37, STAR),
     ];
     assert_eq!(all_rewards.rewards, expected);
 

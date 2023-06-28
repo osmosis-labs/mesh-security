@@ -823,10 +823,11 @@ impl ExternalStakingContract<'_> {
                     .may_load(ctx.deps.storage, &validator)?
                     .unwrap_or_default();
                 let amount = Self::calculate_reward(stake, &distribution)?;
-                Ok::<_, ContractError>(ValidatorPendingReward {
+                Ok::<_, ContractError>(ValidatorPendingReward::new(
                     validator,
-                    amount: coin(amount.u128(), &config.rewards_denom),
-                })
+                    amount.u128(),
+                    &config.rewards_denom,
+                ))
             })
             .collect::<Result<_, _>>()?;
 
