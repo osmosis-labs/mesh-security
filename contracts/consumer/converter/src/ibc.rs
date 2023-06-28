@@ -152,10 +152,10 @@ pub fn ibc_packet_receive(
         ProviderPacket::Stake {
             validator,
             stake,
-            tx_id,
+            tx_id: _,
         } => {
             let response = contract.stake(deps, validator, stake)?;
-            let ack = ack_success(&StakeAck { tx_id })?;
+            let ack = ack_success(&StakeAck {})?;
             IbcReceiveResponse::new()
                 .set_ack(ack)
                 .add_submessages(response.messages)
@@ -165,10 +165,10 @@ pub fn ibc_packet_receive(
         ProviderPacket::Unstake {
             validator,
             unstake,
-            tx_id,
+            tx_id: _,
         } => {
             let response = contract.unstake(deps, validator, unstake)?;
-            let ack = ack_success(&UnstakeAck { tx_id })?;
+            let ack = ack_success(&UnstakeAck {})?;
             IbcReceiveResponse::new()
                 .set_ack(ack)
                 .add_submessages(response.messages)

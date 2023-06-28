@@ -32,17 +32,11 @@ pub enum ProviderPacket {
 
 /// Ack sent for ProviderPacket::Stake
 #[cw_serde]
-pub struct StakeAck {
-    /// Return the value from the original packet
-    pub tx_id: u64,
-}
+pub struct StakeAck {}
 
 /// Ack sent for ProviderPacket::Unstake
 #[cw_serde]
-pub struct UnstakeAck {
-    /// Return the value from the original packet
-    pub tx_id: u64,
-}
+pub struct UnstakeAck {}
 
 /// These are messages sent from consumer -> provider
 /// ibc_packet_receive in external-staking must handle them all.
