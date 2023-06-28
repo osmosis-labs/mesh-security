@@ -8,8 +8,8 @@ staking the native token locally, as well as staking "virtual tokens"
 on multiple external chains connected via IBC:
 
 ```mermaid
+%%{init: {'theme': 'forest'}}%%
 flowchart LR
-  %%{init: {'theme': 'forest'}}%%
   subgraph Osmosis
   A{{$OSMO}} -- User Deposit --> B(Vault);
   B -- $OSMO --> C(Local Staker);
@@ -20,7 +20,6 @@ flowchart LR
 
   E -. IBC .-> F{{Juno Consumer}};
   G -. IBC .-> H{{Stars Consumer}};
-
 ```
 
 ## Flows
@@ -42,7 +41,7 @@ for more.
 
 The external stakers allow us to cross-stake the native vault
 token on other chains (or other DAOs) that use a different native
-staking token, but have opt-ed in to accepting a portion
+staking token, but have opted in to accepting a portion
 of their security from this vault in exchange for a portion
 of their rewards. In the basic model, these accept a lien
 from the vault and will communicate with a consumer interface
@@ -50,7 +49,7 @@ to inform how much stake is locked to which validator and
 to receive rewards.
 [Read more about external staking](./ExternalStaking.md).
 
-The connection to the consumer is generally over IBC and the consumer is
+The connection to the consumer is over IBC and the consumer is
 responsible for converting these "virtual tokens" into delegations
 in the native staking module. Note that the consumer must first opt-in to
 accept the provider's tokens and can place multiple restrictions and limits
@@ -66,21 +65,19 @@ The question arises as to what influence the cross-staked user can have on chain
 For MVP, all these delegations provide full governance power to the validator
 that was selected, but the cross-staker may not directly vote
 on any of these issues (they inherit the validator's vote).
-**For MVP, no override of votes**
 
-For local staking (in the native token), the end goal is the cross-staker has the
-same governance rights as if they had staked directly and can override
-the validator's voice if they request. However, this is relatively complex when
-one local staking contract hold delegations from many staker to the same validator,
-and takes careful design with weighted votes and probably something
-like cron cat to trigger this.
-
-**We aim to have full participation in local votes by v2**
+For local staking (in the native token), the cross-staker has the
+same governance rights as if they had staked directly. They can vote
+on governance proposals to override the validator's voice if they desire.
+They may also restake with the same restrictions as normal (once per
+unbonding period), and naturally unstake when they want.
 
 For external staking, the cross-staker will never be able to override
 the vote, as they are not expected to be very active in local governance
 on these external protocols. (If they want to participate, they can take the
 cross-staking rewards and delegate those tokens directly to get a voice.)
+
+**Desired goal by v2:**
 
 There will be two supported configurations for external staking.
 Either the cross-staked tokens provides governance voting power
@@ -89,96 +86,8 @@ Or the cross-staked tokens only provide Tendermint voting power (security)
 without granting more governance power to that validator.
 There are [use cases](../UseCases.md) for each configuration.
 
-**By v2, we will be able to configure if cross-staked tokens provide governance power to the validator**
-
-## DAO DAO Extension
-
-After discussing this general diagram, we realized there is some value in
-a simplified version of this, which may also be a great starting place to
-testing out UX without the complications of IBC. DAOs have their own
-token, governance, staking, and reward contracts. We can compare them to
-low-cap chains embedded in a host chain. Let's look at two ways of using DAOs locally
-
-### Bootstrapping DAOs
-
-When a new DAO launches, it often wants to accomplish two things:
-
-1. Ensure a reasonable security for the DAO (regardless of low market cap)
-2. Airdrop some tokens to native stakers.
-
-By using a variant of mesh security, they can do both, acting as a
-consumer of security from the native staking tokens to provide a solid
-base security amount. And also, providing a share of their rewards
-to those $JUNO cross-stakers, effectively airdropping those tokens
-(at zero cost to the recipient) for providing some initial security.
-It would look like this:
-
-```mermaid
-flowchart LR
-  %%{init: {'theme': 'forest'}}%%
-  A{{$JUNO}} -- User Deposit --> B(Vault);
-  B -- $JUNO --> C(Local Staker);
-  C -- Stake --> D[Native Staking]
-  B -- Lien --> E(External Staker Neta);
-  E -- virtual $NETA --> F(Neta Staking contract);
-```
-
-Note that this requires the exact same Vault and Local Staker
-as the real use case, and uses the same External Staker interface.
-The "Neta Staking" contract is already built and by building out
-this "External Staker Neta" adapter contract, we can work through
-all the design issues in a local environment (where we can easy get
-coverage with `cw-multi-test`), as well as start building out a
-single-chain demo UI, where we can start discovering and resolving
-the UX issues in explaining such a system.
-
-This may force a bit more abstraction in the system, as
-"external staker Neta" doesn't take a validator as an argument,
-it just stakes. Without delegation, this also brings up many questions
-about governance power and such, which may be easier to prototype
-in DAO contracts than modifying the Cosmos SDK staking module.
-
-**Recommendation** Once the MVP Vault is built, it would be good to assign
-one contract dev to work out this External Staker implementation to
-some standard DAO DAO staking contract (can be a "hacked" version that
-just holds a lot of the DAO token, like we did in HackWasm Medellin).
-This will unblock frontend developers and allow us to get much quicker
-feedback on UX issues in such a system, while the backend engineers
-are working with the complexities of IBC and staking virtual tokens in
-the native SDK staking module.
-
-We don't develop this to production quality, but use it
-as a proof-of-concept to get some hands on feedback on how to deal
-with various issues here like different unbonding periods and
-what to do about governance power.
-
-### Mega DAOs
-
-If a DAO has a market cap approaching the TVL staked in the native token, this
-becomes a dangerous situation for the DAO as the security provisioned by the chain
-is insufficient to protect it from attacks. We could turn this model around and allow
-the DAO token to "externally stake" on the local staking contract.
-
-```mermaid
-flowchart LR
-  %%{init: {'theme': 'forest'}}%%
-  A{{$WYND}} -- User Deposit --> B(Vault);
-  B -- $WYND --> C(Local Staker);
-  C -- Stake --> D(WYND DAO Staking)
-  B -- Lien --> E(External Staker Juno);
-  E -- virtual stake --> F(Virtual Staking);
-  F -- $JUNO --> G[Native Staking];
-```
-
-Note this would require a different implementation for vault (to handle cw20),
-and likely a different "local staker" interface (you don't select validators, but rather unbonding time).
-The "External Staker JUNO" would be similar to the normal [Receiver model](../consumer/Receiver.md)
-and we will need a full implementation of the [Consumer side](../consumer/Consumer.md)
-implemented on the same chain.
-
-**Recommendation** We do not build this either as MVP or v1, and view later if it makes
-sense at all. However, we should consider this use case in our designs to ensure our interfaces
-and invariants make this possible.
+It is unclear if this is possible without forking the governance module
+and design work is [tracked in this issue](https://github.com/osmosis-labs/mesh-security-sdk/issues/48)
 
 ## Optional Extensions
 

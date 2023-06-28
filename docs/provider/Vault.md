@@ -17,9 +17,8 @@ then one could safely use the same collateral to provide security to 20 chains, 
 if every validator that used that collateral double-signed, there would still be enough
 stake to slash to cover that security promise.
 
-As discussed in the higher-level description of the provider design, about extending
-this [concept to local DAOs](./Provider.md#dao-dao-extension),
-there may be many different implementations of both the _Local Staking_ concept as well
+Looking at [extending the concept of mesh security to local DAOs](./DAOs.md),
+we see there may be many different implementations of both the _Local Staking_ concept as well
 as the _External Staking_ concept. However, we must define
 standard interfaces here that can plug into the Vault.
 
