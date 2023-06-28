@@ -22,8 +22,8 @@ use crate::error::ContractError;
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
 use crate::msg::{
     AllPendingRewards, AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse,
-    IbcChannelResponse, ListRemoteValidatorsResponse, PendingRewards, ReceiveVirtualStake,
-    StakeInfo, StakesResponse, TxResponse, ValidatorPendingReward,
+    IbcChannelResponse, ListRemoteValidatorsResponse, MaybePendingRewards, ReceiveVirtualStake,
+    StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
 };
 use crate::state::{Config, Distribution, Stake};
 
@@ -940,28 +940,30 @@ impl ExternalStakingContract<'_> {
         ctx: QueryCtx,
         user: String,
         validator: String,
-    ) -> Result<PendingRewards, ContractError> {
+    ) -> Result<MaybePendingRewards, ContractError> {
         let user = ctx.deps.api.addr_validate(&user)?;
 
         let stake_lock = self
             .stakes
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
-        let stake = stake_lock.read()?;
+        match stake_lock.read() {
+            Ok(stake) => {
+                let distribution = self
+                    .distribution
+                    .may_load(ctx.deps.storage, &validator)?
+                    .unwrap_or_default();
 
-        let distribution = self
-            .distribution
-            .may_load(ctx.deps.storage, &validator)?
-            .unwrap_or_default();
+                let amount = Self::calculate_reward(stake, &distribution)?;
+                let config = self.config.load(ctx.deps.storage)?;
 
-        let amount = Self::calculate_reward(stake, &distribution)?;
-        let config = self.config.load(ctx.deps.storage)?;
-
-        let resp = PendingRewards {
-            amount: coin(amount.u128(), config.rewards_denom),
-        };
-
-        Ok(resp)
+                Ok(MaybePendingRewards::Rewards(coin(
+                    amount.u128(),
+                    config.rewards_denom,
+                )))
+            }
+            Err(_) => Ok(MaybePendingRewards::Locked {}),
+        }
     }
 
     /// Returns how much rewards are to be withdrawn by particular user, iterating over all validators.
@@ -988,17 +990,21 @@ impl ExternalStakingContract<'_> {
             .take(limit)
             .map(|item| {
                 let (validator, stake_lock) = item?;
-                let stake = stake_lock.read()?;
-                let distribution = self
-                    .distribution
-                    .may_load(ctx.deps.storage, &validator)?
-                    .unwrap_or_default();
-                let amount = Self::calculate_reward(stake, &distribution)?;
-                Ok::<_, ContractError>(ValidatorPendingReward::new(
-                    validator,
-                    amount.u128(),
-                    &config.rewards_denom,
-                ))
+                match stake_lock.read() {
+                    Ok(stake) => {
+                        let distribution = self
+                            .distribution
+                            .may_load(ctx.deps.storage, &validator)?
+                            .unwrap_or_default();
+                        let amount = Self::calculate_reward(stake, &distribution)?;
+                        Ok::<_, ContractError>(ValidatorPendingRewards::new(
+                            validator,
+                            amount.u128(),
+                            &config.rewards_denom,
+                        ))
+                    }
+                    Err(_) => Ok(ValidatorPendingRewards::new_locked(validator)),
+                }
             })
             .collect::<Result<_, _>>()?;
 
