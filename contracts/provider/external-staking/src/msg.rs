@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{coin, Coin, IbcChannel, Uint128};
 
+use crate::msg::MaybePendingRewards::{Locked, Rewards};
 use crate::{error::ContractError, state::Config};
 
 #[cw_serde]
@@ -91,10 +92,20 @@ pub struct UsersResponse {
 
 /// Response for pending rewards query on one validator
 #[cw_serde]
-pub struct PendingRewards {
-    pub amount: Coin,
+pub enum MaybePendingRewards {
+    Rewards(Coin),
+    Locked {},
 }
 
+impl MaybePendingRewards {
+    /// Designed for test code, unwrap or panic if Locked
+    pub fn unwrap(self) -> Coin {
+        match self {
+            Rewards(coin) => coin,
+            Locked {} => panic!("Pending rewards are locked"),
+        }
+    }
+}
 /// Response for pending rewards query on all validator
 #[cw_serde]
 pub struct AllPendingRewards {

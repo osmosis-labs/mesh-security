@@ -26,7 +26,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use crate::error::ContractError;
 use crate::msg::{
     AllPendingRewards, AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse,
-    IbcChannelResponse, ListRemoteValidatorsResponse, PendingRewards, ReceiveVirtualStake,
+    IbcChannelResponse, ListRemoteValidatorsResponse, MaybePendingRewards, ReceiveVirtualStake,
     StakeInfo, StakesResponse, TxResponse, ValidatorPendingReward,
 };
 use crate::state::{Config, Distribution, Stake};
@@ -776,28 +776,30 @@ impl ExternalStakingContract<'_> {
         ctx: QueryCtx,
         user: String,
         validator: String,
-    ) -> Result<PendingRewards, ContractError> {
+    ) -> Result<MaybePendingRewards, ContractError> {
         let user = ctx.deps.api.addr_validate(&user)?;
 
         let stake_lock = self
             .stakes
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
-        let stake = stake_lock.read()?;
+        match stake_lock.read() {
+            Ok(stake) => {
+                let distribution = self
+                    .distribution
+                    .may_load(ctx.deps.storage, &validator)?
+                    .unwrap_or_default();
 
-        let distribution = self
-            .distribution
-            .may_load(ctx.deps.storage, &validator)?
-            .unwrap_or_default();
+                let amount = Self::calculate_reward(stake, &distribution)?;
+                let config = self.config.load(ctx.deps.storage)?;
 
-        let amount = Self::calculate_reward(stake, &distribution)?;
-        let config = self.config.load(ctx.deps.storage)?;
-
-        let resp = PendingRewards {
-            amount: coin(amount.u128(), config.rewards_denom),
-        };
-
-        Ok(resp)
+                Ok(MaybePendingRewards::Rewards(coin(
+                    amount.u128(),
+                    config.rewards_denom,
+                )))
+            }
+            Err(_) => Ok(MaybePendingRewards::Locked {}),
+        }
     }
 
     /// Returns how much rewards are to be withdrawn by particular user, iterating over all validators.
