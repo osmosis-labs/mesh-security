@@ -1,7 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{coin, Coin, IbcChannel, Uint128};
 
-use crate::msg::MaybePendingRewards::{Locked, Rewards};
 use crate::{error::ContractError, state::Config};
 
 #[cw_serde]
@@ -101,8 +100,8 @@ impl MaybePendingRewards {
     /// Designed for test code, unwrap or panic if Locked
     pub fn unwrap(self) -> Coin {
         match self {
-            Rewards(coin) => coin,
-            Locked {} => panic!("Pending rewards are locked"),
+            MaybePendingRewards::Rewards(coin) => coin,
+            MaybePendingRewards::Locked {} => panic!("Pending rewards are locked"),
         }
     }
 }
@@ -122,13 +121,13 @@ impl ValidatorPendingRewards {
     pub fn new(validator: impl Into<String>, amount: u128, denom: impl Into<String>) -> Self {
         Self {
             validator: validator.into(),
-            rewards: Rewards(coin(amount, denom)),
+            rewards: MaybePendingRewards::Rewards(coin(amount, denom)),
         }
     }
     pub fn new_locked(validator: impl Into<String>) -> Self {
         Self {
             validator: validator.into(),
-            rewards: Locked {},
+            rewards: MaybePendingRewards::Locked {},
         }
     }
 }
