@@ -4,11 +4,11 @@ The entry point of Mesh Security is the **Vault**. This is where a potential
 staker can provide collateral in the form of native tokens, with which he or she wants
 to stake on multiple chains.
 
-Connected to the _Vault_ contract, is exactly one [local Staking contract](./LocalStaking.md)
+Connected to the _Vault_ contract, is exactly one [Local Staking contract](./LocalStaking.md)
 which can delegate the actual token to the native staking module. It also can connect to an
-arbitrary number of [external staking contracts](./ExternalStaking.md) which can make use
-of said collateral as "virtual stake" to use in an external staking system (that doesn't
-use the vault token as collateral).
+arbitrary number of [External Staking contracts](./ExternalStaking.md) which can make use
+of said collateral as "virtual stake" to use in an external staking system (one that doesn't
+directly use the vault token as collateral).
 
 The key here is that we can safely use the
 same collateral for multiple protocols, as the maximum slashing penalty is significantly
@@ -18,8 +18,8 @@ if every validator that used that collateral double-signed, there would still be
 stake to slash to cover that security promise.
 
 Looking at [extending the concept of mesh security to local DAOs](./DAOs.md),
-we see there may be many different implementations of both the _Local Staking_ concept as well
-as the _External Staking_ concept. However, we must define
+we see that there may be many different implementations of both the _Local Staking_ concept and
+the _External Staking_ concept. However, we must define
 standard interfaces here that can plug into the Vault.
 
 We define this interface as a _Creditor_ (as it accepts liens).
@@ -30,9 +30,9 @@ TODO: refine this
 
 - **Native Token** - The native staking token of this blockchain. More specifically,
   the token in which all collateral is measured.
-- **Slashable Collateral** - `Liens(user).map(|x| x.amount * x.slashable).sum()`
-- **Maximum Lien** - `Liens(user).map(|x| x.amount).max()`
-- **Free Collateral** - `Collateral(user) - max(SlashableCollateral(user), MaximumLien(user))`
+- **Slashable Collateral** - `Liens(user).map(|x| x.amount * x.slashable).sum()`.
+- **Maximum Lien** - `Liens(user).map(|x| x.amount).max()`.
+- **Free Collateral** - `Collateral(user) - max(SlashableCollateral(user), MaximumLien(user))`.
 
 ## Design Decisions
 
@@ -41,10 +41,10 @@ created, and this contract address cannot be changed.
 
 The _vault_ contract doesn't require the _External Stakers_ to be pre-registered. Each user can decide
 which external staker it trusts with their tokens. (We will provide guidance in the UI to only
-show "recommended" externals, but do not enforce on the contract level, if someone wants to build their own UI)
+show "recommended" externals, but do not enforce at the contract level, if someone wants to build their own UI).
 
 The _vault_ contract enforces the maximum amount a given Creditor can slash to whatever was
-agreed when making the lien.
+agreed upon when making the lien.
 
 The _vault_ contract will only release a lien when requested by the creditor. (No auto-release override).
 
@@ -58,7 +58,7 @@ The _vault_ contract may have a parameter to limit slashable collateral or maxim
 100% of the size of the collateral. This makes handling a small slash condition much simpler.
 
 The _creditor_ is informed of a new lien and may reject it by returning an error
-(eg if the slashing percentage is too small, or if the total credit would be too high).
+(e.g. if the slashing percentage is too small, or if the total credit would be too high).
 
 The _creditor_ may slash the collateral up to the agreed upon amount when it was lent out.
 
@@ -71,15 +71,15 @@ it is much less clear than the corresponding code.
 
 ### State
 
-- Collateral: `User -> Amount`
-- Liens: `User -> {Creditor, Amount, Slashable}[]`
-- Credit `Creditor -> Amount`
+- Collateral: `User -> Amount`.
+- Liens: `User -> {Creditor, Amount, Slashable}[]`.
+- Credit `Creditor -> Amount`.
 
 ### Invariants
 
-- `SlashableCollateral(user) <= Collateral(user)` - for all users
-- `MaximumLien(user) <= Collateral(user)` - for all users
-- `Liens(user).map(|x| x.creditor).isUnique()` - for all users
+- `SlashableCollateral(user) <= Collateral(user)` - for all users.
+- `MaximumLien(user) <= Collateral(user)` - for all users.
+- `Liens(user).map(|x| x.creditor).isUnique()` - for all users.
 
 ### Transitions
 
