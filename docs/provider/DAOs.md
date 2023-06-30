@@ -1,23 +1,23 @@
 # DAO DAO Extension
 
-After discussing this general diagram, we realized there is some value in
-a simplified version of this, which may also be a great starting place to
+After discussing this general diagram, we realized that there is some value in
+a simplified version of this, which may also be a great starting place for
 testing out UX without the complications of IBC. DAOs have their own
 token, governance, staking, and reward contracts. We can compare them to
-low-cap chains embedded in a host chain. Let's look at two ways of using DAOs locally
+low-cap chains embedded in a host chain. Let's look at two ways of using DAOs locally.
 
 This document holds some brainstorm idea of how one might reuse much of the
 design but customize some pieces to allow DAOs partially secured by native
 tokens, or let huge DAOs provide security to the chain they run on.
-None of this is fleshed out or on the road map, but is here to give
+None of this is fleshed out or on the roadmap, but is here to give
 an idea on the flexibility of Mesh Security and may inspire someone
-to develop it further
+to develop it further.
 
 ## Bootstrapping DAOs
 
 When a new DAO launches, it often wants to accomplish two things:
 
-1. Ensure a reasonable security for the DAO (regardless of low market cap)
+1. Ensure a reasonable security for the DAO (regardless of low market cap).
 2. Airdrop some tokens to native stakers.
 
 By using a variant of mesh security, they can do both, acting as a
@@ -52,10 +52,10 @@ it just stakes. Without delegation, this also brings up many questions
 about governance power and such, which may be easier to prototype
 in DAO contracts than modifying the Cosmos SDK staking module.
 
-**Recommendation** Once the MVP Vault is built, it would be good to assign
+**Recommendation**: Once the MVP Vault is built, it would be good to assign
 one contract dev to work out this External Staker implementation to
 some standard DAO DAO staking contract (can be a "hacked" version that
-just holds a lot of the DAO token, like we did in HackWasm Medellin).
+just holds a lot of the DAO token, like we did in HackWasm Medellín).
 This will unblock frontend developers and allow us to get much quicker
 feedback on UX issues in such a system, while the backend engineers
 are working with the complexities of IBC and staking virtual tokens in
@@ -86,10 +86,10 @@ flowchart LR
 
 Note this would require a different implementation for vault (to handle cw20),
 and likely a different "local staker" interface (you don't select validators, but rather unbonding time).
-The "External Staker JUNO" would be similar to the normal [Receiver model](../consumer/Receiver.md)
-and we will need a full implementation of the [Consumer side](../consumer/Consumer.md)
+The "External Staker JUNO" would be similar to the normal [Receiver model](../consumer/Receiver.md), and
+we will need a full implementation of the [Consumer side](../consumer/Consumer.md)
 implemented on the same chain.
 
-**Recommendation** We do not build this either as MVP or v1, and view later if it makes
+**Recommendation**: We do not build this either as MVP or v1, and view later if it makes
 sense at all. However, we should consider this use case in our designs to ensure our interfaces
 and invariants make this possible.

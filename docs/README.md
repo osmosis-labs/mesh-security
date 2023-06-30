@@ -45,7 +45,7 @@ You can get a good overview of the whole system flow in the above diagram.
 The design should allow one chain to provide security to multiple chains, while
 at the same time receiving security from multiple chains.
 
-A key to understanding the design, is that the whole system is _delegator-centeric_
+A key to understanding the design, is that the whole system is _delegator-centric_
 not _validator-centric_. This means that we don't try to match the same validators on
 multiple chains, or even subsets, but rather focus on leveraging the security
 provided by staking tokens to secure validators on multiple chains. This provides a way to
@@ -65,9 +65,9 @@ Addressing some common points people raise up, which are hidden in the docs.
 
 There are many questions if this isn't "fractional reserve banking" or such.
 This does use the same collateral to back multiple claims (staking), but
-the [final invariant in the vault](https://github.com/osmosis-labs/mesh-security/blob/main/contracts/vault/README.md#invariants)
+the [final invariant in the vault](https://github.com/osmosis-labs/mesh-security/blob/main/contracts/provider/vault/README.md#invariants)
 ensures there is sufficient collateral to cover the maximum loss
-(eg. if all local and cross-staked validators double-sign).
+(e.g. if all local and cross-staked validators double-sign).
 If the double slash penalty is 5%, you can safely cross stake 20x.
 If it were to be raised to say 40%, you could only safely cross stake 2.5x
 This is more like insurance companies holding reserves for the worse cases expected losses,
@@ -76,9 +76,9 @@ not the total value of all property insured.
 ### Power Limits on Remote Chains
 
 Another common concern is whether there are effective limits in the power a remote
-chain can exert over one chain. Would it be possible for a higher cap chain (eg $ATOM)
+chain can exert over one chain. Would it be possible for a higher cap chain (e.g. $ATOM)
 to take over more than one-third, or even two-thirds or the power of a smaller cap chain
-(eg $STARS) it is cross-staking on.
+(e.g. $STARS) it is cross-staking on.
 
 Clearly the consumer chain wants to put some limits. The first limit is the
 [discount applied during the conversion](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-normalization).
@@ -110,7 +110,7 @@ There are three main failure modes to consider:
 #### Huge Price Swing
 
 This is the most likely scenario. If the provider price rises too much, it may suddenly have
-disproportionate power over the affairs of the consumer. If the provier price falls too much,
+disproportionate power over the affairs of the consumer. If the provider price falls too much,
 in the period until the price oracle is updated, there may be less remote collateral
 than the virtual stake.
 
@@ -135,7 +135,7 @@ max cap limit preventing total takeover, so it just provides overly high rewards
 #### Byzantine Provider Chain
 
 The worst case is the provider claims to deposit millions of tokens on one malicious validator,
-while not actually locking any collateral on it's own chain. This is similar to the case of
+while not actually locking any collateral on its own chain. This is similar to the case of
 a hostile community on the provider chain selecting validators against the interest of the
 community on the consumer chain.
 
@@ -154,10 +154,10 @@ perceived stability.
 If a Consumer Chain goes Byzantine (or starts some mob-rule governance proposals), it can
 try to damage stake on the Provider chain. There are several ways it can try to do so:
 
-- Withholding all rewards to said Provider
-- Removing all voting power from said Provider
-- Refusing to unlock the virtual stake of the Provider
-- Unfairly slashing virtual stake from the Provider
+- Withholding all rewards to said Provider.
+- Removing all voting power from said Provider.
+- Refusing to unlock the virtual stake of the Provider.
+- Unfairly slashing virtual stake from the Provider.
 
 The first two are temporary and can be seen in the case when the consumer no longer trusts the
 provider and sets "max cap" to zero. This is a temporary effect but must be acknowledged as
@@ -165,7 +165,7 @@ a possible risk, which is loss of benefits, but not loss of collateral.
 
 The third point is impossible, as the unlock period is implemented between the external staking
 contracts and the vault on the provider side. Nothing on the Consumer can lock up stake longer.
-And if a Provider feels they have unfairly withhold benefits (first two points), they could
+And if a Provider feels they have unfairly withheld benefits (first two points), they could
 make a governance vote to allow immediate unbonding of all cross-stake to that consumer.
 
 The last point is a bit trickier. We will not fully define slashing until v1, but the design is
@@ -201,7 +201,7 @@ Some common terms are defined here, which may be used throughout the documentati
   based on misbehavior of that validator.
 - **Unbonding period** - The time delay between initiating unbonding and having free access to the
   underlying collateral. Once this time has passed after unstaking, all claims on the underlying
-  collateral are released and
+  collateral are released.
 - **Rewards** - Block rewards are issued to validators in the native token of the consumer chain.
   A portion of these rewards goes to the stakers and is collected cross-chain.
 - **Slashing** - If a validator misbehaves, the tokens delegated to it, which provided the
@@ -212,7 +212,7 @@ Some common terms are defined here, which may be used throughout the documentati
   prevented from returning. Tokens staked to it would be partially slashed and should be unstaked
   as soon as possible, as they will receive no more rewards. Stake to a jailed validator still must
   wait the unbonding period to be liquid.
-- **Latency** - Time delay from an action being initiated and the effects being reflected in
+- **Latency** - Time delay from an action being initiated and its effects being reflected in
   another contract or chain. This doesn't refer to the unbonding period, but rather the delay between
   initiating bonding or unbonding on the provider and the equivalent action occurring on the consumer.
 

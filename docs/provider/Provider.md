@@ -33,7 +33,7 @@ which they can withdraw assuming there are no outstanding liens on that amount.
 Each vault contains _exactly one_ denom and has _exactly one_ local staking
 module. This local staker can stake the vault token with the
 native staking module. It actually accepts the original token, which makes
-it different than external stakers, which accept liens. By depositing in the vault
+it different from external stakers, which accept liens. By depositing in the vault
 and staking in the local staker, I will have achieved the same effect
 (and get the same rewards) as directly staking... but I can now use my balance
 for more.
@@ -45,16 +45,16 @@ staking token, but have opted in to accepting a portion
 of their security from this vault in exchange for a portion
 of their rewards. In the basic model, these accept a lien
 from the vault and will communicate with a consumer interface
-to inform how much stake is locked to which validator and
+to inform how much stake is locked to which validator, and
 to receive rewards.
 [Read more about external staking](./ExternalStaking.md).
 
 The connection to the consumer is over IBC and the consumer is
 responsible for converting these "virtual tokens" into delegations
-in the native staking module. Note that the consumer must first opt-in to
+in their native staking module. Note that the consumer must first opt in to
 accept the provider's tokens and can place multiple restrictions and limits
-on to how much power can be granted into any external chain.
-[Read more about consumers](../consumers/Consumer.md).
+on how much power can be granted to any external chain.
+[Read more about consumers](../consumer/Consumer.md).
 
 ## Stakers and Governance
 
@@ -75,26 +75,26 @@ unbonding period), and naturally unstake when they want.
 For external staking, the cross-staker will never be able to override
 the vote, as they are not expected to be very active in local governance
 on these external protocols. (If they want to participate, they can take the
-cross-staking rewards and delegate those tokens directly to get a voice.)
+cross-staking rewards and delegate those tokens directly to get a voice).
 
 **Desired goal by v2:**
 
 There will be two supported configurations for external staking.
 Either the cross-staked tokens provides governance voting power
 to the validator in the same proportion that it provides Tendermint voting power.
-Or the cross-staked tokens only provide Tendermint voting power (security)
+Or, the cross-staked tokens only provide Tendermint voting power (security)
 without granting more governance power to that validator.
 There are [use cases](../UseCases.md) for each configuration.
 
-It is unclear if this is possible without forking the governance module
-and design work is [tracked in this issue](https://github.com/osmosis-labs/mesh-security-sdk/issues/48)
+It is unclear if this is possible without forking the governance module,
+and design work is [tracked in this issue](https://github.com/osmosis-labs/mesh-security-sdk/issues/48).
 
 ## Optional Extensions
 
 These won't be included in MVP and require more modifications
 to the core Cosmos SDK modules, which makes them more risky and
-more difficult to port to other chains. But could be considered
+more difficult to port to other chains. But, could be considered
 as chain-specific extensions.
 
-- Enable moving bonded tokens directly into the vault? (Custom SDK change)
-- Allow depositing vesting tokens to the vault? (deeper SDK change)
+- Enable moving bonded tokens directly into the vault? (custom SDK change).
+- Allow depositing vesting tokens to the vault? (deeper SDK change).

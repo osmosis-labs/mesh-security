@@ -1,16 +1,16 @@
 # Use Cases
 
 We assume each chain has a native staking token denom, with some quantity (could be 1 or 1,000,000,000).
-This is the initial token to start the chain with. Each provider chain that connects gets a maximum of X virtual tokens, defined by consumer govenance
-when authorizing the new provider. The ratio between the amount of native tokens and the max cap
-of virtual tokens on each provider is a key element in defining the various security models.
+This is the initial token to start the chain with. Each provider chain that connects gets a maximum of X virtual tokens,
+defined by consumer governance when authorizing the new provider. The ratio between the amount of native tokens
+and the max cap of virtual tokens on each provider is a key element in defining the various security models.
 
 To make these diagrams easier to read, I will normalize each chain has 100 native tokens, and label the
 connections on how many virtual tokens they are authorized to mint. Thus, a connection with 100 could
 exert the same amount of voting power as all native stakers. A connection with 10 could exert 10% of the
 power of native stakers, and a connection of 1000 could exert 10 times the power of native stakers.
 
-(Note this is not clear percentages. 40 / (100 + 40) = 28.5% of the total power in the hands of that provider)
+(Note that these are not clear percentages. 40 / (100 + 40) = 28.5% of the total power in the hands of that provider).
 
 ## Sibling Chains
 
@@ -52,7 +52,7 @@ You could analyze Juno in this example:
 Osmosis hits the 1/3 threshold exactly, while native tokens still hold the majority in the governance votes.
 Does that make sense, should this be adjusted?
 
-## DAOs migrating to own chain
+## DAOs migrating to their own chain
 
 A number of Juno DAOs launching their own chains. They want to inherit most of their security from Juno,
 but keep governance to their own token.
@@ -65,13 +65,14 @@ flowchart TD
   Juno -- 300, no gov --> DAO3;
 ```
 
-Note < 1/3 power in the native token, so all PoS security relies on Juno (while all governance security relies on the DAO token)
+Note that less than 1/3 power is in the native token, so all PoS security relies on Juno (while all governance security relies
+on the DAO token).
 
 ## Almost Replicated Security
 
 Mesh Security is not ICSv1 "Replicated Security". We do not map validators from provider to consumer, but rather delegators.
-And the power is the subset of staked tokens that opt-in, so will always be lower than full stake. By design we always require
-a native staking token in the consumer chain, but we can approximate "replciated security" for the "fully owned subsidiary"
+And the power is the subset of staked tokens that opt-in, so will always be lower than full stake. By design, we always require
+a native staking token in the consumer chain, but we can approximate "replicated security" for the "fully owned subsidiary"
 use case.
 
 You can launch a chain with a governance token with minimal distribution to bootstrap the chain. Then accept another chain as a
