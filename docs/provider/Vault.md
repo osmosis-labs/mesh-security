@@ -74,8 +74,9 @@ The _vault_ should release the lien once the lien holder terminates any agreemen
 
 ## Implementation
 
-**TODO** translate the below into Rust code. After writing this in text, I realize
-it is much less clear than the corresponding code.
+- [Vault](../../contracts/provider/vault/src/contract.rs).
+- [Local Staking](../../contracts/provider/native-staking/src/contract.rs).
+- [External Staking](../../contracts/provider/external-staking/src/contract.rs).
 
 ### State
 
@@ -93,36 +94,61 @@ it is much less clear than the corresponding code.
 
 ### Transitions
 
-**Provide Collateral (i.e. bond)**
+**Provide Collateral (i.e. `bond`)**
 
 Any user may deposit native tokens to the vault contract,
 thus increasing their collateral as stored in this contract.
 
-**Withdraw Collateral (i.e. unbond)**
+**Withdraw Collateral (i.e. `unbond`)**
 
 Any user may withdraw any _Free Collateral_ credited to their account.
 Their collateral is reduced by this amount and these native tokens are
 immediately transferred to their account.
 
-**Provide Lien (i.e. remote staking)**
+**Provide Lien (i.e. `stake_local`)**
 
-Promise collateral as slashable to some lien holder. The vault has to guarantee that that promise can be fulfilled
-(i.e. that the slashable amount is always available for slashing).
-Args `(lien_holder, amount, slashable)`.
+This sends actual tokens to the local staking contract for native staking.
+Native staking for a user is handled through a proxy contract (i.e. `native_staking_proxy`),
+which is owned by the native staking contract, and instantiated for each user.
+
+Available collateral and related quantities are updated locally to the vault.
+
+**Provide Lien (i.e. `stake_remote`)**
+
+Promises collateral as slashable to some lien holder. It is the responsibility of the vault to guarantee that
+that promise can be fulfilled (i.e. that the associated slashable amount is always available for eventual slashing).
 
 This is updated locally to the vault.
 
-**Release Lien (i.e. remote unstaking)**
+**Release Local Stake (i.e. `release_local_stake`)**
 
-TODO
+Local unstaking is initiated by the user on their corresponding native-staking-proxy contract (i.e. native-staking-proxy `unstake` handler).
+This is because unstaking requires an unbonding period to be enforced. Only after that unbonding period is over, the user's native-staking-proxy
+contract allows the user to withdraw the unbonded amounts (i.e. `withdraw_unbonded`). And only then it sends a message to the vault contract,
+to release the associated "lien" (Properly, a claim. The implementation uses "lien" indistinctly, for simplicity) (i.e. `release_local_stake`).
+
+**Release Lien (i.e. `release_cross_stake`)**
+
+Remote unstaking is initiated by the user on the external-staking contract (i.e. external-staking `unstake` handler).
+This is because unstaking requires an unbonding period to be enforced. Only after that unbonding period is over, the external-staking
+contract allows the user to withdraw the unbonded amounts (i.e. `withdraw_unbonded`). And only then it sends a message to the vault contract,
+to release the associated lien (i.e. `release_cross_stake`).
+
+**Commit Tx (i.e. `commit_tx`)**
+Though this is a public handler, it is only meant to be called by external-staking contracts. This finalises the remote staking process
+successfully, and updates the vault state accordingly.
+
+**Rollback Tx (i.e. `rollback_tx`)**
+Though this is a public handler, it is only meant to be called by external-staking contracts. This aborts the remote staking process
+in case of error, and rollbacks the vault state accordingly.
 
 **Slash**
 
-TODO
+TODO: Slashing is not part of MVP, and will be implemented in a future version of mesh-security.
 
 - Increase Slashing(user, lien_holder)?
 
-TODO
+TODO: Increase slashing is not part of MVP, and will be implemented in a future version of mesh-security.
 
 ## Footnotes
 
