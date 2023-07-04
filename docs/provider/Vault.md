@@ -22,17 +22,25 @@ we see that there may be many different implementations of both the _Local Staki
 the _External Staking_ concept. However, we must define
 standard interfaces here that can plug into the Vault.
 
-We define this interface as a _Creditor_ (as it accepts liens).
+We define this interface as a _Lien Holder_ (as it accepts liens, i.e. embargable amounts).
 
 ## Definitions
 
-TODO: refine this
-
+- **Vault** - The main contract that holds all the collateral and liens.
 - **Native Token** - The native staking token of this blockchain. More specifically,
   the token in which all collateral is measured.
-- **Slashable Collateral** - `Liens(user).map(|x| x.amount * x.slashable).sum()`.
-- **Maximum Lien** - `Liens(user).map(|x| x.amount).max()`.
-- **Free Collateral** - `Collateral(user) - max(SlashableCollateral(user), MaximumLien(user))`.
+- **Local Staking** - A contract that can delegate the native token to the native staking module.
+- **External Staking** - A contract that can use the collateral as "virtual stake" in an external staking system.
+- **User** - A user of the vault that provides collateral, to either the local staking or an external staking system.
+- **Lien** - A promise to provide some amount of collateral to a lien holder.
+- **Lien Holder** - A contract that accepts liens and can slash the collateral.
+- **Collateral** - The total amount of collateral, in the native token, for a given user.
+- **Slashable Collateral** - The total amount of collateral that can be slashed, in the native token, for a given user.
+  `Liens(user).map(|x| x.amount * x.slashable).sum()`.
+- **Maximum Lien** - The maximum lien of all liens a user has.
+  `Liens(user).map(|x| x.amount).max()`.
+- **Free Collateral** - The total collateral a user has, minus either their slashable collateral or their maximum lien (whatever is bigger).
+  `Collateral(user) - max(SlashableCollateral(user), MaximumLien(user))`.
 
 ## Design Decisions
 
@@ -43,13 +51,13 @@ The _vault_ contract doesn't require the _External Stakers_ to be pre-registered
 which external staker it trusts with their tokens. (We will provide guidance in the UI to only
 show "recommended" externals, but do not enforce at the contract level, if someone wants to build their own UI).
 
-The _vault_ contract enforces the maximum amount a given Creditor can slash to whatever was
+The _vault_ contract enforces the maximum amount a given Lien Holder can slash to whatever was
 agreed upon when making the lien.
 
-The _vault_ contract will only release a lien when requested by the creditor. (No auto-release override).
+The _vault_ contract will only release a lien when requested by the lien holder. (No auto-release override).
 
-The _vault_ contract may force-reduce the size of the lien only in the case of slashing by another creditor.
-The creditors must be able to handle this case properly.
+The _vault_ contract may force-reduce the size of the lien only in the case of slashing by another lien holder.
+The lien holders must be able to handle this case properly.
 
 The _vault_ contract ensures the user's collateral is sufficient to service all the liens
 made on said collateral.
@@ -57,12 +65,12 @@ made on said collateral.
 The _vault_ contract may have a parameter to limit slashable collateral or maximum lien to less than
 100% of the size of the collateral. This makes handling a small slash condition much simpler.
 
-The _creditor_ is informed of a new lien and may reject it by returning an error
+The _lien holder_ is informed of a new lien, and may reject it by returning an error
 (e.g. if the slashing percentage is too small, or if the total credit would be too high).
 
-The _creditor_ may slash the collateral up to the agreed upon amount when it was lent out.
+The _vault_ may slash the collateral associated to a given lien holder, up to the agreed upon amount when it was lent out.
 
-The _creditor_ should release the lien once the user terminates any agreement with the creditor.
+The _vault_ should release the lien once the lien holder terminates any agreement with the user.
 
 ## Implementation
 
@@ -71,36 +79,40 @@ it is much less clear than the corresponding code.
 
 ### State
 
-- Collateral: `User -> Amount`.
-- Liens: `User -> {Creditor, Amount, Slashable}[]`.
-- Credit `Creditor -> Amount`.
+- Config: General contract configuration.
+- LocalStaking: Local staking info.
+- Liens: All liens in the protocol. Liens are indexed with (user, lien_holder), as this pair has to be unique.
+- Users: Per-user information. Collateral, max lien, total slashable amount, total used collateral and free collateral.
+- Txs: Pending txs information.
 
 ### Invariants
 
 - `SlashableCollateral(user) <= Collateral(user)` - for all users.
 - `MaximumLien(user) <= Collateral(user)` - for all users.
-- `Liens(user).map(|x| x.creditor).isUnique()` - for all users.
+- `Liens(user).map(|x| x.lien_holder).isUnique()` - for all users.
 
 ### Transitions
 
-**Provide Collateral**
+**Provide Collateral (i.e. bond)**
 
 Any user may deposit native tokens to the vault contract,
 thus increasing their collateral as stored in this contract.
 
-**Withdraw Collateral**
+**Withdraw Collateral (i.e. unbond)**
 
 Any user may withdraw any _Free Collateral_ credited to their account.
 Their collateral is reduced by this amount and these native tokens are
 immediately transferred to their account.
 
-**Provide Lien**
+**Provide Lien (i.e. remote staking)**
 
-TODO. Promise collateral as slashable to some creditor.
-Args `(creditor, amount, slashable)`.
-This is updated locally
+Promise collateral as slashable to some lien holder. The vault has to guarantee that that promise can be fulfilled
+(i.e. that the slashable amount is always available for slashing).
+Args `(lien_holder, amount, slashable)`.
 
-**Release Lien**
+This is updated locally to the vault.
+
+**Release Lien (i.e. remote unstaking)**
 
 TODO
 
@@ -108,7 +120,9 @@ TODO
 
 TODO
 
-- Increase Slashing(user, creditor)?
+- Increase Slashing(user, lien_holder)?
+
+TODO
 
 ## Footnotes
 

@@ -51,7 +51,7 @@ pub struct VaultContract<'a> {
     pub local_staking: Item<'a, LocalStaking>,
     /// All liens in the protocol
     ///
-    /// Liens are indexed with (user, creditor), as this pair has to be unique
+    /// Liens are indexed with (user, lien_holder), as this pair has to be unique
     pub liens: Map<'a, (&'a Addr, &'a Addr), Lockable<Lien>>,
     /// Per-user information
     pub users: Map<'a, &'a Addr, Lockable<UserInfo>>,
@@ -685,7 +685,7 @@ impl VaultContract<'_> {
     /// Updates the local stake for unstaking from any contract
     ///
     /// The unstake (both local and remote) is always called by the staking contract
-    /// (aka lienholder), so the `sender` address is used for that.
+    /// (aka lien_holder), so the `sender` address is used for that.
     fn unstake(&self, ctx: &mut ExecCtx, owner: String, amount: Coin) -> Result<(), ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         ensure!(amount.denom == denom, ContractError::UnexpectedDenom(denom));
