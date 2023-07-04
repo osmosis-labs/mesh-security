@@ -59,6 +59,9 @@ impl<'a> CrdtState<'a> {
         }
     }
 
+    /// Add / Update a validator.
+    /// In test code, this is called from `test_set_active_validator`.
+    /// In non-test code, this is called from `ibc_packet_receive`
     pub fn add_validator(
         &self,
         storage: &mut dyn Storage,
@@ -83,6 +86,8 @@ impl<'a> CrdtState<'a> {
         self.validators.save(storage, valoper, &state)
     }
 
+    /// Remove a validator.
+    /// In non-test code, this is called from `ibc_packet_receive`
     pub fn remove_validator(
         &self,
         storage: &mut dyn Storage,

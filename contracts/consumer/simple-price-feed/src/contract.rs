@@ -59,6 +59,8 @@ impl SimplePriceFeedContract<'_> {
         ctx: ExecCtx,
         native_per_foreign: Decimal,
     ) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         let mut config = self.config.load(ctx.deps.storage)?;
         config.native_per_foreign = native_per_foreign;
         self.config.save(ctx.deps.storage, &config)?;
