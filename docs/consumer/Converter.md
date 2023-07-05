@@ -9,17 +9,20 @@ The converter is connected to the Provider chain via IBC and handles the various
 
 ## Setup
 
-TODO: Update this.
+We must first instantiate a Price Feed contract(see [Price Normalization / Price Feeds](#price-feeds) below),
+then the Converter contract.
+The Converter will then instantiate a Virtual Staking contract to work with it,
+as they both need references to each other.
+In addition to a reference to the Price Feed contract and the code id of the Virtual Staking contract,
+the Converter also needs the discount ratio, the remote denomination, and the admin of the Virtual Staking
+contract, which is taken as an explicit argument, and normally will be the same admin of the Converter.
 
-When we [deploy the contracts](../ibc/Overview.md#deployment), we connect the Stake Converter on the consumer
+TODO: Update IBC Setup
+
+When we [deploy the contracts](../ibc/Overview.md#deployment), we connect the Converter on the Consumer
 chain with an [External Staking](../provider/ExternalStaking.md) contract on the Provider. Once this
-connection is established, Consumer governance can authorize this Stake Converter with some ability to mint
+connection is established, Consumer governance can authorize this Converter with some ability to mint
 on the [Virtual Staking](./VirtualStaking.md) contract.
-
-When we deploy the Stake Converter, we must also configure the address of the
-[Virtual Staking](./VirtualStaking.md) contract that it will use to stake tokens.
-In addition, we must define a price feed on setup.
-(see [Price Normalization / Price Feeds](#price-feeds) below)
 
 ## Staking Flow
 
