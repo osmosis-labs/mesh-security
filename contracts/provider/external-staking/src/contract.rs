@@ -4,7 +4,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
-use cw_utils::PaymentError;
+use cw_utils::{nonpayable, PaymentError};
 
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
@@ -123,8 +123,8 @@ impl ExternalStakingContract<'_> {
         Ok(Response::new())
     }
 
-    /// In test code, this is called from test_commit_stake.
-    /// In non-test code, this is called from ibc_packet_ack
+    /// In test code, this is called from `test_commit_stake`.
+    /// In non-test code, this is called from `ibc_packet_ack`
     pub(crate) fn commit_stake(&self, deps: DepsMut, tx_id: u64) -> Result<WasmMsg, ContractError> {
         // Load tx
         let tx = self.pending_txs.load(deps.storage, tx_id)?;
@@ -182,8 +182,8 @@ impl ExternalStakingContract<'_> {
         Ok(msg)
     }
 
-    /// In test code, this is called from test_rollback_stake.
-    /// In non-test code, this is called from ibc_packet_ack or ibc_packet_timeout
+    /// In test code, this is called from `test_rollback_stake`.
+    /// In non-test code, this is called from `ibc_packet_ack` or `ibc_packet_timeout`
     pub(crate) fn rollback_stake(
         &self,
         deps: DepsMut,
@@ -259,7 +259,7 @@ impl ExternalStakingContract<'_> {
         }
     }
 
-    /// Rollbacks a pending stake.
+    /// Updates the active validator set.
     /// Method used for tests only.
     #[msg(exec)]
     fn test_set_active_validator(
@@ -291,8 +291,8 @@ impl ExternalStakingContract<'_> {
         }
     }
 
-    /// Schedules tokens for release, adding them to the pending unbonds. After `unbonding_period`
-    /// passes, funds are ready to be released with `withdraw_unbonded` call by the user
+    /// Schedules tokens for release, adding them to the pending unbonds. After the unbonding period
+    /// passes, funds are ready to be released through a `withdraw_unbonded` call by the user.
     #[msg(exec)]
     pub fn unstake(
         &self,
@@ -300,6 +300,8 @@ impl ExternalStakingContract<'_> {
         validator: String,
         amount: Coin,
     ) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         let config = self.config.load(ctx.deps.storage)?;
 
         ensure_eq!(
@@ -369,8 +371,8 @@ impl ExternalStakingContract<'_> {
         Ok(resp)
     }
 
-    /// In test code, this is called from test_commit_unstake.
-    /// Method used for tests only.
+    /// In test code, this is called from `test_commit_unstake`.
+    /// In non-test code, this is called from `ibc_packet_ack`
     pub(crate) fn commit_unstake(
         &self,
         deps: DepsMut,
@@ -442,8 +444,8 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
-    /// In test code, this is called from test_rollback_unstake.
-    /// In non-test code, this is called from ibc_packet_ack or ibc_packet_timeout
+    /// In test code, this is called from `test_rollback_unstake`.
+    /// In non-test code, this is called from `ibc_packet_ack` or `ibc_packet_timeout`
     pub(crate) fn rollback_unstake(&self, deps: DepsMut, tx_id: u64) -> Result<(), ContractError> {
         // Load tx
         let tx = self.pending_txs.load(deps.storage, tx_id)?;
@@ -512,10 +514,12 @@ impl ExternalStakingContract<'_> {
 
     /// Withdraws all released tokens to the sender.
     ///
-    /// Tokens to be claimed has to be unbond before by calling the `unbond` message and
-    /// waiting the `unbond_period`
+    /// Tokens to be claimed have to be unbond before by calling the `unbond` message, and
+    /// their unbonding period must have passed.
     #[msg(exec)]
     pub fn withdraw_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         let config = self.config.load(ctx.deps.storage)?;
 
         let stake_locks: Vec<_> = self
@@ -563,6 +567,8 @@ impl ExternalStakingContract<'_> {
         Ok(resp)
     }
 
+    /// Distribute rewards.
+    /// Method used for tests only.
     #[msg(exec)]
     pub fn test_distribute_rewards(
         &self,
@@ -584,7 +590,8 @@ impl ExternalStakingContract<'_> {
 
     /// Distributes reward among users staking via particular validator. Distribution is performed
     /// proportionally to amount of tokens staked by user.
-    /// This is called by IBC packets in real code, but also exposed in a test only message "test_distribute_rewards"
+    /// In test code, this is called from `test_distribute_rewards`.
+    /// In non-test code, this is called from `ibc_packet_receive`
     pub(crate) fn distribute_rewards(
         &self,
         deps: DepsMut,
@@ -632,6 +639,8 @@ impl ExternalStakingContract<'_> {
         /// Address on the consumer side to receive the rewards
         remote_recipient: String,
     ) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
         let mut stake_lock = self
             .stakes
             .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
@@ -705,6 +714,8 @@ impl ExternalStakingContract<'_> {
         Ok(resp)
     }
 
+    /// Commits a withdraw rewards transaction.
+    /// Method used for tests only.
     #[msg(exec)]
     fn test_commit_withdraw_rewards(
         &self,
@@ -723,6 +734,8 @@ impl ExternalStakingContract<'_> {
         }
     }
 
+    /// Rollbacks a withdraw rewards transaction.
+    /// Method used for tests only.
     #[msg(exec)]
     fn test_rollback_withdraw_rewards(
         &self,
@@ -741,6 +754,8 @@ impl ExternalStakingContract<'_> {
         }
     }
 
+    /// In test code, this is called from `test_rollback_withdraw_rewards`.
+    /// In non-test code, this is called from `ibc_packet_ack` or `ibc_packet_timeout`
     pub(crate) fn rollback_withdraw_rewards(
         &self,
         deps: DepsMut,
@@ -769,6 +784,8 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
+    /// In test code, this is called from `test_commit_withdraw_rewards`.
+    /// In non-test code, this is called from `ibc_packet_ack`
     pub(crate) fn commit_withdraw_rewards(
         &self,
         deps: DepsMut,

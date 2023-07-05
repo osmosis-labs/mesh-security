@@ -112,7 +112,7 @@ impl ConverterContract<'_> {
         Ok(Response::new())
     }
 
-    /// This is only used for tests
+    /// This is only used for tests.
     /// Ideally we want conditional compilation of these whole methods and the enum variants
     #[msg(exec)]
     fn test_stake(
@@ -133,7 +133,7 @@ impl ConverterContract<'_> {
         }
     }
 
-    /// This is only used for tests
+    /// This is only used for tests.
     /// Ideally we want conditional compilation of these whole methods and the enum variants
     #[msg(exec)]
     fn test_unstake(
