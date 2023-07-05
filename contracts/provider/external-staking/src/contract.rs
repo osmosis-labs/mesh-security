@@ -512,7 +512,7 @@ impl ExternalStakingContract<'_> {
         }
     }
 
-    /// Withdraws all released tokens to the sender.
+    /// Withdraws all of their released tokens to the calling user.
     ///
     /// Tokens to be claimed have to be unbond before by calling the `unbond` message, and
     /// their unbonding period must have passed.
