@@ -103,16 +103,19 @@ We dig more into the mechanics of the Virtual Staking contract in the
 
 ## Rewards Flow
 
-Once per epoch, the Virtual Staking module will trigger rewards. This will send a number of
+Once per epoch, the Virtual Staking module will trigger rewards. This will generate a number of
 messages to the Converter, specifying which validators the rewards belong to, along with the
-native reward tokens themselves.
+amounts of rewards. The Converter will send vouchers of the reward amounts to the Exteral Staking contract
+over IBC. The actual tokens will be kept on the Converter, for later distribution.
 
-TODO: Update this.
-The Converter will then [transfer all these tokens via ICS20](../ibc/Overview.md) to the
-corresponding `External Staking` contract on the Provider chain, and send a message over the
-standard IBC channel to inform the `External Staking` contract how to distribute them.
-(If we get callbacks on ICS20, we send the metadata only after tokens have arrived. Until then
-(for MVP), we send them concurrently and hope).
+The External Staking contract on the Consumer chain will receive the vouchers of the amounts per
+validator, and will then inform in turn to the Converter of the proper distribution of rewards per user.
+
+This is done in this way because while the Consumer side knows the rewards per validator, the information
+about which delegators are staking with which validator is only known on the Provider side. Thus,
+the Provider must inform the Consumer of the proper distribution of rewards.
+
+The Converter will then send the actual rewards to their respective owners.
 
 ## Unstaking Flow
 
