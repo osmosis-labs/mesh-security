@@ -222,19 +222,18 @@ Below are links to detailed documents on various sub-systems:
 
 [Provider](./provider/Provider.md):
 
-- [Vault](./provider/Vault.md)
-- [Local Staking](./provider/LocalStaking.md)
-- [External Staking](./provider/ExternalStaking.md)
-- TODO - Rust interfaces
+- [Vault](./provider/Vault.md).
+- [Local Staking](./provider/LocalStaking.md).
+- [External Staking](./provider/ExternalStaking.md).
 
 [Consumer](./consumer/Consumer.md):
 
-- [Converter](./consumer/Converter.md)
-- [Virtual Staking](./consumer/VirtualStaking.md)
-- SDK Changes
+- [Converter](./consumer/Converter.md).
+- [Virtual Staking](./consumer/VirtualStaking.md).
+- SDK Changes.
 
 [IBC Protocol](./ibc/Overview.md):
 
-- [Cross-Chain Staking](./ibc/Staking.md)
-- [Reward Flow](./ibc/Rewards.md)
-- [Handling Slashing Evidence](./ibc/Slashing.md)
+- [Cross-Chain Staking](./ibc/Staking.md).
+- [Reward Flow](./ibc/Rewards.md).
+- [Handling Slashing Evidence](./ibc/Slashing.md).
