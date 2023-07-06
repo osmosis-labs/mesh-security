@@ -7,7 +7,7 @@ and releases the virtual tokens when finished unbonding.
 It also manages distribution of rewards coming from the remote (consumer) chain,
 and transferring of those rewards to remote recipients on the consumer chain.
 
-# Transitions
+## Transitions
 
 **Stake (i.e. `receive_virtual_stake`)**
 

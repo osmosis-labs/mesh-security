@@ -22,6 +22,34 @@ flowchart LR
   G -. IBC .-> H{{Stars Consumer}};
 ```
 
+## Setup
+
+## Contracts setup
+
+After the Consumer side is instantiated(See [Consumer Setup](../consumer/Consumer.md#setup)),
+we need to instantiate the contracts on the Provider side.
+
+The Vault contract is instantiated with the code id of the Local Staking contract,
+and a initialization message for it which includes the code id of the Native Staking Proxy contract,
+and a max slashing setting for local staking.
+It also requires the local denom, which is the denom of the native staking token on the Provider chain.
+
+After that, the External Staking contract can be instantiated. This also requires the local denom, the
+address of the Vault contract, the unbonding period of the remote chain, the rewards denom (which is the
+denom of the staking token on the remote chain), and a max slashing setting for external staking.
+It also requires remote contact information, which are the IBC connection and port ids for
+connecting to the remote (Consumer) chain over IBC.
+
+### IBC
+
+After the contracts setup is done, IBC setup needs to be done, again starting from the Consumer side.
+See [Consumer IBC](../consumer/Consumer.md#ibc).
+
+This may involve some test setup, involving by example [ibctesting](https://pkg.go.dev/github.com/incubus-network/fanfury-sdk/ibctesting)
+or a similar framework, or a relayer configuration, which would require the External Staking contract address on the Provider and the Converter
+address on the Consumer.
+The exact setup of IBC is out of scope for this document.
+
 ## Flows
 
 The first action the user must undertake is depositing
