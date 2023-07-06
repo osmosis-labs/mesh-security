@@ -117,6 +117,16 @@ the Provider must inform the Consumer of the proper distribution of rewards.
 
 The Converter will then send the actual rewards to their respective owners.
 
+## Rebalancing Flow
+
+Once per epoch, the Virtual Staking module will check if a rebalancing of staking amounts is required.
+This can happen once the max staking cap is reached on the Consumer. In this case, the Virtual Staking
+module will trigger a rebalancing, which will generate a number of messages for bonding/unbonding
+of amounts for each validator.
+
+TODO: The current implementation does not consider changes to the validator set, and rebalancing may
+(repeatedly) fail if any validator was slashed or fell out of the active set.
+
 ## Unstaking Flow
 
 The Converter can also unstake some tokens. These will be held in escrow on the Provider and
