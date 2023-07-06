@@ -7,31 +7,6 @@ which handles the actual issuance.
 
 The converter is connected to the Provider chain via IBC and handles the various packets coming from it.
 
-## Setup
-
-We must first instantiate a Price Feed contract(see [Price Normalization / Price Feeds](#price-feeds) below),
-and a Virtual Staking contract must be stored on chain. So that we can get its code id.
-
-Then the Converter contract is instantiated, which takes the address of the Price Feed contract, and the Code Id
-of the Virtual Staking contract.
-The Converter will then instantiate a Virtual Staking contract to work with it, as they both need references
-to each other.
-In addition to the Price Feed contract address and the code id of the Virtual Staking contract,
-the Converter also needs the discount ratio, the remote denomination, and the admin of the Virtual Staking
-contract, which is taken as an explicit argument, and normally will be the same admin of the Converter (but
-could be a different one). This (wasm) admin is very important, as it is the only one who can migrate the Virtual
-Staking contract if needed.
-
-When we [deploy the contracts](../ibc/Overview.md#deployment), we connect the Converter on the Consumer
-chain with an [External Staking](../provider/ExternalStaking.md) contract on the Provider. Once this
-connection is established, Consumer governance can authorize this Converter with some ability to mint
-on the [Virtual Staking](./VirtualStaking.md) contract.
-
-When IBC connection is established from the Converter, the Provider side [External Staking](../provider/ExternalStaking.md)
-contract must be already instantiated with the proper IBC channel information (i.e. proper connection id
-and port id information in the `AuthorizedEndpoint` struct, set as part of their `InstantiateMsg`).
-See the [Provider](../provider/Provider.md) Setup for more information.
-
 ## Validator Updates Flow
 
 The Converter contract on the Provider chain will send validator updates to the Consumer chain via IBC packets,
