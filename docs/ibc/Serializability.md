@@ -31,7 +31,7 @@ It goes on and explains
 
 Continuing with an example of [such a case that you can read](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-SERIALIZABLE).
 
-The key note here is that, in the interest of performance, the database _does not_ actually run them
+The key point here is that, in the interest of performance, the database _does not_ actually run them
 serially, not use locking to ensure key portions are run serially. Instead, it detects any conflict, and
 if present, aborts the transaction with an error (to be retried later). Such a definition may be useful
 when speeding up local changes, but it is not possible when the transaction consists of sub-transactions on different blockchains, as we cannot roll them both back on failure.
@@ -68,7 +68,7 @@ locks, or special handling of the packet and ack ordering. One way to guarantee 
 is to create a [data structure that is a CRDT](#crdts) (link to section below). Often that is
 not possible (we have some global invariants that may never be broken), and we need to
 look further. But if it is possible to use CRDTs, you can always guarantee serializability, without
-the need for locks or any other book-keeping.
+the need for locks or any other bookkeeping.
 
 Note that Incrementing and Decrementing a counter is a good example of a commutative operation,
 but once we start adding some global invariants, like "counter must never go below 0", this is
@@ -107,7 +107,7 @@ significant communication between the nodes, and is not suitable for an IBC syst
 For our purpose, we can look at the basic requirements of
 [Atomic Commits](https://en.m.wikipedia.org/wiki/Atomic_commit):
 
-> In the field of computer science, an atomic commit is an operation that applies a set of distinct changes as a single operation. If the changes are applied, then the atomic commit is said to have succeeded. If there is a failure before the atomic commit can be completed, then all of the changes completed in the atomic commit are reversed. This ensures that the system is always left in a consistent state
+> In the field of computer science, an atomic commit is an operation that applies a set of distinct changes as a single operation. If the changes are applied, then the atomic commit is said to have succeeded. If there is a failure before the atomic commit can be completed, then all the changes completed in the atomic commit are reversed. This ensures that the system is always left in a consistent state
 
 This can be implemented in a two-chain IBC protocol with the following approach:
 
@@ -146,7 +146,7 @@ that fails depends on the ordering of the operations, thus rendering it no longe
 and there is a limit to the value of the counter (not user defined), then we can prove we will never hit the said limits and this
 would be commutative. However, since we usually enforce `value > 0` on blockchains, this would rarely work.
 
-Other types that are well defined and may be useful to IBC protocols are "grow-only set", "two-phase-set" (once removed, it can never enter),
+Other types that are well-defined and may be useful to IBC protocols are "grow-only set", "two-phase-set" (once removed, it can never enter),
 "last write wins" (based on some trusted timestamp). These are mathematical definitions and can be implemented in a variety of ways.
 For example "grow-only set" could be an "append-only vector" where we keep it sorted and remove duplicates.
 
@@ -162,10 +162,10 @@ Note that commit ordering is essential here. If we start transaction A, B, C on 
 concurrently, we still want to treat them as if they were committed in order. That all of A's processing is done
 before B starts. If they are completely independent and don't touch the same data, then they can safely run concurrently.
 If they depend on (or would interfere with) each other, then we must fail the later transactions before sending an IBC packet.
-It can be retried after A is committed and we can safely determine the result.
+It can be retried after A is committed, and we can safely determine the result.
 
-Note this extends both to the order of processing of A', B', C' on the receiving chain, as well as the order of ACKs
-arriving on the sending chain. On top of this, we have to ensure that no other transactions conflict with any open
+Note this extends both to the order of processing of A', B', C' on the receiving chain, and the order of ACKs
+arriving at the sending chain. On top of this, we have to ensure that no other transactions conflict with any open
 IBC transactions. Transaction A is "open" from the time the first logic is run on the sending chain (which will send
 the IBC message) until the ACK is fully processed and committed on the sending chain. This will span several blocks,
 possibly hours in the case of timeouts.
@@ -198,7 +198,7 @@ In some cases where the business logic is very complex and hard to model commuta
 sub-system (nothing universal like bank), this may be the best approach. However, it is very limiting and should be avoided if possible.
 
 **Note** Unlike a typical DB, we cannot wait on a lock, as a transaction must be processed sequentially (and quickly).
-Instead we return an error on any transaction that cannot acquire a lock, pushing the responsibility to the client to retry later.
+Instead, we return an error on any transaction that cannot acquire a lock, pushing the responsibility to the client to retry later.
 This also ensures we can never get deadlock (just very poor performance if we lock too much).
 
 ## Forcing Commutativity
@@ -222,10 +222,10 @@ We can say that ICS20 implementation does something like this. As the only invar
 it preemptively moves the tokens out of the users account to an escrow. This doesn't require any further lock on the user's account,
 but ensures no other transaction will be possible to execute that would render the user's balance below 0 if this was committed.
 Thus, any other transaction that would be commutative with this (commit or rollback) can be executed concurrently, but any other
-transaction that would conflict with this (eg. spend the same tokens, and only be valid if the ICS20 transfer gets an error ack),
+transaction that would conflict with this (e.g. spend the same tokens, and only be valid if the ICS20 transfer gets an error ack),
 will immediately fail.
 
-ICS20 is an extremely simple case and you don't need such theory to describe decrementing one counter. However, assume there was not
+ICS20 is an extremely simple case, and you don't need such theory to describe decrementing one counter. However, assume there was not
 only a min token balance (0) but some max, say 1 million. Then ICS20 would not work, as you could escrow 500k tokens, then receive
 600k tokens, and if the ICS20 received an error ACK, it would be impossible to validly roll this back (another example of non-commutative,
 or conflicting, operations).
@@ -250,7 +250,7 @@ With some clever reasoning, we could possibly enforce such value ranges without 
 After discussions with other developers, we feel that Value Ranges could be a very valuable approach, offering the same
 guarantees of commutativity as locking, but with much less impact on the user's experience. It doesn't require developers
 to reason about every workflow, but rather, like the locking approach, enforces constraints in the data structures themselves.
-This is much less error prone, and the same data structures that would be affected by locking are the same ones that would
+This is much less error-prone, and the same data structures that would be affected by locking are the same ones that would
 be affected by value ranges.
 
 We will focus on Locking for MVP and look forward to develop this further for the V1 release, with plenty of time to discuss the
