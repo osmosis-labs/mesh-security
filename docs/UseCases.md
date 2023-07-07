@@ -1,7 +1,7 @@
 # Use Cases
 
 We assume each chain has a native staking token denom, with some quantity (could be 1 or 1,000,000,000).
-This is the initial token to start the chain with. Each provider chain that connects gets a maximum of X virtual tokens,
+This is the initial token to start the chain with. Each provider chain that connects may mint up to a maximum of X virtual tokens,
 defined by consumer governance when authorizing the new provider. The ratio between the amount of native tokens
 and the max cap of virtual tokens on each provider is a key element in defining the various security models.
 
