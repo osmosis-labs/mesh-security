@@ -56,6 +56,8 @@ contract must be already instantiated with the proper IBC channel information (i
 and port id information in the `AuthorizedEndpoint` struct, set as part of their `InstantiateMsg`).
 See the [Provider](../provider/Provider.md) Setup for more information.
 
+Also, see [IBC Deployment](../ibc/ControlChannel.md#deployment) for more information on how the IBC connection is established.
+
 ## Converting Foreign Stake
 
 Not all providers are treated equally. (And this is a good thing)
