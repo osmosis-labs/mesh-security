@@ -30,14 +30,14 @@ const DEFAULT_VALIDATOR_TIMEOUT: u64 = 24 * 60 * 60;
 const DEFAULT_REWARD_TIMEOUT: u64 = 60 * 60;
 
 pub fn packet_timeout_validator(env: &Env) -> IbcTimeout {
-    // No idea about their blocktime, but 24 hours ahead of our view of the clock
+    // No idea about their block time, but 24 hours ahead of our view of the clock
     // should be decently in the future.
     let timeout = env.block.time.plus_seconds(DEFAULT_VALIDATOR_TIMEOUT);
     IbcTimeout::with_timestamp(timeout)
 }
 
 pub fn packet_timeout_rewards(env: &Env) -> IbcTimeout {
-    // No idea about their blocktime, but 1 hour ahead of our view of the clock
+    // No idea about their block time, but 1 hour ahead of our view of the clock
     // should be decently in the future.
     let timeout = env.block.time.plus_seconds(DEFAULT_REWARD_TIMEOUT);
     IbcTimeout::with_timestamp(timeout)
@@ -196,7 +196,7 @@ pub fn ibc_packet_receive(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// We get acks on sync state without much to do.
+/// We get ACKs on sync state without much to do.
 /// If it succeeded, take no action. If it errored, we can't do anything else and let it go.
 /// We just log the error cases so they can be detected.
 pub fn ibc_packet_ack(
