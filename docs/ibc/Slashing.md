@@ -27,7 +27,7 @@ if the **entire chain** has gone Byzantine, which is to say that there are two v
 light client proofs for the same height, and over 1/3 of the validators have double-signed.
 
 At such a point, the light client will halt and require governance intervention to
-be restored. No packets or acks on any channel between those two chains will be
+be restored. No packets or ACKs on any channel between those two chains will be
 allowed until the governance intervention is complete.
 
 Mesh Security should detect such a state and likewise freeze the relevant `external-staking`
@@ -54,10 +54,11 @@ as [well as the signature](https://github.com/cometbft/cometbft/blob/v0.37.1/pro
 
 The basic checks are:
 
-1. Ensure both votes are by the same validator, same height, and same round, and same vote type (precommit)
-2. Ensure the Block IDs of the two votes are different
-3. Look up the validator's public key from the validator address (stored in `external-staking`) and ensure this is a valid validator on the consumer chain
-4. Finally, [verify the signature on both votes](https://github.com/cometbft/cometbft/blob/v0.37.1/evidence/verify.go#L211-L219) using the public key and the chain-id of the consumer chain (this must be set up in the `external-staking` contract)
+1. Ensure both votes are by the same validator, same height, and same round, and same vote type (pre-commit).
+2. Ensure the Block IDs of the two votes are different.
+3. Look up the validator's public key from the validator address (stored in `external-staking`) and ensure this is a valid validator on the consumer chain.
+4. Finally, [verify the signature on both votes](https://github.com/cometbft/cometbft/blob/v0.37.1/evidence/verify.go#L211-L219)
+   using the public key and the chain-id of the consumer chain (this must be set up in the `external-staking` contract)
 
 We can also add some consistency checks, like "this evidence has not been seen before", which is
 equivalent to "this validator has not been tombstoned yet", and maybe some limit on age of
