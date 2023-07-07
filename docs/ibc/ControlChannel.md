@@ -30,7 +30,7 @@ digging into the sub-protocols below.
 
 The Consumer sends packets for the original validator set.
 
-TODO: Validator set updates are not yet supported. Only the original validator set is sync
+TODO: Validator set updates are not yet supported. Only the original validator set is sent once
 after IBC connection establishment at the moment.
 
 We use a CRDT-based algorithm to maintain a consistent view of the validator set regardless
