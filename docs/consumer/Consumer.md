@@ -46,7 +46,7 @@ Staking contract if needed.
 
 ### IBC
 
-When we [deploy the contracts](../ibc/Overview.md#deployment), we connect the Converter on the Consumer
+After we [deployed the contracts](../ibc/Overview.md#deployment), an IBC channel can be setup between Converter on the Consumer
 chain with an [External Staking](../provider/ExternalStaking.md) contract on the Provider. Once this
 connection is established, Consumer governance can authorize this Converter with some ability to mint
 on the [Virtual Staking](./VirtualStaking.md) contract.
