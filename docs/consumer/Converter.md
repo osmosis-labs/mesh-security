@@ -111,7 +111,7 @@ over IBC. The actual tokens will be kept on the Converter, for later distributio
 The External Staking contract on the Consumer chain will receive the vouchers of the amounts per
 validator, and will then inform in turn to the Converter of the proper distribution of rewards per user.
 
-This is done in this way because while the Consumer side knows the rewards per validator, the information
+This is done in this way because while the Consumer side does not know anything about individual stakers. This is stored on the provider side with the distribution model.
 about which delegators are staking with which validator is only known on the Provider side. Thus,
 the Provider must inform the Consumer of the proper distribution of rewards.
 
