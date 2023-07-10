@@ -2,7 +2,7 @@
 
 The Stake Converter is on the consumer side and is connected to an External Staker on the Provider side.
 This handles the normalization of the external tokens and _converts_ them into "Virtual Stake".
-There is a 1:1 connection between a Converter and a [Virtual Staking Contract](./VirtualStaking.md)
+There is a 1:1 connection between a Converter and a [Virtual Staking](./VirtualStaking.md) contract
 which handles the actual issuance.
 
 The converter is connected to the Provider chain via IBC and handles the various packets coming from it.

@@ -23,7 +23,7 @@ flowchart RL
 
 ## Deployment
 
-As mentioned in [the consumer section](../consumer/Consumer.md),
+As mentioned in the [Consumer](../consumer/Consumer.md) section,
 we need to establish a trust relationship between the Provider side and the Consumer side. This is done in multiple stages.
 
 I refer to "Admin" here in most of the setup, which can be any address that can make calls on two chains.
@@ -47,7 +47,7 @@ to authorize them:
    can verify the contract code and configuration.
 3. Consumer chain governance votes to authorize this _Virtual Staking_ contract to have special
    privileges on the staking system (see [Virtual Staking](../consumer/VirtualStaking.md)).
-4. Authorization on the Provider chain [is not required](https://github.com/CosmWasm/mesh-security/blob/begin-architecture/docs/provider/Vault.md#design-decisions),
+4. Authorization on the Provider chain [is not required](../provider/Vault.md#design-decisions),
    but the default cross-stake frontend application should add the _External Staker_ to the recommended list.
 
 Once this has been completed, everything is set up and the token holders on the Provider side

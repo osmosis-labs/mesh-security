@@ -1,11 +1,11 @@
 # Consumer
 
-The consumer side of the system receives "virtual tokens" from
+The Consumer side of the system receives "virtual tokens" from
 some trusted providers and uses those to update the local staking weights.
 It then provides rewards to those providers in exchange for
 the security promise it receives.
 
-This is the other half of [the provider flow](../provider/Provider.md).
+This is the other half of the [Provider](../provider/Provider.md) flow.
 
 ```mermaid
 flowchart LR
@@ -60,19 +60,19 @@ When the IBC connection is established between chains, a channel can be setup be
 and the [External Staking](../provider/ExternalStaking.md) contract on the Provider.
 The External Staking contract must be already instantiated with the proper IBC channel information (i.e. proper connection id
 and port id information in the `AuthorizedEndpoint` struct, set as part of their `InstantiateMsg`).
-See the [Provider](../provider/Provider.md) Setup for more information.
+See the [Provider Setup](../provider/Provider.md#setup) for more information.
 
 Also, see [IBC Deployment](../ibc/ControlChannel.md#deployment) for more information on how the IBC connection is established.
 
 ## Converting Foreign Stake
 
-Not all providers are treated equally. (And this is a good thing)
+Not all providers are treated equally (and this is a good thing).
 
 Each Converter accepts messages from exactly one provider and is
 the point where we establish trust. The Converter is responsible for
 converting the staking messages into local units. It does two transformations.
 This first is convert the token based on a price oracle. The second step is to apply a discount,
-which captures both the volatility of the remote asset, as well as
+which captures both the volatility of the remote asset, and
 a general preference for local/native staking.
 
 This is described more in depth under [Converter](./Converter.md#staking-flow).

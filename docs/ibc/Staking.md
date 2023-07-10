@@ -13,7 +13,7 @@ We also want to guarantee that the Provider chain always maintains sufficient st
 in the vault to cover all virtual staking actions currently outstanding on the Provider chain.
 
 As [mentioned before](./ControlChannel.md#channel-ordering), we wish to use an unordered channel,
-and therefore must bring a degree of understanding of [Serializability](./Serializability.md)
+and therefore must bring a degree of understanding of [serializability](./Serializability.md)
 to this protocol.
 
 ## Delegation Syncing
@@ -84,7 +84,7 @@ Possible keys with conflicts are:
 ### Identifying Potential Commutability
 
 The general design should be to write all changes only on a successful ACK, but hold any locks needed to ensure those
-writes will not fail in any condition. Using the approach of [Value Ranges](./Serializability.md#value-ranges), let us analyze
+writes will not fail in any condition. Using the approach of [Value Ranges](./Serializability.md#value-range), let us analyze
 what needs to be minimally enforced here.
 
 For staking, we update:
@@ -259,4 +259,4 @@ do_stake();
 
 ### Error correction
 
-**TODO** Ideas about using values in success ACKs to double check the state matches expectations and flag possible errors
+**TODO**: Ideas about using values in success ACKs to double check the state matches expectations and flag possible errors.
