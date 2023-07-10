@@ -4,9 +4,9 @@ The entry point of Mesh Security is the **Vault**. This is where a potential
 staker can provide collateral in the form of native tokens, with which he or she wants
 to stake on multiple chains.
 
-Connected to the _Vault_ contract, is exactly one [Local Staking contract](./LocalStaking.md)
+Connected to the _Vault_ contract, is exactly one [Local Staking](./LocalStaking.md) contract
 which can delegate the actual token to the native staking module. It also can connect to an
-arbitrary number of [External Staking contracts](./ExternalStaking.md) which can make use
+arbitrary number of [External Staking](./ExternalStaking.md) contracts which can make use
 of said collateral as "virtual stake" to use in an external staking system (one that doesn't
 directly use the vault token as collateral).
 

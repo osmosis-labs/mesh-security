@@ -65,7 +65,7 @@ Addressing some common points people raise up, which are hidden in the docs.
 
 There are many questions if this isn't "fractional reserve banking" or such.
 This does use the same collateral to back multiple claims (staking), but
-the [final invariant in the vault](https://github.com/osmosis-labs/mesh-security/blob/main/contracts/provider/vault/README.md#invariants)
+the [final invariant in the vault](./provider/Vault.md#invariants)
 ensures there is sufficient collateral to cover the maximum loss
 (e.g. if all local and cross-staked validators double-sign).
 If the double slash penalty is 5%, you can safely cross stake 20x.
@@ -81,13 +81,13 @@ to take over more than one-third, or even two-thirds or the power of a smaller c
 (e.g. $STARS) it is cross-staking on.
 
 Clearly the consumer chain wants to put some limits. The first limit is the
-[discount applied during the conversion](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-normalization).
+[discount applied during the conversion](./consumer/Converter.md#price-normalization).
 This doesn't just provide margin for price fluctuations but also means that on average
 a remote token has less voting power (and rewards) per USD-value than a local token, favoring
 local stakers.
 
 In addition, the Virtual Staking module enforces a
-[max cap per provider](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/VirtualStaking.md#module).
+[max cap per provider](./consumer/VirtualStaking.md#interface).
 This limits how many virtual tokens a given provider can stake.
 For computational reasons, it is defined as a number of tokens, not a percentage of stake,
 but looking at an average number of local tokens staked, the chain governance on
@@ -118,9 +118,9 @@ For price increases, we have the max cap described under "Power Limits" which pl
 on the provider chain's influence in all circumstances, so this isn't a large problem.
 
 For a rapid price decrease, we must consider the time frame.
-It is a [requirement of an oracle](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-feeds)
+It is a [requirement of an oracle](./consumer/Converter.md#price-feeds)
 to provide timely feeds, say once a day or week, so we should focus on the relative price movement
-in such a period. [The discount](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-normalization)
+in such a period. [The discount](./consumer/Converter.md#price-normalization)
 provides such a buffer. If there is a discount of 40% and the provider tokens drop 30% relative to
 the consumer tokens in one oracle epoch, then it is still over-collateralized relative to voting power.
 If, however, it falls 60%, then it would only have 2/3 of the collateral locked on the provider
