@@ -47,7 +47,8 @@ Establish a channel (allow list):
 Now that we have a channel and know which contract is talking to whom, we need
 to authorize them:
 
-1. Admin removes their admin rights on both contracts (or passes to chain governance).
+1. Admin removes their admin rights on both contracts. Or passes to chain governance; it would be
+   unwise to not have any admin, as this would prevent on-chain migrations.
 2. Due diligence performed on configuration of both contracts and the channel. Parties from both chains
    can verify the contract code and configuration.
 3. Consumer chain governance votes to authorize this _Virtual Staking_ contract to have special
