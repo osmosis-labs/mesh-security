@@ -44,6 +44,8 @@ contract, which is taken as an explicit argument, and normally will be the same 
 could be a different one). This (wasm) admin is very important, as it is the only one who can migrate the Virtual
 Staking contract if needed.
 
+**Note**: wasmd v0.41+ is required, for gov authority propagation to work.
+
 ### IBC
 
 After we [deployed the contracts](../ibc/Overview.md#deployment), an IBC channel can be setup between Converter on the Consumer
