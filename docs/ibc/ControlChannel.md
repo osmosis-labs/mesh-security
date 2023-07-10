@@ -79,8 +79,9 @@ The general process (assuming a vault is already established on the Provider) is
 Opening the channel is a 4-step process. It must be initiated by the Consumer side.
 
 1. Start with `OpenInit` from converter to the (connection, port) of the external staking. The version 
-   SHOULD be set to the highest mesh-security version it supports (see below), and the channel ordering
-   MUST be "unordered". It MUST error if it has a previously established channel.
+   SHOULD be set to the highest mesh-security version it supports (see below), or left empty to let
+   the contract handle it. The channel ordering MUST be "unordered". It MUST error if it has a previously
+   established channel.
 2. The external staking contract receives `OpenTry`. The channel ordering MUST be "unordered",
    and the version protocol MUST be `mesh-security`. It performs version negotiation as defined below.
    It MUST error if the (connection, port) being proposed is not the one it was initialized with.
