@@ -56,8 +56,9 @@ chain with an [External Staking](../provider/ExternalStaking.md) contract on the
 connection is established, Consumer chain governance needs to authorize the [Virtual Staking](./VirtualStaking.md) contract
 to mint virtual tokens. The Consumer contract orchestrates the mint / burn.
 
-When IBC connection is established from the Converter, the Provider side [External Staking](../provider/ExternalStaking.md)
-contract must be already instantiated with the proper IBC channel information (i.e. proper connection id
+When the IBC connection is established between chains, a channel can be setup between the Converter on the Consumer side
+and the [External Staking](../provider/ExternalStaking.md) contract on the Provider.
+The External Staking contract must be already instantiated with the proper IBC channel information (i.e. proper connection id
 and port id information in the `AuthorizedEndpoint` struct, set as part of their `InstantiateMsg`).
 See the [Provider](../provider/Provider.md) Setup for more information.
 
