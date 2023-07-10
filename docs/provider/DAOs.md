@@ -84,9 +84,9 @@ flowchart LR
   F -- $JUNO --> G[Native Staking];
 ```
 
-Note this would require a different implementation for vault (to handle cw20),
+Note this would require a different implementation for vault (to handle CW20),
 and likely a different "local staker" interface (you don't select validators, but rather unbonding time).
-The "External Staker JUNO" would be similar to the normal [Receiver model](../consumer/Receiver.md), and
+The "External Staker JUNO" would be similar to the normal [Provider model](../provider/Provider.md), and
 we will need a full implementation of the [Consumer side](../consumer/Consumer.md)
 implemented on the same chain.
 
