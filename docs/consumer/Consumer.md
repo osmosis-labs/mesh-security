@@ -36,15 +36,18 @@ and a [Virtual Staking](./VirtualStaking.md) contract must be stored on chain. S
 
 Then the Converter contract is instantiated, which takes the address of the Price Feed contract, and the Code Id
 of the Virtual Staking contract.
-The Converter will then instantiate a Virtual Staking contract to work with it, as they both need references
+It will then instantiate a Virtual Staking contract to work with it, as they both need references
 to each other.
-In addition to the Price Feed contract address and the code id of the Virtual Staking contract,
-the Converter also needs the discount ratio, the remote denomination, and the admin of the Virtual Staking
-contract, which is taken as an explicit argument, and normally will be the same admin of the Converter (but
-could be a different one). This (wasm) admin is very important, as it is the only one who can migrate the Virtual
-Staking contract if needed.
+The Converter also needs:
+ - Discount ratio.
+ - Remote denomination.
+ - Admin of the Virtual Staking contract.
 
-**Note**: wasmd v0.41+ is required, for gov authority propagation to work.
+The admin is taken as an explicit argument, and normally will be the same admin of the Converter (but
+could be different). The (wasm) admin is important, as it is the only one who can migrate the Virtual
+Staking contract without a chain upgrade.
+
+**Note**: wasmd v0.41+ is required for gov authority propagation to work.
 
 ### IBC
 
