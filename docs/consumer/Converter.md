@@ -18,7 +18,7 @@ the Consumer chain.
 
 ## Staking Flow
 
-Once the connection is established, the Provider can send various "virtual stake" messages to the Converter,
+Once the IBC connection and channel are established, the Provider can send various "virtual stake" messages to the Converter,
 which is responsible for processing them and normalizing amounts for the local "virtual staking" module. These
 packets are sent via a dedicated channel between the Provider chain and the Consumer chain, to ensure
 that there are no other security assumptions (3rd party modules) involved in sending this critical staking
@@ -105,23 +105,28 @@ We dig more into the mechanics of the Virtual Staking contract in the
 
 Once per epoch, the Virtual Staking module will trigger rewards. This will generate a number of
 messages to the Converter, specifying which validators the rewards belong to, along with the
-amounts of rewards. The Converter will send vouchers of the reward amounts to the Exteral Staking contract
+amounts of rewards. The Converter will send reward amounts to the External Staking contract
 over IBC. The actual tokens will be kept on the Converter, for later distribution.
 
-The External Staking contract on the Consumer chain will receive the vouchers of the amounts per
-validator, and will then inform in turn to the Converter of the proper distribution of rewards per user.
+The External Staking contract will receive the amounts per validator,
+and will inform the Converter of the distribution of rewards per user.
 
-This is done in this way because while the Consumer side does not know anything about individual stakers. This is stored on the provider side with the distribution model.
+Say, there are 10 rewards for validator 1, and 20 rewards for validator 2. The External Staking
+contract will inform the Converter that 5 rewards go to user X, 15 rewards go to user Y, and 10 rewards
+go to user Z.
+
+This is done this way because while the Consumer side does not know anything about individual stakers. This is stored on the provider side with the distribution model.
 about which delegators are staking with which validator is only known on the Provider side. Thus,
 the Provider must inform the Consumer of the proper distribution of rewards.
 
-The Converter will then send the actual rewards to their respective owners.
+The Converter will then send the actual rewards in the chain's native token
+to their respective owners on the Consumer chain.
 
 ## Rebalancing Flow
 
 Once per epoch, the Virtual Staking module will check if a rebalancing of staking amounts is required.
 This can happen once the max staking cap is reached on the Consumer. In this case, the Virtual Staking
-module will trigger a rebalancing, which will generate a number of messages for bonding/unbonding
+module will trigger a rebalancing, which will generate a number of messages for bonding / unbonding
 of amounts for each validator.
 
 TODO: The current implementation does not consider changes to the validator set, and rebalancing may
