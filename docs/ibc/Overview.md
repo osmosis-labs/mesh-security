@@ -71,7 +71,7 @@ principle form of communication, called the
 [Control Channel](./ControlChannel.md), and is the core
 piece of the Mesh Security IBC protocol.
 
-We send reward vouchers over the Control Channel from the converter contract
+We send reward amounts over the Control Channel from the Converter contract
 in the Consumer side to the External Staking contract on the Provider side, so that
 they can be distributed by the Provider side. The Provider side
 indicates in turn to the Consumer side which users should receive rewards.

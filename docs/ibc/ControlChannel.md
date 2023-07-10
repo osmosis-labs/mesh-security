@@ -5,8 +5,8 @@ This document describes the "control channel", which is a direct IBC channel bet
 on the Consumer side. This is used to send messages about bonding and unbonding,
 and any other metadata about the protocol (like validators).
 
-It is also used to send reward vouchers(./Rewards.md), which represent amounts of rewards
-that have been earned by delegators from the Provider chain, and are redeemable on the Consumer chain.
+It is also used to send reward amounts(./Rewards.md) that have been earned by delegators
+from the Provider chain, and are redeemable on the Consumer chain.
 
 It is **not** used to [handle slashing](./Slashing.md), as there are concerns
 a malicious state machine would lie, so we demand original evidence of Tendermint
