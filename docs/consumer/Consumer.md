@@ -53,8 +53,8 @@ Staking contract without a chain upgrade.
 
 After we [deployed the contracts](../ibc/Overview.md#deployment), an IBC channel can be setup between Converter on the Consumer
 chain with an [External Staking](../provider/ExternalStaking.md) contract on the Provider. Once this
-connection is established, Consumer governance can authorize this Converter with some ability to mint
-on the [Virtual Staking](./VirtualStaking.md) contract.
+connection is established, Consumer chain governance needs to authorize the [Virtual Staking](./VirtualStaking.md) contract
+to mint virtual tokens. The Consumer contract orchestrates the mint / burn.
 
 When IBC connection is established from the Converter, the Provider side [External Staking](../provider/ExternalStaking.md)
 contract must be already instantiated with the proper IBC channel information (i.e. proper connection id
