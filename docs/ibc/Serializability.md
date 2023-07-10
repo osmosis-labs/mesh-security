@@ -64,7 +64,7 @@ the details of the actual transactions being executed.
 > A more general definition of conflicting operations (also for complex operations, which may each consist of several "simple" read/write operations) requires that they are noncommutative (changing their order also changes their combined result). Each such operation needs to be atomic by itself (using proper system support) in order to be considered an operation for a commutativity check. For example, read–read operations are commutative (unlike read–write and the other possibilities) and thus read–read is not a conflict. Another more complex example: the operations increment and decrement of a counter are both write operations (both modify the counter), but do not need to be considered conflicting (write-write conflict type) since they are commutative (thus increment–decrement is not a conflict; e.g., already has been supported in the old IBM's IMS "fast path").
 
 The idea of "commutative operations" gets very attractive for our case. In this case, we need no
-locks, or special handling of the packet and ack ordering. One way to guarantee communativity
+locks, or special handling of the packet and ACK ordering. One way to guarantee commutativity
 is to create a [data structure that is a CRDT](#crdts) (link to section below). Often that is
 not possible (we have some global invariants that may never be broken), and we need to
 look further. But if it is possible to use CRDTs, you can always guarantee serializability, without
@@ -113,8 +113,8 @@ This can be implemented in a two-chain IBC protocol with the following approach:
 
 1. The sending chain A completes its sub-transaction and maintains all needed locks
    (or other structs) to guarantee it can commit or rollback the state transitions as needed.
-2. The receiving chain B processes its sub-transaction and returns a success or error ack.
-3. If the ack is a success, chain A commits its state transitions. If it is an error, chain A
+2. The receiving chain B processes its sub-transaction and returns a success or error ACK.
+3. If the ACK is a success, chain A commits its state transitions. If it is an error, chain A
    rolls back its state transitions.
 
 This builds on the existing IBC infrastructure and is the reason why ACKs were introduced
@@ -176,7 +176,7 @@ resistent to deadlock. We would do the following:
 
 1. Start Tx on Sending Chain: Acquire all read/write locks on all data that will be touched. This is the "growing" phase of the lock.
 2. Process Packet on Receiving Chain: Acquire all read/write locks on all data, process data, release all locks. This goes from the "growing" phase to the "shrinking" phase.
-3. Process Ack on the Sending Chain: Process ack, and release all locks. This is the "shrinking" phase.
+3. Process ACK on the Sending Chain: Process ACK, and release all locks. This is the "shrinking" phase.
 
 Note that blockchains actually process all transactions sequentially (this is one of their main purposes), so we can simplify this
 by considering any non-IBC transaction to get and release locks on all data it touches during its execution.
@@ -187,11 +187,11 @@ _data read during Phase 3 will need a read lock from Phase 1_
 With that, we can simplify to:
 
 1. Start Tx on Sending Chain: Acquire all locks on all data that may be touched in Phase 3, but don't write anything.
-2. Process Packet on Receiving Chain: Process data, and return success or error ack.
-3. Process Ack on the Sending Chain: Commit or rollback based on ack. Only can read/write data held under lock from step 1
+2. Process Packet on Receiving Chain: Process data, and return success or error ACK.
+3. Process ACK on the Sending Chain: Commit or rollback based on ACK. Only can read/write data held under lock from step 1
 
 If we modelled ICS20 like this, it would require us to hold a lock on the account balance of the sender (at least the keys holding the
-denom being sent) from the original send until the ack. This would not interfere with any other processes,
+denom being sent) from the original send until the ACK. This would not interfere with any other processes,
 but that user could not send tokens locally, stake those tokens, receive local tokens, or even properly query his balance (as it is undefined).
 
 In some cases where the business logic is very complex and hard to model commutatively, and the keys under lock are only used by this one
@@ -222,7 +222,7 @@ We can say that ICS20 implementation does something like this. As the only invar
 it preemptively moves the tokens out of the users account to an escrow. This doesn't require any further lock on the user's account,
 but ensures no other transaction will be possible to execute that would render the user's balance below 0 if this was committed.
 Thus, any other transaction that would be commutative with this (commit or rollback) can be executed concurrently, but any other
-transaction that would conflict with this (e.g. spend the same tokens, and only be valid if the ICS20 transfer gets an error ack),
+transaction that would conflict with this (e.g. spend the same tokens, and only be valid if the ICS20 transfer gets an error ACK),
 will immediately fail.
 
 ICS20 is an extremely simple case, and you don't need such theory to describe decrementing one counter. However, assume there was not
@@ -235,7 +235,7 @@ or conflicting, operations).
 One idea to implement this would be to not just store one value (the balance), but a range of values, covering possible values if
 all in-flight transactions were to succeed or fail. Normal transactions (send 100 tokens) would update both values and error if either
 one violated some invariant (too high or too low). When an IBC transaction is initiated, it would execute eg. "Maybe(200)", which would
-attempt to decrease the min by 200 but leave the max unchanged (requiring this range to remain valid). When the IBC ack is received,
+attempt to decrease the min by 200 but leave the max unchanged (requiring this range to remain valid). When the IBC ACK is received,
 we would either `Commit(200)` or `Rollback(200)`, which would once again bring min and max to the same value (which one depends on Commit or Rollback).
 
 This approach would only work by values not used by complex formulas, such as balances of an AMM (we can't calculate prices of ranges),
