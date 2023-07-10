@@ -9,10 +9,10 @@ The converter is connected to the Provider chain via IBC and handles the various
 
 ## Validator Updates Flow
 
-The Converter contract on the Provider chain will send validator updates to the Consumer chain via IBC packets,
+The Converter contract on the Provider chain will send validator information to the Consumer chain via IBC packets,
 so that the External Staking contract on the Provider can know if a given remote validator is active or not.
+These packets are currently being sent on IBC channel ACK only (i.e. as part of IBC channel establishment between both contracts).
 
-These packets are sent on IBC connection establishment.
 TODO: Send validator updates dynamically, so that the Provider chain is kept up-to-date with the validator set on
 the Consumer chain.
 
