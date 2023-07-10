@@ -36,13 +36,7 @@ the connection once it is all configured (for security).
 
 Establish a channel (allow list):
 
-1. Admin deploys _Converter_ and _Virtual Staking_ on the Consumer side, both referencing each other.
-2. Admin deploys _External Staker_ on the Provider side, registering `(connection, port)`
-   from _Converter_ contract from (1).
-3. Admin updates _Converter_ (1) to allow the `(connection, port)` from (2).
-4. Anyone establishes a new channel between _Converter_ and _External Staker_.
-   Both contracts ensure the other side matches the stored `(connection, port)` and refuse the channel otherwise.
-5. Neither contract accept any more channels. They only accept one channel and only what matches their config.
+See [Control Channel](./ControlChannel.md#deployment) for more information on how the IBC connection is established.
 
 Now that we have a channel and know which contract is talking to whom, we need
 to authorize them:
