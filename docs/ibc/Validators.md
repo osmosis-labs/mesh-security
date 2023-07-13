@@ -4,7 +4,7 @@ It is important for the provider to know the proper validators on the consumer c
 Both in order to limit the delegations to valid targets _before_ creating an IBC message,
 but also in order to track tendermint public keys to be able to slash properly.
 
-We define the "Validator Subprotocol" as a way to sync this information. It uses a CRDT-like
+We define the "Validator Sub-protocol" as a way to sync this information. It uses a CRDT-like
 design to maintain consistency in the face of arbitrary reordering. And retries in order
 to ensure dropped packets are eventually received.
 
@@ -12,7 +12,7 @@ to ensure dropped packets are eventually received.
 
 All validator change messages are initiated from the consumer side. The provider is
 responsible for guaranteeing any packet with a success ACK is written to state.
-Given all successful acks have been committed, the consumer maintains enough
+Given all successful ACKs have been committed, the consumer maintains enough
 information to sync outstanding changes and guarantee the Provider will eventually
 have a proper view of the dynamic validator set.
 
@@ -29,7 +29,7 @@ stream of `AddValidators` and `RemoveValidators` messages.
 
 As new validators are added to the active set, the consumer will send an `AddValidators`
 message with their information. We do not signal when a validator is removed from the active
-set as long as it is still valid to delegate to them (ie. they have not been tombstoned).
+set as long as it is still valid to delegate to them (i.e. they have not been tombstoned).
 
 When a validator is tombstoned, the consumer will send a `RemoveValidators` message with
 the address of that validator. Once it has been removed, it can never be added again.
@@ -40,12 +40,12 @@ _Note: sending these updates as a stream (rather than polling for the whole list
 
 As you see from the message types, we are using an operation-based CRDT design.
 This requires that all operations are commutative. We also guarantee they are idempotent,
-although that is not strictly required given IBC's "exactly once" delivery.
+although that is not strictly required, given IBC's "exactly once" delivery.
 
 In this section, we consider the operations that compose IBC packets:
 
-- `A(x, p)` - Add validator `x` with pubkey `p` to the validator set
-- `R(x)` - Remove validator `x` from the validator set
+- `A(x, p)` - Add validator `x` with pubkey `p` to the validator set.
+- `R(x)` - Remove validator `x` from the validator set.
 
 We do not consider Tendermint key rotation in this section, but describe it as an addition
 in [the following section](#validator-key-rotation).
@@ -53,9 +53,9 @@ This section is sufficient to support the basic operations available today.
 
 We wish to maintain a validator set `V` on the Provider with the following properties:
 
-- If no packet has been received for a given `x`, `x` is not in `V`
-- If `R(x)` has been received, `x` is not in `V`
-- If `A(x, p)` has been received, but no `R(x)`, `x` is in `V` with pubkey `p`
+- If no packet has been received for a given `x`, `x` is not in `V`.
+- If `R(x)` has been received, `x` is not in `V`.
+- If `A(x, p)` has been received, but no `R(x)`, `x` is in `V` with pubkey `p`.
 
 ### Basic Implementation
 
@@ -102,8 +102,8 @@ let new_state: State = match (old_state, op) {
 ### Proof of correctness
 
 The basic implementation without public key rotation is another expression of the same algorithm
-used in [`2P-Set`](<https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#2P-Set_(Two-Phase_Set)>). This is a proven CRDT, and if we implement it to match the spec, we have a
-guarantee of commutability.
+used in [`2P-Set`](<https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type#2P-Set_(Two-Phase_Set)>).
+This is a proven CRDT, and if we implement it to match the spec, we have a guarantee of commutability.
 
 ## Validator Key Rotation
 
@@ -112,19 +112,19 @@ to support. This protocol is designed to handle Tendermint key rotation, such th
 address may be associated with multiple public keys over the course of its existence.
 
 This feature is not implemented in Cosmos SDK yet, but long-requested and the Mesh Security
-protocol should be future proof. (Note: we do not handle changing the `valoper` address as
+protocol should be future-proof. (Note: we do not handle changing the `valoper` address as
 we use that as the unique identifier).
 
 We wish the materialized state to have the following properties:
 
 We wish to maintain a validator set `V` on the Provider with the following properties:
 
-- If no packet has been received for a given `x`, `x` is not in `V`
-- If `R(x)` has been received, `x` is not in `V`
+- If no packet has been received for a given `x`, `x` is not in `V`.
+- If `R(x)` has been received, `x` is not in `V`.
 - If at least one `A(x, _, _)` has been received, but no `R(x)`, `x` is in `V` with:
-  - A set of all pubkeys, along with the block height they were first active from.  
+  - A set of all pubkeys, along with the block height they were first active from 
     (We may represent this as a sorted list without duplicates, but that is a mathematically
-    equivalent optimization)
+    equivalent optimization).
 
 ### Proof of correctness
 

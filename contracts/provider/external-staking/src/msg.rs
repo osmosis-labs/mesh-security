@@ -65,13 +65,13 @@ pub struct StakeInfo {
     pub stake: Uint128,
 }
 
-/// Aggregated mutiple stakes response
+/// Aggregated multiple stakes response
 #[cw_serde]
 pub struct StakesResponse {
     pub stakes: Vec<StakeInfo>,
 }
 
-/// Message to be send as `msg` field on `receive_virtual_staking`
+/// Message to be sent as `msg` field on `receive_virtual_staking`
 #[cw_serde]
 pub struct ReceiveVirtualStake {
     pub validator: String,

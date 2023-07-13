@@ -6,9 +6,8 @@ simplifications used for MVP (testnet) or v1 (production-ready, feature-limited)
 as footnotes in the documents.
 
 ```mermaid
+%%{init: {'theme': 'forest'}}%%
 flowchart TD
-  %%{init: {'theme': 'forest'}}%%
-
   subgraph Osmosis
   A{{$OSMO}} -- User Deposit --> B(Vault);
   B -- $OSMO --> C(Local Staker);
@@ -25,25 +24,28 @@ flowchart TD
   end
 
   subgraph Juno
+  I(Price Oracle) -- price feed --> M;
+  J(Price Oracle) -- price feed --> N;
+
   M(Osmosis Converter) -- virtual stake --> O(Virtual Staking 1);
   N(Akash Converter) -- virtual stake --> P(Virtual Staking 2);
   O & P -- $JUNO --> Q[Native Staking];
   end
 
-  G -. IBC .-> R;
+  G -. IBC .-> T;
 
   subgraph Stargaze
-  R{{Osmosis Receiver}} -- virtual stake --> S(Virtual Staking);
-  S -- $STARS --> T[Native Staking];
+  S(Price Oracle) -- price feed --> T;
+  T{{Osmosis Converter}} -- virtual stake --> U(Virtual Staking);
+  U -- $STARS --> V[Native Staking];
   end
-
 ```
 
 You can get a good overview of the whole system flow in the above diagram.
 The design should allow one chain to provide security to multiple chains, while
 at the same time receiving security from multiple chains.
 
-A key to understanding the design, is that the whole system is _delegator-centeric_
+A key to understanding the design, is that the whole system is _delegator-centric_
 not _validator-centric_. This means that we don't try to match the same validators on
 multiple chains, or even subsets, but rather focus on leveraging the security
 provided by staking tokens to secure validators on multiple chains. This provides a way to
@@ -63,9 +65,9 @@ Addressing some common points people raise up, which are hidden in the docs.
 
 There are many questions if this isn't "fractional reserve banking" or such.
 This does use the same collateral to back multiple claims (staking), but
-the [final invariant in the vault](https://github.com/osmosis-labs/mesh-security/blob/main/contracts/vault/README.md#invariants)
+the [final invariant in the vault](./provider/Vault.md#invariants)
 ensures there is sufficient collateral to cover the maximum loss
-(eg. if all local and cross-staked validators double-sign).
+(e.g. if all local and cross-staked validators double-sign).
 If the double slash penalty is 5%, you can safely cross stake 20x.
 If it were to be raised to say 40%, you could only safely cross stake 2.5x
 This is more like insurance companies holding reserves for the worse cases expected losses,
@@ -74,18 +76,18 @@ not the total value of all property insured.
 ### Power Limits on Remote Chains
 
 Another common concern is whether there are effective limits in the power a remote
-chain can exert over one chain. Would it be possible for a higher cap chain (eg $ATOM)
+chain can exert over one chain. Would it be possible for a higher cap chain (e.g. $ATOM)
 to take over more than one-third, or even two-thirds or the power of a smaller cap chain
-(eg $STARS) it is cross-staking on.
+(e.g. $STARS) it is cross-staking on.
 
 Clearly the consumer chain wants to put some limits. The first limit is the
-[discount applied during the conversion](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-normalization).
+[discount applied during the conversion](./consumer/Converter.md#price-normalization).
 This doesn't just provide margin for price fluctuations but also means that on average
 a remote token has less voting power (and rewards) per USD-value than a local token, favoring
 local stakers.
 
 In addition, the Virtual Staking module enforces a
-[max cap per provider](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/VirtualStaking.md#module).
+[max cap per provider](./consumer/VirtualStaking.md#interface).
 This limits how many virtual tokens a given provider can stake.
 For computational reasons, it is defined as a number of tokens, not a percentage of stake,
 but looking at an average number of local tokens staked, the chain governance on
@@ -93,6 +95,9 @@ the consumer chain can select appropriate values for each provider.
 This max cap can be updated by governance as needed, so if a lot more (or less) local
 tokens are staked, the max cap of the providers can be updated with a gov vote to
 keep them in reasonable limits.
+
+Please [look at the use cases](./UseCases.md) to see the use of max cap in some example scenarios
+to gain a better intuition of how it works.
 
 ### Failure Modes
 
@@ -105,7 +110,7 @@ There are three main failure modes to consider:
 #### Huge Price Swing
 
 This is the most likely scenario. If the provider price rises too much, it may suddenly have
-disproportionate power over the affairs of the consumer. If the provier price falls too much,
+disproportionate power over the affairs of the consumer. If the provider price falls too much,
 in the period until the price oracle is updated, there may be less remote collateral
 than the virtual stake.
 
@@ -113,9 +118,9 @@ For price increases, we have the max cap described under "Power Limits" which pl
 on the provider chain's influence in all circumstances, so this isn't a large problem.
 
 For a rapid price decrease, we must consider the time frame.
-It is a [requirement of an oracle](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-feeds)
+It is a [requirement of an oracle](./consumer/Converter.md#price-feeds)
 to provide timely feeds, say once a day or week, so we should focus on the relative price movement
-in such a period. [The discount](https://github.com/osmosis-labs/mesh-security/blob/main/docs/consumer/Converter.md#price-normalization)
+in such a period. [The discount](./consumer/Converter.md#price-normalization)
 provides such a buffer. If there is a discount of 40% and the provider tokens drop 30% relative to
 the consumer tokens in one oracle epoch, then it is still over-collateralized relative to voting power.
 If, however, it falls 60%, then it would only have 2/3 of the collateral locked on the provider
@@ -130,7 +135,7 @@ max cap limit preventing total takeover, so it just provides overly high rewards
 #### Byzantine Provider Chain
 
 The worst case is the provider claims to deposit millions of tokens on one malicious validator,
-while not actually locking any collateral on it's own chain. This is similar to the case of
+while not actually locking any collateral on its own chain. This is similar to the case of
 a hostile community on the provider chain selecting validators against the interest of the
 community on the consumer chain.
 
@@ -149,10 +154,10 @@ perceived stability.
 If a Consumer Chain goes Byzantine (or starts some mob-rule governance proposals), it can
 try to damage stake on the Provider chain. There are several ways it can try to do so:
 
-- Withholding all rewards to said Provider
-- Removing all voting power from said Provider
-- Refusing to unlock the virtual stake of the Provider
-- Unfairly slashing virtual stake from the Provider
+- Withholding all rewards to said Provider.
+- Removing all voting power from said Provider.
+- Refusing to unlock the virtual stake of the Provider.
+- Unfairly slashing virtual stake from the Provider.
 
 The first two are temporary and can be seen in the case when the consumer no longer trusts the
 provider and sets "max cap" to zero. This is a temporary effect but must be acknowledged as
@@ -160,7 +165,7 @@ a possible risk, which is loss of benefits, but not loss of collateral.
 
 The third point is impossible, as the unlock period is implemented between the external staking
 contracts and the vault on the provider side. Nothing on the Consumer can lock up stake longer.
-And if a Provider feels they have unfairly withhold benefits (first two points), they could
+And if a Provider feels they have unfairly withheld benefits (first two points), they could
 make a governance vote to allow immediate unbonding of all cross-stake to that consumer.
 
 The last point is a bit trickier. We will not fully define slashing until v1, but the design is
@@ -174,7 +179,9 @@ such a condition without the Validators fault. It would require hacks deep into 
 (not the custom ABCI app) and a governance upgrade to direct the validators to use it, and we
 generally consider this unlikely (it has never been observed in 4+ years of the Cosmos).
 
-## Definitions
+## Glossary
+
+Some common terms are defined here, which may be used throughout the documentation.
 
 - **Pairing** - a trust relationship between two chains, such that one promises to lock up slashable
   stake, while the other leverages this promise to issue validation power in the dPoS system.
@@ -194,7 +201,7 @@ generally consider this unlikely (it has never been observed in 4+ years of the 
   based on misbehavior of that validator.
 - **Unbonding period** - The time delay between initiating unbonding and having free access to the
   underlying collateral. Once this time has passed after unstaking, all claims on the underlying
-  collateral are released and
+  collateral are released.
 - **Rewards** - Block rewards are issued to validators in the native token of the consumer chain.
   A portion of these rewards goes to the stakers and is collected cross-chain.
 - **Slashing** - If a validator misbehaves, the tokens delegated to it, which provided the
@@ -205,7 +212,7 @@ generally consider this unlikely (it has never been observed in 4+ years of the 
   prevented from returning. Tokens staked to it would be partially slashed and should be unstaked
   as soon as possible, as they will receive no more rewards. Stake to a jailed validator still must
   wait the unbonding period to be liquid.
-- **Latency** - Time delay from an action being initiated and the effects being reflected in
+- **Latency** - Time delay from an action being initiated and its effects being reflected in
   another contract or chain. This doesn't refer to the unbonding period, but rather the delay between
   initiating bonding or unbonding on the provider and the equivalent action occurring on the consumer.
 
@@ -215,19 +222,18 @@ Below are links to detailed documents on various sub-systems:
 
 [Provider](./provider/Provider.md):
 
-- [Vault](./provider/Vault.md)
-- [Local Staking](./provider/LocalStaking.md)
-- [External Staking](./provider/ExternalStaking.md)
-- TODO - Rust interfaces
+- [Vault](./provider/Vault.md).
+- [Local Staking](./provider/LocalStaking.md).
+- [External Staking](./provider/ExternalStaking.md).
 
 [Consumer](./consumer/Consumer.md):
 
-- [Converter](./consumer/Converter.md)
-- [Virtual Staking](./consumer/VirtualStaking.md)
-- SDK Changes
+- [Converter](./consumer/Converter.md).
+- [Virtual Staking](./consumer/VirtualStaking.md).
+- SDK Changes.
 
 [IBC Protocol](./ibc/Overview.md):
 
-- [Cross-Chain Staking](./ibc/Staking.md)
-- [Reward Flow](./ibc/Rewards.md)
-- [Handling Slashing Evidence](./ibc/Slashing.md)
+- [Cross-Chain Staking](./ibc/Staking.md).
+- [Reward Flow](./ibc/Rewards.md).
+- [Handling Slashing Evidence](./ibc/Slashing.md).

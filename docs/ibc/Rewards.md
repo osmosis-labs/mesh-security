@@ -1,27 +1,30 @@
 # Cross-Chain Rewards Protocol
 
-The cross-chain rewards protocol is used to send staking rewards from the consumer chain
-to the provider chain, where it will be distributed among the virtual delegators.
+The cross-chain rewards protocol is used to send staking rewards from the Consumer chain
+to the Provider chain, where it will be distributed among the virtual delegators.
+
+**Note**: But see [Possible Implementations](#possible-implementations) below for alternatives
+to this approach. In particular, rewards can be distributed on the Consumer chain directly.
 
 ## Channel Requirements
 
-The original reward token is the native staking token of the consumer chain,
-and it should be transferred to the provider chain using the most commonly accepted
+The original reward token is the native staking token of the Consumer chain,
+and it should be transferred to the Provider chain using the most commonly accepted
 token bridge, to ensure fungibility. Generally this will be the ICS20 channel
 between `transfer` ports on a standard accepted channel. However, if there is
 another bridge that is more commonly used, it may be used instead.
 
-The consumer side should take care of both the _transfer_ of the reward token
-as well as _distributing_ the tokens to the `external-staking` contract.
-This means, the provider side just sees it as a local method execution
+The Consumer side should take care of both the _transfer_ of the reward token
+and _distributing_ the tokens to the `external-staking` contract.
+This means, the Provider side just sees it as a local method execution
 along with a whitelisted IBC token denom.
 
-## Reward Distribution
+## Rewards Distribution
 
-The reward distribution is done by the `external-staking` contract on the provider chain, and not part of the
+The rewards distribution is done by the `external-staking` contract on the Provider chain, and not part of the
 IBC protocol. However, it does touch on timing issues and I want to clarify how some of that is handled.
 
-First, rewards are send from consumer -> provider (by one of the methods described below) on infrequent epochs.
+First, rewards are send from Consumer -> Provider (by one of the methods described below) on infrequent epochs.
 Whoever is recorded as staked to that validator at the end of the epoch will receive a share of the rewards.
 We don't track when during the epoch they staked, so the one who staked 1 minute after epoch N and the other
 who staked 1 minute before epoch N+1 will both receive the same share of rewards.
@@ -37,7 +40,7 @@ about [serializability](./Serializability.md) in this case, we wouldn't allow an
 packets (from all users) and finalized. This is unrealistic, so we can relax this a bit to "read committed", which is close
 enough as there are no invariants to enforce here, and we already accepted an approximation above.
 
-This means, that we don't update a user's reward shares for any in-flight IBC transaction until we have received a success ack.
+This means, that we don't update a user's reward shares for any in-flight IBC transaction until we have received a success ACK.
 This is such an edge case on which side of the epoch they fall, and both decisions are equally valid from an economic perspective.
 However, in order to favor the approach of database consistency, we will use the "read committed" approach, and only count rewards
 after a successful ACK.
@@ -47,7 +50,7 @@ after a successful ACK.
 As mentioned above, the general protocol design supports multiple bridges,
 and the external staking contract need not be aware of the bridge used.
 However, it is essential that the converter contract select an adequate process
-that allows it to (a) send the reward tokens to the provider chain,
+that allows it to (a) send the reward tokens to the Provider chain,
 (b) execute the `external-staking` contract to distribute the tokens, and
 (c) handle any IBC errors (timeout, etc) that may occur.
 
@@ -58,10 +61,10 @@ Below we discuss some proposed implementations:
 **Not Recommended**
 
 In this case, there must be an established ics20-v1 channel between both chains,
-and a ICA channel between the converter contract and the provider chain.
+and a ICA channel between the converter contract and the Provider chain.
 
-The converter contract will send the reward tokens to the provider chain via ICS20,
-and when the ack is received, it will send an ICA message to execute `distribute_rewards`
+The converter contract will send the reward tokens to the Provider chain via ICS20,
+and when the ACK is received, it will send an ICA message to execute `distribute_rewards`
 on the `external-staking` contract, along with the previously transferred funds.
 
 **Problem**: There are currently no contract callbacks on ICS20 nor ICA. This means we cannot reliably
@@ -77,7 +80,7 @@ be stranded, as there is no callback to inform them.
 Osmosis developed a nice addition to the ICS20 standard, which allows the sender
 to specify a memo field. This is used to specify a contract execution to be performed
 with the transferred tokens. It explicitly doesn't allow associating those tokens
-with a particular address which is fine for this use case, as `distribute_rewards`
+with a particular address; which is fine for this use case, as `distribute_rewards`
 is permissionless and accepts any payment in the proper denom.
 
 This is a nice solution, as it allows the converter to perform all actions in a single
@@ -91,16 +94,16 @@ solution when one exists. Hopefully this will spur deployment of such methods.
 
 ### ICS20 with Custom IBC Middleware
 
-With the consumer chain including the mesh-security-sdk, we have the opportunity to add a custom IBC-middleware
-to the IBC-stack for ICS-20. This middleware can be used to do callbacks to contracts on packet ack/timeout.
+With the Consumer chain including the mesh-security-sdk, we have the opportunity to add a custom IBC-middleware
+to the IBC-stack for ICS-20. This middleware can be used to do callbacks to contracts on packet ACK/timeout.
 The process would be:
 
-- Contract sends ICS-20 message and register for a callback on the IBC packet ID (via custom message)
-- All metadata is stored on chain only and not relayed
-- When the packet is ACKed/timeout, the contract receives the callback from the middleware (after the ICS-20 module) with the ack/timeout data
-- When there is confidence that the ICS-20 operation succeeded, the contract can trigger the reward distribution work with the callback
+- Contract sends ICS-20 message and register for a callback on the IBC packet ID (via custom message).
+- All metadata is stored on chain only and not relayed.
+- When the packet is ACKed/timeout, the contract receives the callback from the middleware (after the ICS-20 module) with the ACK/timeout data.
+- When there is confidence that the ICS-20 operation succeeded, the contract can trigger the reward distribution work with the callback.
 
-Note: the callback execution must not fail to not interfere with the ack/timeout process
+Note: the callback execution must not fail to not interfere with the ACK/timeout process.
 
 The benefit of this solution is that it is not depending on other technology. IBC-middleware and callback registration would
 be provided and maintained by the mesh-security-sdk project.
@@ -114,31 +117,32 @@ the Provider chain has enabled the memo field extension.
 
 In the end, ICS20 is just two trusted contracts passing some numbers back and forth with a bit of accounting.
 No tokens ever move. Just a promise to release the token on the source chain. So we can do this without ICS20
-if we just want the reward tokens on the consumer chain.
+if we just want the reward tokens on the Consumer chain.
 
 Imagine the OSMO-JUNO scenario. The Provider on OSMO may want to get their reward tokens in IBC-JUNO on Osmosis if they wish
-to sell it immediately. However, if they want to stake it (or compound on Juno), the will have to first withdraw on Osmosis,
+to sell it immediately. However, if they want to stake it (or compound on Juno), they will have to first withdraw on Osmosis,
 then IBC Transfer it back to JUNO, then (mesh-)stake it there.
 
-If we assume the typical use case is not selling the reward token on the provider chain, but rather re-investing it (or using it)
-on the Consumer chain, there is another approach that works without ICS20. The consumer chain doesn't send any tokens, but
-rather it holds the reward tokens and sends a packet over the control channel to the provider chain to execute
-`distribute_rewards` with this amount. Later, when a user wants to withdraw their rewards on the provider chain,
-it will send a packet to the consumer chain over the control channel to release the tokens to any address on the consumer side.
+If we assume that the typical use case is not selling the reward token on the Provider chain, but rather re-investing it (or using it)
+on the Consumer chain, there is another approach that works without ICS20. The Consumer chain doesn't send any tokens, but
+rather it holds the reward tokens, and sends a packet over the control channel to the Provider chain to execute
+`distribute_rewards` with this amount. Later, when a user wants to withdraw their rewards on the Provider chain,
+it will send a packet to the Consumer chain over the control channel to release the tokens to any address on the Consumer side.
 
 This approach is basically like an embedded ICS20 inside the mesh protocol, but it doesn't issue any tokens or provide fungibility
-on the provider chain. This reduces the complexity as we only have one channel and packet and don't need to orchestrate multiple
+on the Provider chain. This reduces the complexity, as we only have one channel and packet and don't need to orchestrate multiple
 packets over multiple channels.
 
-The biggest question is whether the functionality change is acceptable (or even desirable). Note that this will make restaking the
-reward tokens easier, while making selling them on the provider chain harder. This may be a good thing (in the eyes of the
-consumer chain at least), as it encourages longer-term holders.
+The biggest question is whether the functionality change is acceptable (or even desirable). Note that this will make re-staking the
+reward tokens easier, while making selling them on the Provider chain harder. This may be a good thing (in the eyes of the
+Consumer chain at least), as it encourages longer-term holders.
 
 ## Selected Implementation
 
-To reduce external dependencies and to encourage restaking of the consumer staking rewards,
+To reduce external dependencies and to encourage re-staking of the Consumer staking rewards,
 we are selecting the last option for MVP, adding one more message to the control channel.
-This is part of the `mesh-security 1.0.0` IBC implementation. If there is a change in the reward distribution mechanism, it would likely be breaking and would bump the IBC protocol to v2.0.0.
+This is part of the `mesh-security 1.0.0` IBC implementation. If there is a change in the reward distribution mechanism,
+it would likely be breaking and would bump the IBC protocol to v2.0.0.
 
 This involves two new packet variants, one on each side. The Consumer side has a new variant
 `ConsumerPacket::DistributeRewards { validator, rewards }`, which specifies the reward `Coin`
@@ -147,9 +151,9 @@ that should be distributed among all stakers on the given validators. It is up t
 must guarantee to hold `rewards` tokens in reserve to be released by future IBC packets
 on this channel.
 
-The provider side has a new variant `ProviderPacket::TransferRewards {}` which specifies the
-among and the recipient address on the consumer chain. If the converter contract hold those
-tokens in reserve (always in the case of a correct provider chain), it must release
-them to the given address. The consumer chain must be designed to handle rollbacks here
-on any error (especially due to invalid recipient address that cannot be validated on the
-provider side).
+The Provider side has a new variant `ProviderPacket::TransferRewards {}` which specifies the
+amount and recipient address on the Consumer chain. If the converter contract hold those
+tokens in reserve (which should always be the case in a correct Provider chain), it must release
+them to the given address. The Consumer chain must be designed to handle rollbacks here
+on any error (especially due to invalid recipient address, that cannot be validated on the
+Provider side).

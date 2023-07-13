@@ -21,7 +21,7 @@ they split a limited resource.
 The `Converter` should be able to call into the `Virtual Staking` contract with the following:
 
 ```rust
-pub enum VirtualStakeExecMsg {
+pub enum VirtualStakeMsg {
   /// This mints "virtual stake" if possible and bonds to this validator.
   Bond {
     amount: Coin,
@@ -38,7 +38,7 @@ pub enum VirtualStakeExecMsg {
 The `Converter` should be able to query the following info from the contract:
 
 ```rust
-pub enum VirtualStakeQueryMsg {
+pub enum VirtualStakeQuery {
   #[returns(BondStatusResponse)]
   BondStatus {
     contract: String,
@@ -52,7 +52,7 @@ pub struct BondStatusResponse {
 ```
 
 Finally, the virtual staking contract should make the following call into the `Converter`,
-which is send along with a number of `info.funds` in the native staking token:
+which is sent along with a number of `info.funds` in the native staking token:
 
 ```rust
 pub enum ConverterExecMsg {
