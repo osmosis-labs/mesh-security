@@ -271,7 +271,7 @@ fn releasing_proxy_stake() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [mesh_vault::msg::LienInfo {
+        [mesh_vault::msg::LienResponse {
             lienholder: staking_addr.to_owned(),
             amount: Uint128::new(100)
         }]
@@ -300,7 +300,7 @@ fn releasing_proxy_stake() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [mesh_vault::msg::LienInfo {
+        [mesh_vault::msg::LienResponse {
             lienholder: staking_addr.to_owned(),
             amount: Uint128::zero() // TODO? Clean-up empty liens
         }]

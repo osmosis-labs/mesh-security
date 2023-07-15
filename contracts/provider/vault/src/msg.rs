@@ -60,11 +60,11 @@ pub struct AllAccountsResponseItem {
 
 #[cw_serde]
 pub struct AccountClaimsResponse {
-    pub claims: Vec<LienInfo>,
+    pub claims: Vec<LienResponse>,
 }
 
 #[cw_serde]
-pub struct LienInfo {
+pub struct LienResponse {
     pub lienholder: String,
     pub amount: Uint128,
 }
