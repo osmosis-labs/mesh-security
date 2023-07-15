@@ -8,8 +8,3 @@ pub type ConfigResponse = Config;
 pub struct OwnerMsg {
     pub owner: String,
 }
-
-#[cw_serde]
-pub struct ClaimsResponse {
-    // TODO
-}
