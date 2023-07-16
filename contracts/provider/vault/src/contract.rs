@@ -332,10 +332,10 @@ impl VaultContract<'_> {
             .map(|item| {
                 let (lienholder, lien) = item?;
                 match lien.read() {
-                    Ok(lien) => Ok::<_, ContractError>(MaybeLienResponse::Lien {
-                        lienholder: lienholder.into(),
-                        amount: lien.amount,
-                    }),
+                    Ok(lien) => Ok::<_, ContractError>(MaybeLienResponse::new_unlocked(
+                        lienholder,
+                        lien.amount,
+                    )),
                     Err(_) => Ok(MaybeLienResponse::Locked {}),
                 }
             })

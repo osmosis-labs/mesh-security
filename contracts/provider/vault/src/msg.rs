@@ -1,6 +1,6 @@
 use crate::msg::MaybeAccountResponse::{Account, Locked};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Binary, Uint128};
+use cosmwasm_std::{Addr, Binary, Uint128};
 use mesh_sync::Tx;
 
 /// This is the info used to construct the native staking contract
@@ -67,6 +67,15 @@ pub struct AccountClaimsResponse {
 pub enum MaybeLienResponse {
     Lien { lienholder: String, amount: Uint128 },
     Locked {},
+}
+
+impl MaybeLienResponse {
+    pub fn new_unlocked(lienholder: Addr, amount: Uint128) -> Self {
+        MaybeLienResponse::Lien {
+            lienholder: lienholder.into(),
+            amount,
+        }
+    }
 }
 
 #[cw_serde]
