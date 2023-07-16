@@ -65,6 +65,16 @@ pub enum MaybeStake {
     Locked {},
 }
 
+impl MaybeStake {
+    /// Designed for test code, unwrap or panic if Locked
+    pub fn unwrap(self) -> Stake {
+        match self {
+            MaybeStake::Stake(stake) => stake,
+            MaybeStake::Locked {} => panic!("Stake is locked"),
+        }
+    }
+}
+
 /// Stake-related information including user address and validator
 #[cw_serde]
 pub struct StakeInfo {

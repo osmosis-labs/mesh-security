@@ -259,21 +259,25 @@ fn staking() {
     // Querying for particular stakes
     let stake = contract
         .stake(users[0].to_owned(), validators[0].to_owned())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 200);
 
     let stake = contract
         .stake(users[0].to_owned(), validators[1].to_owned())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 100);
 
     let stake = contract
         .stake(users[1].to_owned(), validators[0].to_owned())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 100);
 
     let stake = contract
         .stake(users[1].to_owned(), validators[1].to_owned())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 200);
 
@@ -472,21 +476,25 @@ fn unstaking() {
     // Unstaken should be immediately visible on staken amount
     let stake = contract
         .stake(users[0].to_string(), validators[0].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 150);
 
     let stake = contract
         .stake(users[0].to_string(), validators[1].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 100);
 
     let stake = contract
         .stake(users[1].to_string(), validators[0].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 240);
 
     let stake = contract
         .stake(users[1].to_string(), validators[1].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 0);
 
@@ -561,21 +569,25 @@ fn unstaking() {
     // Verify proper stake values
     let stake = contract
         .stake(users[0].to_string(), validators[0].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 80);
 
     let stake = contract
         .stake(users[0].to_string(), validators[1].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 10);
 
     let stake = contract
         .stake(users[1].to_string(), validators[0].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 240);
 
     let stake = contract
         .stake(users[1].to_string(), validators[1].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 0);
 
