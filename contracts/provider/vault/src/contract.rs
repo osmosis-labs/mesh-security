@@ -20,8 +20,8 @@ use crate::error::ContractError;
 use crate::msg;
 use crate::msg::{
     AccountClaimsResponse, AllAccountsResponse, AllAccountsResponseItem, AllTxsResponse,
-    AllTxsResponseItem, ConfigResponse, LienResponse, MaybeAccountResponse, MaybeLienResponse,
-    StakingInitInfo, TxResponse,
+    AllTxsResponseItem, ConfigResponse, MaybeAccountResponse, MaybeLienResponse, StakingInitInfo,
+    TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
@@ -332,10 +332,10 @@ impl VaultContract<'_> {
             .map(|item| {
                 let (lienholder, lien) = item?;
                 match lien.read() {
-                    Ok(lien) => Ok::<_, ContractError>(MaybeLienResponse::Lien(LienResponse {
+                    Ok(lien) => Ok::<_, ContractError>(MaybeLienResponse::Lien {
                         lienholder: lienholder.into(),
                         amount: lien.amount,
-                    })),
+                    }),
                     Err(_) => Ok(MaybeLienResponse::Locked {}),
                 }
             })

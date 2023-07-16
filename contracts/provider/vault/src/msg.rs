@@ -65,14 +65,8 @@ pub struct AccountClaimsResponse {
 
 #[cw_serde]
 pub enum MaybeLienResponse {
-    Lien(LienResponse),
+    Lien { lienholder: String, amount: Uint128 },
     Locked {},
-}
-
-#[cw_serde]
-pub struct LienResponse {
-    pub lienholder: String,
-    pub amount: Uint128,
 }
 
 #[cw_serde]
