@@ -904,7 +904,10 @@ impl ExternalStakingContract<'_> {
                     Ok::<StakeInfo, ContractError>(StakeInfo {
                         owner: user.to_string(),
                         validator,
-                        stake: stake_lock.read()?.stake,
+                        stake: match stake_lock.read() {
+                            Ok(stake) => MaybeStake::Stake(stake.clone()),
+                            Err(_) => MaybeStake::Locked {},
+                        },
                     })
                 })?
             })
