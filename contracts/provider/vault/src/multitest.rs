@@ -9,7 +9,6 @@ use crate::msg::{
     AccountResponse, AllAccountsResponseItem, LienResponse, MaybeAccountResponse,
     MaybeLienResponse, StakingInitInfo,
 };
-use cosmwasm_std::StdError::GenericErr;
 use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
 use mesh_sync::Tx::InFlightStaking;
@@ -895,15 +894,15 @@ fn stake_cross_txs() {
         vault.account(user.to_owned()).unwrap(),
         MaybeAccountResponse::Locked {}
     ); // write locked
-       // Cannot query claims while pending
-       // TODO: locked enum not error
-    assert!(matches!(
+       // Can query claims, and locked are reported
+    assert_eq!(
         vault
             .account_claims(user.to_owned(), None, None)
-            .unwrap_err(),
-        ContractError::Std(GenericErr { .. })
-    )); // write locked
-        // Can query vault's balance while pending
+            .unwrap()
+            .claims,
+        [MaybeLienResponse::Locked {}]
+    ); // write locked
+       // Can query vault's balance while pending
     assert_eq!(
         app.app()
             .wrap()
