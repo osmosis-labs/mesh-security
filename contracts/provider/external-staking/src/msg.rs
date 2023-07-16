@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{coin, Coin, IbcChannel, Uint128};
 
+use crate::state::Stake;
 use crate::{error::ContractError, state::Config};
 
 #[cw_serde]
@@ -55,6 +56,13 @@ impl From<Config> for ConfigResponse {
             unbonding_period: value.unbonding_period,
         }
     }
+}
+
+/// Response for stake query on one user and validator
+#[cw_serde]
+pub enum MaybeStake {
+    Stake(Stake),
+    Locked {},
 }
 
 /// Stake-related information including user address and validator
