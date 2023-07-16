@@ -60,7 +60,13 @@ pub struct AllAccountsResponseItem {
 
 #[cw_serde]
 pub struct AccountClaimsResponse {
-    pub claims: Vec<LienResponse>,
+    pub claims: Vec<MaybeLienResponse>,
+}
+
+#[cw_serde]
+pub enum MaybeLienResponse {
+    Lien(LienResponse),
+    Locked {},
 }
 
 #[cw_serde]
