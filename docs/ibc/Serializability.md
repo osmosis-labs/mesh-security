@@ -247,13 +247,27 @@ But for counters with comparisons, increments, and decrements, it could work wel
 were value ranges. In this case, the max of (`lien.max`) would be compared against `collateral.min`.
 With some clever reasoning, we could possibly enforce such value ranges without actually storing multiple fields.
 
+Value ranges work when all operations (add and subtract) are commutative within a range, as they will only error on a boundary condition.
+If we can guarantee that all outstanding transactions will in no case hit a boundary condition, then they are commutative,
+and can be freely applied in any order.
+
+If it may be possible to hit these (min or max) boundaries, then it is unsafe to perform them concurrently, and we must
+fall back to another approach. Either [Locking](#locking), or simply returning an error on the offending transaction.
+
+Value range tracks the possible range when resolving all outstanding transactions as either commit (success) or rollback (failure),
+and can be checked against boundary conditions **before** adding a new transaction to the set of pending transactions.
+
+Please note that an offending transaction can succeed / be accepted later. When some or all of the outstanding transactions are resolved,
+either as succeeding or failing, and the value range is updated accordingly, it may be possible to execute the transaction
+that previously failed, because the updated value range (or single value) now allows it.
+
 After discussions with other developers, we feel that Value Ranges could be a very valuable approach, offering the same
 guarantees of commutativity as locking, but with much less impact on the user's experience. It doesn't require developers
 to reason about every workflow, but rather, like the locking approach, enforces constraints in the data structures themselves.
 This is much less error-prone, and the same data structures that would be affected by locking are the same ones that would
 be affected by value ranges.
 
-We will focus on Locking for MVP and look forward to develop this further for the V1 release, with plenty of time to discuss the
+We will focus on Locking for MVP, and look forward to develop this further for the V1 release, with plenty of time to discuss the
 various UX implications, as well as the best way to implement this.
 
 ## Next Steps
