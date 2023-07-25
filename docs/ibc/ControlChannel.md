@@ -166,6 +166,7 @@ Stake {
 ```
 
 Cross unstaking:
+
 ```rust
 /// This should be called when we begin the unbonding period of some more tokens previously virtually staked
 Unstake {
