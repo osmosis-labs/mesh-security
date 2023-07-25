@@ -252,7 +252,7 @@ If we can guarantee that all outstanding transactions will in no case hit a boun
 and can be freely applied in any order.
 
 If it may be possible to hit these (min or max) boundaries, then it is unsafe to perform them concurrently, and we must
-fall back to another approach. Either [Locking](#locking), or simply returning an error on the offending transaction.
+fall back to another approach. Either [Locking](#locking), or returning an error on the offending transaction.
 
 Value range tracks the possible range when resolving all outstanding transactions as either commit (success) or rollback (failure),
 and can be checked against boundary conditions **before** adding a new transaction to the set of pending transactions.
