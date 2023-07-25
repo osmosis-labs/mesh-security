@@ -133,6 +133,10 @@
 
 **Closed issues:**
 
+- Provider contracts mostly finished (vault, native-staking, external-staking)
+- Docs solid for provider side
+- Consumer APIs and bindings defined
+- Stub contracts for consumer side
 - Update Sylvia to 0.4 [\#25](https://github.com/osmosis-labs/mesh-security/issues/25)
 - Always use denom with currency amounts [\#22](https://github.com/osmosis-labs/mesh-security/issues/22)
 - Allow staking on multiple remote validators [\#12](https://github.com/osmosis-labs/mesh-security/issues/12)
