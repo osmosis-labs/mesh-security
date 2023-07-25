@@ -2,7 +2,11 @@
 
 ## [Unreleased](https://github.com/osmosis-labs/mesh-security/tree/HEAD)
 
-[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.4.0-alpha.1...HEAD)
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.5.0-alpha.1...HEAD)
+
+## [v0.5.0-alpha.1](https://github.com/osmosis-labs/mesh-security/tree/v0.5.0-alpha.1) (2023-07-25)
+
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.4.0-alpha.1...v0.5.0-alpha.1)
 
 **Closed issues:**
 
@@ -13,6 +17,7 @@
 
 **Merged pull requests:**
 
+- F/update changelog [\#103](https://github.com/osmosis-labs/mesh-security/pull/103) ([maurolacy](https://github.com/maurolacy))
 - Update docs 2 [\#102](https://github.com/osmosis-labs/mesh-security/pull/102) ([maurolacy](https://github.com/maurolacy))
 - Fix queries: return `Locked` [\#94](https://github.com/osmosis-labs/mesh-security/pull/94) ([maurolacy](https://github.com/maurolacy))
 - Add nonpayable checks [\#92](https://github.com/osmosis-labs/mesh-security/pull/92) ([maurolacy](https://github.com/maurolacy))
