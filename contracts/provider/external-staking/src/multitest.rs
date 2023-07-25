@@ -17,6 +17,7 @@ use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
 use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo, ValidatorPendingRewards};
+use crate::state::Stake;
 
 const OSMO: &str = "osmo";
 const STAR: &str = "star";
@@ -259,21 +260,25 @@ fn staking() {
     // Querying for particular stakes
     let stake = contract
         .stake(users[0].to_owned(), validators[0].to_owned())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 200);
 
     let stake = contract
         .stake(users[0].to_owned(), validators[1].to_owned())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 100);
 
     let stake = contract
         .stake(users[1].to_owned(), validators[0].to_owned())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 100);
 
     let stake = contract
         .stake(users[1].to_owned(), validators[1].to_owned())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 200);
 
@@ -282,16 +287,8 @@ fn staking() {
     assert_eq!(
         stakes.stakes,
         [
-            StakeInfo {
-                owner: users[0].to_owned(),
-                validator: validators[0].to_owned(),
-                stake: 200u128.into()
-            },
-            StakeInfo {
-                owner: users[0].to_owned(),
-                validator: validators[1].to_owned(),
-                stake: 100u128.into()
-            },
+            StakeInfo::new(users[0], validators[0], &Stake::from_amount(200u128.into())),
+            StakeInfo::new(users[0], validators[1], &Stake::from_amount(100u128.into()))
         ]
     );
 
@@ -299,16 +296,8 @@ fn staking() {
     assert_eq!(
         stakes.stakes,
         [
-            StakeInfo {
-                owner: users[1].to_owned(),
-                validator: validators[0].to_owned(),
-                stake: 100u128.into()
-            },
-            StakeInfo {
-                owner: users[1].to_owned(),
-                validator: validators[1].to_owned(),
-                stake: 200u128.into()
-            },
+            StakeInfo::new(users[1], validators[0], &Stake::from_amount(100u128.into())),
+            StakeInfo::new(users[1], validators[1], &Stake::from_amount(200u128.into()))
         ]
     );
 }
@@ -472,21 +461,25 @@ fn unstaking() {
     // Unstaken should be immediately visible on staken amount
     let stake = contract
         .stake(users[0].to_string(), validators[0].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 150);
 
     let stake = contract
         .stake(users[0].to_string(), validators[1].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 100);
 
     let stake = contract
         .stake(users[1].to_string(), validators[0].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 240);
 
     let stake = contract
         .stake(users[1].to_string(), validators[1].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 0);
 
@@ -561,21 +554,25 @@ fn unstaking() {
     // Verify proper stake values
     let stake = contract
         .stake(users[0].to_string(), validators[0].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 80);
 
     let stake = contract
         .stake(users[0].to_string(), validators[1].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 10);
 
     let stake = contract
         .stake(users[1].to_string(), validators[0].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 240);
 
     let stake = contract
         .stake(users[1].to_string(), validators[1].to_string())
+        .unwrap()
         .unwrap();
     assert_eq!(stake.stake.u128(), 0);
 

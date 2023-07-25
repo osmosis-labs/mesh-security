@@ -40,6 +40,16 @@ pub struct Stake {
     pub withdrawn_funds: Uint128,
 }
 
+impl Stake {
+    /// Create simplified stake (mostly for tests)
+    pub fn from_amount(amount: Uint128) -> Self {
+        Self {
+            stake: amount,
+            ..Default::default()
+        }
+    }
+}
+
 /// Description of tokens in unbonding period
 #[cw_serde]
 pub struct PendingUnbond {

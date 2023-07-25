@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{coin, Coin, IbcChannel, Uint128};
+use cosmwasm_std::{coin, Coin, IbcChannel};
 
+use crate::state::Stake;
 use crate::{error::ContractError, state::Config};
 
 #[cw_serde]
@@ -57,12 +58,39 @@ impl From<Config> for ConfigResponse {
     }
 }
 
+/// Response for stake query on one user and validator
+#[cw_serde]
+pub enum MaybeStake {
+    Stake(Stake),
+    Locked {},
+}
+
+impl MaybeStake {
+    /// Designed for test code, unwrap or panic if Locked
+    pub fn unwrap(self) -> Stake {
+        match self {
+            MaybeStake::Stake(stake) => stake,
+            MaybeStake::Locked {} => panic!("Stake is locked"),
+        }
+    }
+}
+
 /// Stake-related information including user address and validator
 #[cw_serde]
 pub struct StakeInfo {
     pub owner: String,
     pub validator: String,
-    pub stake: Uint128,
+    pub stake: MaybeStake,
+}
+
+impl StakeInfo {
+    pub fn new(owner: &str, validator: &str, stake: &Stake) -> Self {
+        Self {
+            owner: owner.to_string(),
+            validator: validator.to_string(),
+            stake: MaybeStake::Stake(stake.clone()),
+        }
+    }
 }
 
 /// Aggregated multiple stakes response

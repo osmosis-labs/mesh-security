@@ -22,8 +22,8 @@ use crate::error::ContractError;
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
 use crate::msg::{
     AllPendingRewards, AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse,
-    IbcChannelResponse, ListRemoteValidatorsResponse, MaybePendingRewards, ReceiveVirtualStake,
-    StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
+    IbcChannelResponse, ListRemoteValidatorsResponse, MaybePendingRewards, MaybeStake,
+    ReceiveVirtualStake, StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
 };
 use crate::state::{Config, Distribution, Stake};
 
@@ -867,14 +867,16 @@ impl ExternalStakingContract<'_> {
         ctx: QueryCtx,
         user: String,
         validator: String,
-    ) -> Result<Stake, ContractError> {
+    ) -> Result<MaybeStake, ContractError> {
         let user = ctx.deps.api.addr_validate(&user)?;
         let stake_lock = self
             .stakes
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
-        let stake = stake_lock.read()?;
-        Ok(stake.clone())
+        match stake_lock.read() {
+            Ok(stake) => Ok(MaybeStake::Stake(stake.clone())),
+            Err(_) => Ok(MaybeStake::Locked {}),
+        }
     }
 
     /// Paginated list of user stakes.
@@ -902,7 +904,10 @@ impl ExternalStakingContract<'_> {
                     Ok::<StakeInfo, ContractError>(StakeInfo {
                         owner: user.to_string(),
                         validator,
-                        stake: stake_lock.read()?.stake,
+                        stake: match stake_lock.read() {
+                            Ok(stake) => MaybeStake::Stake(stake.clone()),
+                            Err(_) => MaybeStake::Locked {},
+                        },
                     })
                 })?
             })
