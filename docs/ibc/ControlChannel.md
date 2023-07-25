@@ -144,3 +144,104 @@ will render the channel useless forever. We must make sure to use extremely larg
 receiving contract always returns ACKs with errors on failure, and never panics.
 A contract panic will abort the tx containing the IbcPacketReceiveMsg, as of wasmd 0.40
 (MSV for Mesh Security).
+
+### External Staking Packets (Provider side)
+
+These are messages sent from Provider to Consumer.
+They are defined in the `ProviderPacket` enum; see [packet.rs](../../packages/apis/src/ibc/packet.rs).
+
+Cross staking:
+
+```rust
+/// This should be called when we lock more tokens to virtually stake on a given validator
+Stake {
+  validator: String,
+  /// This is the local (provider-side) denom that is held in the vault.
+  /// It will be converted to the consumer-side staking token in the converter with help
+  /// of the price feed.
+  stake: Coin,
+  /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
+  tx_id: u64,
+},
+```
+
+Cross unstaking:
+
+```rust
+/// This should be called when we begin the unbonding period of some more tokens previously virtually staked
+Unstake {
+  validator: String,
+  /// This is the local (provider-side) denom that is held in the vault.
+  /// It will be converted to the consumer-side staking token in the converter with help
+  /// of the price feed.
+  unstake: Coin,
+  /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
+  tx_id: u64,
+},
+```
+
+Transfer rewards:
+
+```rust
+/// This is part of the rewards protocol
+TransferRewards {
+  /// Amount previously received by ConsumerPacket::Distribute
+  rewards: Coin,
+  /// A valid address on the consumer chain to receive these rewards
+  recipient: String,
+  /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
+  tx_id: u64,
+},
+```
+
+### Converter Packets (Consumer side)
+
+These are messages sent from Consumer to Provider.
+They are defined in the `ConsumerPacket` enum; see [packet.rs](../../packages/apis/src/ibc/packet.rs).
+
+Add Validators:
+
+```rust
+/// This is sent when a new validator registers and is available to receive
+/// delegations. This is also sent when a validator changes pubkey.
+/// One such packet is sent right after the channel is opened to sync initial state
+AddValidators(Vec<AddValidator>),
+```
+
+```rust
+pub struct AddValidator {
+    /// This is the validator operator (valoper) address used for delegations and rewards
+    pub valoper: String,
+    /// This is the *Tendermint* public key, used for signing blocks.
+    /// This is needed to detect slashing conditions
+    pub pub_key: String,
+    /// This is the first height the validator was active.
+    /// It is used to detect slashing conditions, eg which header heights are punishable.
+    pub start_height: u64,
+    /// This is the timestamp of the first block the validator was active.
+    /// It may be used for unbonding_period issues, maybe just for informational purposes.
+    /// Stored as unix seconds.
+    pub start_time: u64,
+}
+```
+
+Remove Validators:
+
+```rust
+/// This is sent when a validator is tombstoned. Not just leaving the active state,
+/// but when it is no longer a valid target to delegate to.
+/// It contains a list of `valoper_address` to be removed
+RemoveValidators(Vec<String>),
+```
+
+Distribute rewards:
+
+```rust
+/// This is part of the rewards protocol
+Distribute {
+  /// The validator whose stakers should receive these rewards
+  validator: String,
+  /// The amount of rewards held on the consumer side to be released later
+  rewards: Coin,
+},
+```
