@@ -14,5 +14,3 @@ too much logic.
 
 It is bound 1-to-1 with a virtual staking contract, and requires a price feed
 contract to provide valid price data.
-
-**TODO** More details on IBC comms
