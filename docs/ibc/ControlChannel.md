@@ -151,6 +151,7 @@ These are messages sent from Provider to Consumer.
 They are defined in the `ProviderPacket` enum; see [packet.rs](../../packages/apis/src/ibc/packet.rs).
 
 Cross staking:
+
 ```rust
 /// This should be called when we lock more tokens to virtually stake on a given validator
 Stake {
