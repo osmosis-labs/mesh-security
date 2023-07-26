@@ -1,7 +1,7 @@
 mod virtual_staking_mock;
 
 use cosmwasm_std::{coin, Addr, Decimal, Uint128};
-
+use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
 
 use crate::contract;
@@ -16,12 +16,13 @@ struct SetupArgs<'a> {
 }
 
 struct SetupResponse<'a> {
-    price_feed: mesh_simple_price_feed::contract::multitest_utils::SimplePriceFeedContractProxy<'a>,
-    converter: contract::multitest_utils::ConverterContractProxy<'a>,
-    virtual_staking: virtual_staking_mock::multitest_utils::VirtualStakingMockProxy<'a>,
+    price_feed:
+        mesh_simple_price_feed::contract::multitest_utils::SimplePriceFeedContractProxy<'a, MtApp>,
+    converter: contract::multitest_utils::ConverterContractProxy<'a, MtApp>,
+    virtual_staking: virtual_staking_mock::multitest_utils::VirtualStakingMockProxy<'a, MtApp>,
 }
 
-fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
+fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
     let SetupArgs {
         owner,
         admin,

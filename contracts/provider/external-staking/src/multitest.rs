@@ -31,10 +31,13 @@ const LOCAL_SLASHING_PERCENTAGE: u64 = 5;
 //
 // Returns vault and external staking proxies
 fn setup<'app>(
-    app: &'app App,
+    app: &'app App<MtApp>,
     owner: &str,
     unbond_period: u64,
-) -> AnyResult<(VaultContractProxy<'app>, ExternalStakingContractProxy<'app>)> {
+) -> AnyResult<(
+    VaultContractProxy<'app, MtApp>,
+    ExternalStakingContractProxy<'app, MtApp>,
+)> {
     let native_staking_proxy_code = NativeStakingProxyCodeId::store_code(app);
     let native_staking_code = NativeStakingCodeId::store_code(app);
     let vault_code = VaultCodeId::store_code(app);
@@ -303,7 +306,9 @@ fn staking() {
 }
 
 #[track_caller]
-fn get_last_external_staking_pending_tx_id(contract: &ExternalStakingContractProxy) -> Option<u64> {
+fn get_last_external_staking_pending_tx_id(
+    contract: &ExternalStakingContractProxy<MtApp>,
+) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(Tx::id)
 }
