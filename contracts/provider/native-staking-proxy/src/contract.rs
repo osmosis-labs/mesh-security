@@ -51,7 +51,12 @@ impl NativeStakingProxyContract<'_> {
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
         // Stake info.funds on validator
-        let res = self.stake(ctx, validator)?;
+        let exec_ctx = ExecCtx {
+            deps: ctx.deps,
+            env: ctx.env,
+            info: ctx.info,
+        };
+        let res = self.stake(exec_ctx, validator)?;
 
         // Set owner as recipient of future withdrawals
         let set_withdrawal = DistributionMsg::SetWithdrawAddress {
@@ -258,7 +263,12 @@ mod tests {
                 VALIDATOR.to_owned(),
             )
             .unwrap();
-        (ctx, contract)
+        let exec_ctx = ExecCtx {
+            deps: ctx.deps,
+            info: mock_info(OWNER, &[]),
+            env: ctx.env,
+        };
+        (exec_ctx, contract)
     }
 
     // Extra checks of instantiate returned messages and data
@@ -311,7 +321,6 @@ mod tests {
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
         // The owner can vote
-        ctx.info = mock_info(OWNER, &[]);
         let proposal_id = 1;
         let vote = Yes;
         let res = contract
@@ -352,7 +361,6 @@ mod tests {
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
         // The owner can weighted vote
-        ctx.info = mock_info(OWNER, &[]);
         let proposal_id = 2;
         let vote = vec![WeightedVoteOption {
             option: Yes,
