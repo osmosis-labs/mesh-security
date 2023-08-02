@@ -15,7 +15,7 @@ use crate::msg::ConfigResponse;
 const OSMO: &str = "uosmo";
 const UNBONDING_PERIOD: u64 = 17 * 24 * 60 * 60; // 7 days
 
-fn init_app(owner: &str, validators: &[&str]) -> App {
+fn init_app(owner: &str, validators: &[&str]) -> App<MtApp> {
     // Fund the staking contract, and add validators to staking keeper
     let block = mock_env().block;
     let app = MtApp::new(|router, api, storage| {
@@ -52,11 +52,11 @@ fn init_app(owner: &str, validators: &[&str]) -> App {
 }
 
 fn setup<'app>(
-    app: &'app App,
+    app: &'app App<MtApp>,
     owner: &str,
     user: &str,
     validator: &str,
-) -> AnyResult<VaultContractProxy<'app>> {
+) -> AnyResult<VaultContractProxy<'app, MtApp>> {
     let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(app);
     let staking_code = mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
     let staking_proxy_code = contract::multitest_utils::CodeId::store_code(app);

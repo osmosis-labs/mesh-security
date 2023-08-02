@@ -514,7 +514,7 @@ impl VaultContract<'_> {
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
-        let mut user = user_lock.write()?;
+        let user = user_lock.write()?;
         user.max_lien = user.max_lien.max(lien.amount);
         user.total_slashable += amount * lien.slashable;
 
