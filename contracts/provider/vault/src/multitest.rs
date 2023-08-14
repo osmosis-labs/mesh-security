@@ -6,13 +6,12 @@ use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
 use crate::msg::{
-    AccountResponse, AllAccountsResponseItem, MaybeAccountResponse, MaybeLienResponse,
-    StakingInitInfo,
+    AccountResponse, AllAccountsResponseItem, LienResponse, MaybeAccountResponse, StakingInitInfo,
 };
 use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
 use mesh_sync::Tx::InFlightStaking;
-use mesh_sync::{LockError, Tx};
+use mesh_sync::{LockError, Tx, ValueRange};
 use sylvia::multitest::App;
 
 const OSMO: &str = "OSMO";
@@ -284,9 +283,9 @@ fn stake_local() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: local_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
     assert_eq!(
@@ -320,9 +319,9 @@ fn stake_local() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: local_staking.contract_addr.to_string(),
-            amount: Uint128::new(250)
+            amount: ValueRange::new_val(Uint128::new(250))
         }]
     );
     assert_eq!(
@@ -376,9 +375,9 @@ fn stake_local() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: local_staking.contract_addr.to_string(),
-            amount: Uint128::new(200)
+            amount: ValueRange::new_val(Uint128::new(200))
         }]
     );
     assert_eq!(
@@ -415,9 +414,9 @@ fn stake_local() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: local_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
     assert_eq!(
@@ -555,9 +554,9 @@ fn stake_cross() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
     assert_eq!(
@@ -601,9 +600,9 @@ fn stake_cross() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(250)
+            amount: ValueRange::new_val(Uint128::new(250))
         }]
     );
     assert_eq!(
@@ -662,9 +661,9 @@ fn stake_cross() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(200)
+            amount: ValueRange::new_val(Uint128::new(200))
         }]
     );
     assert_eq!(
@@ -703,9 +702,9 @@ fn stake_cross() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
 
@@ -894,13 +893,16 @@ fn stake_cross_txs() {
         vault.account(user.to_owned()).unwrap(),
         MaybeAccountResponse::Locked {}
     ); // write locked
-       // Can query claims, and locked are reported
+       // Can query claims, and value ranges are reported
     assert_eq!(
         vault
             .account_claims(user.to_owned(), None, None)
             .unwrap()
             .claims,
-        [MaybeLienResponse::Locked {}]
+        [LienResponse {
+            lienholder: "contract0".to_string(),
+            amount: ValueRange::new(Uint128::zero(), Uint128::new(100))
+        }]
     ); // write locked
        // Can query vault's balance while pending
     assert_eq!(
@@ -944,9 +946,9 @@ fn stake_cross_txs() {
     let claims = vault.account_claims(user2.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
 
@@ -971,9 +973,9 @@ fn stake_cross_txs() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
     assert_eq!(
@@ -1082,9 +1084,9 @@ fn stake_cross_rollback_tx() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(0)
+            amount: ValueRange::new_val(Uint128::zero())
         }]
     );
     // Vault has the funds
@@ -1201,17 +1203,17 @@ fn multiple_stakes() {
     assert_eq!(
         claims.claims,
         [
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: cross_staking1.contract_addr.to_string(),
-                amount: Uint128::new(200)
+                amount: ValueRange::new_val(Uint128::new(200))
             },
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: cross_staking2.contract_addr.to_string(),
-                amount: Uint128::new(100)
+                amount: ValueRange::new_val(Uint128::new(100))
             },
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: local_staking.contract_addr.to_string(),
-                amount: Uint128::new(300)
+                amount: ValueRange::new_val(Uint128::new(300))
             },
         ]
     );
@@ -1262,17 +1264,17 @@ fn multiple_stakes() {
     assert_eq!(
         claims.claims,
         [
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: cross_staking1.contract_addr.to_string(),
-                amount: Uint128::new(400)
+                amount: ValueRange::new_val(Uint128::new(400))
             },
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: cross_staking2.contract_addr.to_string(),
-                amount: Uint128::new(500)
+                amount: ValueRange::new_val(Uint128::new(500))
             },
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: local_staking.contract_addr.to_string(),
-                amount: Uint128::new(300)
+                amount: ValueRange::new_val(Uint128::new(300))
             },
         ]
     );

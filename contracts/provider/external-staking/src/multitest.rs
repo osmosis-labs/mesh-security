@@ -492,12 +492,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     // Immediately withdrawing liens
     contract.withdraw_unbonded().call(users[0]).unwrap();
@@ -507,12 +507,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     // Very short travel in future - too short for claims to release
     app.app_mut().update_block(|block| {
@@ -528,12 +528,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     // Adding some more unstakes
     // users[0] unstakes 70 from validators[0] - 80 left staken
@@ -596,12 +596,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 250);
+    assert_eq!(claim.amount.val().unwrap().u128(), 250);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 240);
+    assert_eq!(claim.amount.val().unwrap().u128(), 240);
 
     // Moving forward more, passing through second bath pending duration
     app.app_mut().update_block(|block| {
@@ -613,12 +613,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 250);
+    assert_eq!(claim.amount.val().unwrap().u128(), 250);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 240);
+    assert_eq!(claim.amount.val().unwrap().u128(), 240);
 
     // Withdrawing liens
     contract.withdraw_unbonded().call(users[0]).unwrap();
@@ -628,12 +628,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 90);
+    assert_eq!(claim.amount.val().unwrap().u128(), 90);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 240);
+    assert_eq!(claim.amount.val().unwrap().u128(), 240);
 }
 
 #[test]

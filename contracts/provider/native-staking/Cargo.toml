@@ -20,6 +20,7 @@ mt = ["library", "sylvia/mt"]
 
 [dependencies]
 mesh-apis        = { workspace = true }
+mesh-sync        = { workspace = true }
 mesh-native-staking-proxy        = { workspace = true, features = ["library"] }
 
 sylvia = { workspace = true }

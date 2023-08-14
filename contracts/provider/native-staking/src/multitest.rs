@@ -3,6 +3,8 @@ use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, StdError, Uint128};
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
 
+use mesh_sync::ValueRange;
+
 use crate::local_staking_api::test_utils::LocalStakingApi;
 use crate::native_staking_callback::test_utils::NativeStakingCallback;
 
@@ -271,9 +273,9 @@ fn releasing_proxy_stake() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [mesh_vault::msg::MaybeLienResponse::Lien {
+        [mesh_vault::msg::LienResponse {
             lienholder: staking_addr.to_owned(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
 
@@ -300,9 +302,9 @@ fn releasing_proxy_stake() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [mesh_vault::msg::MaybeLienResponse::Lien {
+        [mesh_vault::msg::LienResponse {
             lienholder: staking_addr.to_owned(),
-            amount: Uint128::zero() // TODO? Clean-up empty liens
+            amount: ValueRange::new_val(Uint128::zero()) // TODO? Clean-up empty liens
         }]
     );
 }
