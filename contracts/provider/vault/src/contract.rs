@@ -147,7 +147,7 @@ impl VaultContract<'_> {
 
         let free_collateral = user.free_collateral();
         ensure!(
-            user.free_collateral() >= amount.amount,
+            free_collateral >= amount.amount,
             ContractError::ClaimsLocked(free_collateral)
         );
 
