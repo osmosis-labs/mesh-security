@@ -1,7 +1,7 @@
 :
 
 U="cosmwasm"
-V="0.13.0"
+V="0.14.0"
 
 M=$(uname -m)
 #M="x86_64" # Force Intel arch
