@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, Uint128};
 use mesh_apis::local_staking_api::LocalStakingApiHelper;
+use mesh_sync::ValueRange;
 
 #[cw_serde]
 pub struct Config {
@@ -21,7 +22,7 @@ pub struct LocalStaking {
 #[cw_serde]
 pub struct Lien {
     /// Credit amount (denom is in `Config::denom`)
-    pub amount: Uint128,
+    pub amount: ValueRange<Uint128>,
     /// Slashable part - restricted to [0; 1] range
     pub slashable: Decimal,
 }
