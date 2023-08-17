@@ -1,4 +1,5 @@
 use std::{
+    fmt::{Debug, Formatter},
     iter::Sum,
     ops::{Add, Mul, Sub},
 };
@@ -83,7 +84,7 @@ pub fn max_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRang
 // TODO: deprecate this?
 /// Problem: We have a list of ValueRanges, and we want to know the maximum value.
 /// This is not one clear value, as we consider the maximum if all commit and maximum if all rollback.
-/// The result is the range of possible maximum values (different than spread)  
+/// The result is the range of possible maximum values (different than spread)
 pub fn reduce_max_range<'a, I, T>(iter: I) -> ValueRange<T>
 where
     I: Iterator<Item = &'a ValueRange<T>> + 'a,
@@ -101,7 +102,7 @@ pub fn min_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRang
 
 /// Problem: We have a list of ValueRanges, and we want to know the minimum value.
 /// This is not one clear value, as we consider the minimum if all commit and minimum if all rollback.
-/// The result is the range of possible minimum values (different than spread)  
+/// The result is the range of possible minimum values (different than spread)
 pub fn reduce_min_range<'a, I, T>(iter: I) -> ValueRange<T>
 where
     I: Iterator<Item = &'a ValueRange<T>> + 'a,
@@ -150,18 +151,13 @@ where
     }
 }
 
-impl<T: Add<Output = T>> Add for ValueRange<T> {
-    type Output = Self;
-
-    #[inline]
-    fn add(self, rhs: Self) -> Self::Output {
-        ValueRange::new(self.low + rhs.low, self.high + rhs.high)
-    }
+pub fn add_ranges<T: Add<Output = T>>(lhs: ValueRange<T>, rhs: ValueRange<T>) -> ValueRange<T> {
+    ValueRange::new(lhs.low + rhs.low, lhs.high + rhs.high)
 }
 
 impl<T: Add<Output = T> + Default> Sum for ValueRange<T> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(ValueRange::default(), |acc, x| acc + x)
+        iter.fold(ValueRange::default(), |acc, x| add_ranges(acc, x))
     }
 }
 
@@ -210,6 +206,16 @@ where
         self.assert_valid_range();
     }
 
+    /// This is a convenience method for non-transactional addition.
+    /// Similar to `prepare_add`, if the last value is set it enforces that the new maximum
+    /// will remain under that limit.
+    /// Usage: `range.add(20, None)?;` or `range.add(20, 100)?;`
+    pub fn add(&mut self, value: T, max: impl Into<Option<T>>) -> Result<(), RangeError> {
+        self.prepare_add(value, max)?;
+        self.commit_add(value);
+        Ok(())
+    }
+
     /// This is to be called at the beginning of a transaction, to reserve the ability to commit
     /// (or rollback) a subtraction.
     /// You can specify a minimum value that the range must never go below, which is enforced here.
@@ -241,9 +247,31 @@ where
         self.assert_valid_range();
     }
 
+    /// This is a convenience method for non-transactional subtraction.
+    /// Similar to `prepare_sub`, if the last value is set it enforces that the new minimum
+    /// will remain above that limit.
+    /// No minimum: `range.sub(20, None)?;`
+    /// Minimum of 0 (for uints): `range.sub(20, 0)?;`
+    /// Higher minimum :  `range.sub(20, 100)?;`
+    pub fn sub(&mut self, value: T, min: impl Into<Option<T>>) -> Result<(), RangeError> {
+        self.prepare_sub(value, min)?;
+        self.commit_sub(value);
+        Ok(())
+    }
+
     #[inline]
     fn assert_valid_range(&self) {
         assert!(self.low <= self.high);
+    }
+}
+
+// Use Debug output for Display as well
+impl<T> std::fmt::Display for ValueRange<T>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -280,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn add_ranges() {
+    fn ranges_addition() {
         // (80, 120)
         let mut range = ValueRange::new_val(80);
         range.prepare_add(40, None).unwrap();
@@ -289,8 +317,23 @@ mod tests {
         let mut other = ValueRange::new_val(200);
         other.prepare_sub(100, 0).unwrap();
 
-        let total = range + other;
+        let total = add_ranges(range, other);
         assert_eq!(total, ValueRange::new(180, 320));
+    }
+
+    #[test]
+    fn committed_ranges_addition() {
+        // (120, 160)
+        let mut range = ValueRange::new(80, 120);
+        // Avoid name clashing with std::ops::Add :-/
+        range.add(40, None).unwrap();
+
+        // (90, 190)
+        let mut other = ValueRange::new(100, 200);
+        other.sub(10, 0).unwrap();
+
+        let total = add_ranges(range, other);
+        assert_eq!(total, ValueRange::new(210, 350));
     }
 
     #[test]
@@ -356,7 +399,7 @@ mod tests {
             .prepare_sub(Uint128::new(100), Uint128::zero())
             .unwrap();
 
-        let total = range + other;
+        let total = add_ranges(range, other);
         assert_eq!(total, ValueRange::new(Uint128::new(180), Uint128::new(320)));
     }
 
@@ -668,7 +711,8 @@ mod examples {
         let mut bob_user =
             collect_liens_for_user(&store, bob, bob_user.collateral, Some(stake1)).unwrap();
         // and add this lien fully
-        bob_user.total_slashable = bob_user.total_slashable + (lien.amount * lien.slashable);
+        bob_user.total_slashable =
+            add_ranges(bob_user.total_slashable, lien.amount * lien.slashable);
         bob_user.max_lien = max_range(bob_user.max_lien, lien.amount);
         // and finally, check validity
         assert!(bob_user.is_valid());

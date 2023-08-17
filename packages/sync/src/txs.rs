@@ -59,7 +59,7 @@ impl Tx {
     }
 }
 
-// Use Debug output for display as well (simplify the previous hand-coding of that)
+// Use Debug output for Display as well
 impl std::fmt::Display for Tx {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
