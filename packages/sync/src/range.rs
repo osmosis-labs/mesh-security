@@ -151,18 +151,13 @@ where
     }
 }
 
-impl<T: Add<Output = T>> Add for ValueRange<T> {
-    type Output = Self;
-
-    #[inline]
-    fn add(self, rhs: Self) -> Self::Output {
-        ValueRange::new(self.low + rhs.low, self.high + rhs.high)
-    }
+pub fn add_ranges<T: Add<Output = T>>(lhs: ValueRange<T>, rhs: ValueRange<T>) -> ValueRange<T> {
+    ValueRange::new(lhs.low + rhs.low, lhs.high + rhs.high)
 }
 
 impl<T: Add<Output = T> + Default> Sum for ValueRange<T> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(ValueRange::default(), |acc, x| acc + x)
+        iter.fold(ValueRange::default(), |acc, x| add_ranges(acc, x))
     }
 }
 
@@ -313,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn add_ranges() {
+    fn ranges_addition() {
         // (80, 120)
         let mut range = ValueRange::new_val(80);
         range.prepare_add(40, None).unwrap();
@@ -322,22 +317,22 @@ mod tests {
         let mut other = ValueRange::new_val(200);
         other.prepare_sub(100, 0).unwrap();
 
-        let total = range + other;
+        let total = add_ranges(range, other);
         assert_eq!(total, ValueRange::new(180, 320));
     }
 
     #[test]
-    fn add_ranges_committed() {
+    fn committed_ranges_addition() {
         // (120, 160)
         let mut range = ValueRange::new(80, 120);
         // Avoid name clashing with std::ops::Add :-/
-        ValueRange::add(&mut range, 40, None).unwrap();
+        range.add(40, None).unwrap();
 
         // (90, 190)
         let mut other = ValueRange::new(100, 200);
         other.sub(10, 0).unwrap();
 
-        let total = range + other;
+        let total = add_ranges(range, other);
         assert_eq!(total, ValueRange::new(210, 350));
     }
 
@@ -404,7 +399,7 @@ mod tests {
             .prepare_sub(Uint128::new(100), Uint128::zero())
             .unwrap();
 
-        let total = range + other;
+        let total = add_ranges(range, other);
         assert_eq!(total, ValueRange::new(Uint128::new(180), Uint128::new(320)));
     }
 
@@ -716,7 +711,8 @@ mod examples {
         let mut bob_user =
             collect_liens_for_user(&store, bob, bob_user.collateral, Some(stake1)).unwrap();
         // and add this lien fully
-        bob_user.total_slashable = bob_user.total_slashable + (lien.amount * lien.slashable);
+        bob_user.total_slashable =
+            add_ranges(bob_user.total_slashable, lien.amount * lien.slashable);
         bob_user.max_lien = max_range(bob_user.max_lien, lien.amount);
         // and finally, check validity
         assert!(bob_user.is_valid());
