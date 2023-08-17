@@ -79,7 +79,7 @@ fn bonding() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::zero(),
-            free: Uint128::zero(),
+            free: ValueRange::new_val(Uint128::zero()),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -97,7 +97,7 @@ fn bonding() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(100),
-            free: Uint128::new(100),
+            free: ValueRange::new_val(Uint128::new(100)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -125,7 +125,7 @@ fn bonding() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(250),
-            free: Uint128::new(250),
+            free: ValueRange::new_val(Uint128::new(250)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -150,7 +150,7 @@ fn bonding() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(50),
-            free: Uint128::new(50),
+            free: ValueRange::new_val(Uint128::new(50)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -173,7 +173,7 @@ fn bonding() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(30),
-            free: Uint128::new(30),
+            free: ValueRange::new_val(Uint128::new(30)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -193,7 +193,10 @@ fn bonding() {
     // Unbounding over bounded fails
 
     let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
-    assert_eq!(err, ContractError::ClaimsLocked(Uint128::new(30)));
+    assert_eq!(
+        err,
+        ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(30)))
+    );
 }
 
 #[test]
@@ -243,7 +246,7 @@ fn stake_local() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -275,7 +278,7 @@ fn stake_local() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::new(200)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -311,7 +314,7 @@ fn stake_local() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(50),
+            free: ValueRange::new_val(Uint128::new(50)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -349,7 +352,10 @@ fn stake_local() {
     // Cannot unbond used collateral
 
     let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
-    assert_eq!(err, ContractError::ClaimsLocked(Uint128::new(50)));
+    assert_eq!(
+        err,
+        ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
+    );
 
     // Unstaking
 
@@ -367,7 +373,7 @@ fn stake_local() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(100),
+            free: ValueRange::new_val(Uint128::new(100)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -406,7 +412,7 @@ fn stake_local() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::new(200)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -501,7 +507,7 @@ fn stake_cross() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -546,7 +552,7 @@ fn stake_cross() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::new(200)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -592,7 +598,7 @@ fn stake_cross() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(50),
+            free: ValueRange::new_val(Uint128::new(50)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -634,7 +640,10 @@ fn stake_cross() {
     // Cannot unbond used collateral
 
     let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
-    assert_eq!(err, ContractError::ClaimsLocked(Uint128::new(50)));
+    assert_eq!(
+        err,
+        ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
+    );
 
     // Unstaking
 
@@ -653,7 +662,7 @@ fn stake_cross() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(100),
+            free: ValueRange::new_val(Uint128::new(100)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -694,7 +703,7 @@ fn stake_cross() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::new(200)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -789,7 +798,7 @@ fn stake_cross_txs() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -805,7 +814,7 @@ fn stake_cross_txs() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(500),
-            free: Uint128::new(500),
+            free: ValueRange::new_val(Uint128::new(500)),
         }
     );
     assert_eq!(
@@ -897,7 +906,11 @@ fn stake_cross_txs() {
     // Can query account while pending
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
-        AccountResponse::new(OSMO, Uint128::new(300), Uint128::new(150))
+        AccountResponse::new(
+            OSMO,
+            Uint128::new(300),
+            ValueRange::new(Uint128::new(150), Uint128::new(300))
+        )
     );
     // Can query claims, and value ranges are reported
     assert_eq!(
@@ -928,7 +941,7 @@ fn stake_cross_txs() {
                 account: AccountResponse {
                     denom: OSMO.to_owned(),
                     bonded: Uint128::new(300),
-                    free: Uint128::new(150),
+                    free: ValueRange::new(Uint128::new(150), Uint128::new(300)),
                 },
             },
             AllAccountsResponseItem {
@@ -936,7 +949,7 @@ fn stake_cross_txs() {
                 account: AccountResponse {
                     denom: OSMO.to_owned(),
                     bonded: Uint128::new(500),
-                    free: Uint128::new(400),
+                    free: ValueRange::new_val(Uint128::new(400)),
                 },
             },
         ]
@@ -949,7 +962,7 @@ fn stake_cross_txs() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(500),
-            free: Uint128::new(400),
+            free: ValueRange::new_val(Uint128::new(400)),
         }
     );
     // Can query the other account claims
@@ -976,7 +989,7 @@ fn stake_cross_txs() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(150),
+            free: ValueRange::new(Uint128::new(150), Uint128::new(200)),
         }
     );
     // Can query claims
@@ -1048,7 +1061,7 @@ fn stake_cross_rollback_tx() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
 
@@ -1088,7 +1101,7 @@ fn stake_cross_rollback_tx() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
     // No non-empty claims
@@ -1207,7 +1220,7 @@ fn multiple_stakes() {
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(1000),
-            free: Uint128::new(700),
+            free: ValueRange::new_val(Uint128::new(700)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -1265,7 +1278,11 @@ fn multiple_stakes() {
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
-        AccountResponse::new(OSMO, Uint128::new(1000), Uint128::new(430)),
+        AccountResponse::new(
+            OSMO,
+            Uint128::new(1000),
+            ValueRange::new_val(Uint128::new(430))
+        ),
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
@@ -1373,7 +1390,11 @@ fn all_users_fetching() {
         accounts.accounts,
         [AllAccountsResponseItem {
             user: users[0].to_string(),
-            account: AccountResponse::new(OSMO, Uint128::new(100), Uint128::new(100)),
+            account: AccountResponse::new(
+                OSMO,
+                Uint128::new(100),
+                ValueRange::new_val(Uint128::new(100))
+            ),
         }]
     );
 
@@ -1382,7 +1403,11 @@ fn all_users_fetching() {
         accounts.accounts,
         [AllAccountsResponseItem {
             user: users[0].to_string(),
-            account: AccountResponse::new(OSMO, Uint128::new(100), Uint128::new(100),)
+            account: AccountResponse::new(
+                OSMO,
+                Uint128::new(100),
+                ValueRange::new_val(Uint128::new(100),)
+            )
         }]
     );
 
@@ -1400,11 +1425,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(100), Uint128::new(100),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::new(100),
+                    ValueRange::new_val(Uint128::new(100),)
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(200), Uint128::new(200),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::new(200),
+                    ValueRange::new_val(Uint128::new(200),)
+                )
             }
         ]
     );
@@ -1415,11 +1448,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(100), Uint128::new(100),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::new(100),
+                    ValueRange::new_val(Uint128::new(100),)
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(200), Uint128::new(200),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::new(200),
+                    ValueRange::new_val(Uint128::new(200),)
+                )
             }
         ]
     );
@@ -1434,11 +1475,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(50), Uint128::new(50),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::new(50),
+                    ValueRange::new_val(Uint128::new(50),)
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(200), Uint128::new(200),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::new(200),
+                    ValueRange::new_val(Uint128::new(200),)
+                )
             }
         ]
     );
@@ -1449,11 +1498,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(50), Uint128::new(50),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::new(50),
+                    ValueRange::new_val(Uint128::new(50),)
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(200), Uint128::new(200),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::new(200),
+                    ValueRange::new_val(Uint128::new(200),)
+                )
             }
         ]
     );
@@ -1467,11 +1524,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(50), Uint128::new(50),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::new(50),
+                    ValueRange::new_val(Uint128::new(50),)
+                )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: AccountResponse::new(OSMO, Uint128::new(0), Uint128::new(0),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::zero(),
+                    ValueRange::new_val(Uint128::zero(),)
+                )
             }
         ]
     );
@@ -1481,7 +1546,11 @@ fn all_users_fetching() {
         accounts.accounts,
         [AllAccountsResponseItem {
             user: users[0].to_string(),
-            account: AccountResponse::new(OSMO, Uint128::new(50), Uint128::new(50),)
+            account: AccountResponse::new(
+                OSMO,
+                Uint128::new(50),
+                ValueRange::new_val(Uint128::new(50),)
+            )
         },]
     );
 }
