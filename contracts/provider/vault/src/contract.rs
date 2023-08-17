@@ -479,21 +479,34 @@ impl VaultContract<'_> {
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
-        lien.amount
-            .prepare_add(amount, user.collateral)
-            .map_err(|_| ContractError::InsufficentBalance)?;
+        if remote {
+            lien.amount
+                .prepare_add(amount, user.collateral)
+                .map_err(|_| ContractError::InsufficentBalance)?;
+        } else {
+            // Update lien immediately
+            lien.amount
+                .add(amount, user.collateral)
+                .map_err(|_| ContractError::InsufficentBalance)?;
+        }
         user.max_lien = max_range(user.max_lien, lien.amount);
-        user.total_slashable
-            .prepare_add(amount * lien.slashable, user.collateral)
-            .map_err(|_| ContractError::InsufficentBalance)?;
+        if remote {
+            user.total_slashable
+                .prepare_add(amount * lien.slashable, user.collateral)
+                .map_err(|_| ContractError::InsufficentBalance)?;
+        } else {
+            // Update total slashable immediately
+            user.total_slashable
+                .add(amount * lien.slashable, user.collateral)
+                .map_err(|_| ContractError::InsufficentBalance)?;
+        }
 
         ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
-        if remote {
-            self.liens
-                .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien)?;
-            self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
-
+        self.liens
+            .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien)?;
+        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        let tx_id = if remote {
             // Create new tx
             let tx_id = self.next_tx_id(ctx.deps.storage)?;
 
@@ -505,17 +518,11 @@ impl VaultContract<'_> {
                 lienholder: lienholder.clone(),
             };
             self.pending.txs.save(ctx.deps.storage, tx_id, &new_tx)?;
-            Ok(tx_id)
+            tx_id
         } else {
-            // Commit lien immediately
-            lien.amount.commit_add(amount);
-            self.liens
-                .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien)?;
-            // Commit user info immediately
-            user.total_slashable.commit_add(amount * lien.slashable);
-            self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
-            Ok(0)
-        }
+            0
+        };
+        Ok(tx_id)
     }
 
     /// Commits a pending stake
