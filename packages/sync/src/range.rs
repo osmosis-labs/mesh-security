@@ -83,7 +83,7 @@ pub fn max_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRang
 // TODO: deprecate this?
 /// Problem: We have a list of ValueRanges, and we want to know the maximum value.
 /// This is not one clear value, as we consider the maximum if all commit and maximum if all rollback.
-/// The result is the range of possible maximum values (different than spread)  
+/// The result is the range of possible maximum values (different than spread)
 pub fn reduce_max_range<'a, I, T>(iter: I) -> ValueRange<T>
 where
     I: Iterator<Item = &'a ValueRange<T>> + 'a,
@@ -101,7 +101,7 @@ pub fn min_range<T: Ord + Copy>(a: ValueRange<T>, b: ValueRange<T>) -> ValueRang
 
 /// Problem: We have a list of ValueRanges, and we want to know the minimum value.
 /// This is not one clear value, as we consider the minimum if all commit and minimum if all rollback.
-/// The result is the range of possible minimum values (different than spread)  
+/// The result is the range of possible minimum values (different than spread)
 pub fn reduce_min_range<'a, I, T>(iter: I) -> ValueRange<T>
 where
     I: Iterator<Item = &'a ValueRange<T>> + 'a,
@@ -210,6 +210,16 @@ where
         self.assert_valid_range();
     }
 
+    /// This is a convenience method for non-transactional addition.
+    /// Similar to `prepare_add`, if the last value is set it enforces that the new maximum
+    /// will remain under that limit.
+    /// Usage: `range.add(20, None)?;` or `range.add(20, 100)?;`
+    pub fn add(&mut self, value: T, max: impl Into<Option<T>>) -> Result<(), RangeError> {
+        self.prepare_add(value, max)?;
+        self.commit_add(value);
+        Ok(())
+    }
+
     /// This is to be called at the beginning of a transaction, to reserve the ability to commit
     /// (or rollback) a subtraction.
     /// You can specify a minimum value that the range must never go below, which is enforced here.
@@ -239,6 +249,18 @@ where
     pub fn commit_sub(&mut self, value: T) {
         self.high = self.high - value;
         self.assert_valid_range();
+    }
+
+    /// This is a convenience method for non-transactional subtraction.
+    /// Similar to `prepare_sub`, if the last value is set it enforces that the new minimum
+    /// will remain above that limit.
+    /// No minimum: `range.sub(20, None)?;`
+    /// Minimum of 0 (for uints): `range.sub(20, 0)?;`
+    /// Higher minimum :  `range.sub(20, 100)?;`
+    pub fn sub(&mut self, value: T, min: impl Into<Option<T>>) -> Result<(), RangeError> {
+        self.prepare_sub(value, min)?;
+        self.commit_sub(value);
+        Ok(())
     }
 
     #[inline]
@@ -291,6 +313,21 @@ mod tests {
 
         let total = range + other;
         assert_eq!(total, ValueRange::new(180, 320));
+    }
+
+    #[test]
+    fn add_ranges_committed() {
+        // (120, 160)
+        let mut range = ValueRange::new(80, 120);
+        // Avoid name clashing with std::ops::Add :-/
+        ValueRange::add(&mut range, 40, None).unwrap();
+
+        // (90, 190)
+        let mut other = ValueRange::new(100, 200);
+        other.sub(10, 0).unwrap();
+
+        let total = range + other;
+        assert_eq!(total, ValueRange::new(210, 350));
     }
 
     #[test]
