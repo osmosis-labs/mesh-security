@@ -142,7 +142,7 @@ impl VaultContract<'_> {
 
         let free_collateral = user.free_collateral();
         ensure!(
-            free_collateral >= amount.amount,
+            free_collateral.low() >= amount.amount,
             ContractError::ClaimsLocked(free_collateral)
         );
 
@@ -489,6 +489,7 @@ impl VaultContract<'_> {
                 .add(amount, user.collateral)
                 .map_err(|_| ContractError::InsufficentBalance)?;
         }
+        // Tentative value (for remote)
         user.max_lien = max_range(user.max_lien, lien.amount);
         if remote {
             user.total_slashable
@@ -566,7 +567,9 @@ impl VaultContract<'_> {
             .save(ctx.deps.storage, (&tx_user, &tx_lienholder), &lien)?;
         // Load user
         let mut user = self.users.load(ctx.deps.storage, &tx_user)?;
-        // Commit it
+        // Update max lien definitive value (it depends on the lien's value range)
+        user.max_lien = max_range(user.max_lien, lien.amount);
+        // Commit total slashable
         user.total_slashable.commit_add(tx_amount * lien.slashable);
         // Save it
         self.users.save(ctx.deps.storage, &tx_user, &user)?;

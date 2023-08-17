@@ -1,6 +1,6 @@
 use cosmwasm_std::{Addr, StdError, Uint128};
 use cw_utils::{ParseReplyError, PaymentError};
-use mesh_sync::{LockError, RangeError, Tx};
+use mesh_sync::{LockError, RangeError, Tx, ValueRange};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -27,7 +27,7 @@ pub enum ContractError {
     UnexpectedDenom(String),
 
     #[error("Claim is locked, only {0} can be unbonded")]
-    ClaimsLocked(Uint128),
+    ClaimsLocked(ValueRange<Uint128>),
 
     #[error("The address doesn't have sufficient balance for this operation")]
     InsufficentBalance,

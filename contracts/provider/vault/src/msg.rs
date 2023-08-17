@@ -20,11 +20,11 @@ pub struct AccountResponse {
     // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
     pub denom: String,
     pub bonded: Uint128,
-    pub free: Uint128,
+    pub free: ValueRange<Uint128>,
 }
 
 impl AccountResponse {
-    pub fn new(denom: &str, bonded: Uint128, free: Uint128) -> Self {
+    pub fn new(denom: &str, bonded: Uint128, free: ValueRange<Uint128>) -> Self {
         Self {
             denom: denom.to_owned(),
             bonded,

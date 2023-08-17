@@ -41,13 +41,15 @@ pub struct UserInfo {
 impl UserInfo {
     // Return total used collateral
     pub fn used_collateral(&self) -> ValueRange<Uint128> {
-        // self.max_lien.max(self.total_slashable)
         max_range(self.max_lien, self.total_slashable)
     }
 
     /// Returns free collateral
-    pub fn free_collateral(&self) -> Uint128 {
-        self.collateral - self.used_collateral().high()
+    pub fn free_collateral(&self) -> ValueRange<Uint128> {
+        ValueRange::new(
+            self.collateral - self.used_collateral().high(),
+            self.collateral - self.used_collateral().low(),
+        )
     }
 
     /// Checks if the collateral covers staked liens
