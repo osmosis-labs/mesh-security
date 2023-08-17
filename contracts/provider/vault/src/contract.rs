@@ -670,10 +670,8 @@ impl VaultContract<'_> {
 
         let slashable = lien.slashable;
         lien.amount
-            .prepare_sub(amount, Uint128::zero())
+            .sub(amount, Uint128::zero())
             .map_err(|_| ContractError::InsufficientLien)?;
-        // And commit it
-        lien.amount.commit_sub(amount);
 
         self.liens
             .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien)?;
@@ -685,9 +683,7 @@ impl VaultContract<'_> {
         self.recalculate_max_lien(ctx.deps.storage, &owner, &mut user)?;
 
         user.total_slashable
-            .prepare_sub(amount * slashable, Uint128::zero())?;
-        // And commit it
-        user.total_slashable.commit_sub(amount * slashable);
+            .sub(amount * slashable, Uint128::zero())?;
         self.users.save(ctx.deps.storage, &owner, &user)?;
 
         Ok(())
