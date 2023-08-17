@@ -1,4 +1,5 @@
 use std::{
+    fmt::{Debug, Formatter},
     iter::Sum,
     ops::{Add, Mul, Sub},
 };
@@ -266,6 +267,16 @@ where
     #[inline]
     fn assert_valid_range(&self) {
         assert!(self.low <= self.high);
+    }
+}
+
+// Use Debug output for Display as well
+impl<T> std::fmt::Display for ValueRange<T>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
