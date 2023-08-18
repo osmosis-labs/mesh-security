@@ -58,29 +58,12 @@ impl From<Config> for ConfigResponse {
     }
 }
 
-/// Response for stake query on one user and validator
-#[cw_serde]
-pub enum MaybeStake {
-    Stake(Stake),
-    Locked {},
-}
-
-impl MaybeStake {
-    /// Designed for test code, unwrap or panic if Locked
-    pub fn unwrap(self) -> Stake {
-        match self {
-            MaybeStake::Stake(stake) => stake,
-            MaybeStake::Locked {} => panic!("Stake is locked"),
-        }
-    }
-}
-
 /// Stake-related information including user address and validator
 #[cw_serde]
 pub struct StakeInfo {
     pub owner: String,
     pub validator: String,
-    pub stake: MaybeStake,
+    pub stake: Stake,
 }
 
 impl StakeInfo {
@@ -88,7 +71,7 @@ impl StakeInfo {
         Self {
             owner: owner.to_string(),
             validator: validator.to_string(),
-            stake: MaybeStake::Stake(stake.clone()),
+            stake: stake.clone(),
         }
     }
 }

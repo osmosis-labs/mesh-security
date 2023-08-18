@@ -1,7 +1,7 @@
 use cosmwasm_std::{ConversionOverflowError, StdError, Uint128};
 use cw_utils::PaymentError;
 use mesh_apis::ibc::VersionError;
-use mesh_sync::{LockError, Tx};
+use mesh_sync::{LockError, RangeError, Tx};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -56,4 +56,7 @@ pub enum ContractError {
 
     #[error("No staking rewards to be withdrawn")]
     NoRewards,
+
+    #[error("{0}")]
+    Range(#[from] RangeError),
 }

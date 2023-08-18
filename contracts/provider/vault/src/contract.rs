@@ -650,7 +650,6 @@ impl VaultContract<'_> {
             .range(storage, None, None, Order::Ascending)
             .try_fold(ValueRange::new_val(Uint128::zero()), |max_lien, item| {
                 let (_, lien) = item?;
-                // FIXME: Use max_range here when user lock is removed
                 Ok::<_, ContractError>(max_range(max_lien, lien.amount))
             })?;
         Ok(())
@@ -690,6 +689,17 @@ impl VaultContract<'_> {
         self.users.save(ctx.deps.storage, &owner, &user)?;
 
         Ok(())
+    }
+
+    #[msg(query)]
+    fn user_collateral(&self, ctx: QueryCtx, user: String) -> Result<Uint128, ContractError> {
+        let deps = ctx.deps;
+        let user = deps.api.addr_validate(&user)?;
+        let user_info = self
+            .users
+            .may_load(deps.storage, &user)?
+            .unwrap_or_default();
+        Ok(user_info.collateral)
     }
 }
 

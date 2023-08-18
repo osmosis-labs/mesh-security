@@ -1,6 +1,6 @@
 use anyhow::Result as AnyResult;
 
-use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal};
+use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Uint128};
 use mesh_apis::ibc::AddValidator;
 use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
@@ -8,7 +8,7 @@ use mesh_native_staking_proxy::contract::multitest_utils::CodeId as NativeStakin
 use mesh_vault::contract::multitest_utils::{CodeId as VaultCodeId, VaultContractProxy};
 use mesh_vault::msg::StakingInitInfo;
 
-use mesh_sync::Tx;
+use mesh_sync::{Tx, ValueRange};
 
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
@@ -189,6 +189,7 @@ fn staking() {
         )
         .call(users[0])
         .unwrap();
+
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
@@ -263,27 +264,23 @@ fn staking() {
     // Querying for particular stakes
     let stake = contract
         .stake(users[0].to_owned(), validators[0].to_owned())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 200);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(200)));
 
     let stake = contract
         .stake(users[0].to_owned(), validators[1].to_owned())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 100);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
         .stake(users[1].to_owned(), validators[0].to_owned())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 100);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
         .stake(users[1].to_owned(), validators[1].to_owned())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 200);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(200)));
 
     // Querying fo all the stakes
     let stakes = contract.stakes(users[0].to_owned(), None, None).unwrap();
@@ -466,27 +463,23 @@ fn unstaking() {
     // Unstaken should be immediately visible on staken amount
     let stake = contract
         .stake(users[0].to_string(), validators[0].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 150);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(150)));
 
     let stake = contract
         .stake(users[0].to_string(), validators[1].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 100);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
         .stake(users[1].to_string(), validators[0].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 240);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(240)));
 
     let stake = contract
         .stake(users[1].to_string(), validators[1].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 0);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(0)));
 
     // But not on vault side
     let claim = vault
@@ -559,27 +552,23 @@ fn unstaking() {
     // Verify proper stake values
     let stake = contract
         .stake(users[0].to_string(), validators[0].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 80);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(80)));
 
     let stake = contract
         .stake(users[0].to_string(), validators[1].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 10);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(10)));
 
     let stake = contract
         .stake(users[1].to_string(), validators[0].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 240);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(240)));
 
     let stake = contract
         .stake(users[1].to_string(), validators[1].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 0);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(0)));
 
     // Another timetravel - just enough for first batch of stakes to release,
     // too early for second batch
