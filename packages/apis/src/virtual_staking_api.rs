@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Response, StdError};
+use cosmwasm_std::{Coin, Response, StdError, Validator};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -28,12 +28,16 @@ pub trait VirtualStakingApi {
     ) -> Result<Response, Self::Error>;
 }
 
-/// SudoMsg::Rebalance{} should be called once per epoch by the sdk (in EndBlock).
-/// It allows the virtual staking contract to bond or unbond any pending requests, as well
-/// as to perform a rebalance if needed (over the max cap).
-///
-/// It should also withdraw all pending rewards here, and send them to the converter contract.
 #[cw_serde]
 pub enum SudoMsg {
+    /// SudoMsg::Rebalance{} should be called once per epoch by the sdk (in EndBlock).
+    /// It allows the virtual staking contract to bond or unbond any pending requests, as well
+    /// as to perform a rebalance if needed (over the max cap).
+    ///
+    /// It should also withdraw all pending rewards here, and send them to the converter contract.
     Rebalance {},
+    /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update: addition
+    /// of a new validator to the active validator set, or removal of a validator from the
+    /// active validator set.
+    ValsetUpdate { additions: Vec<Validator>, removals: Vec<Validator> },
 }
