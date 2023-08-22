@@ -39,5 +39,8 @@ pub enum SudoMsg {
     /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update: addition
     /// of a new validator to the active validator set, or removal of a validator from the
     /// active validator set.
-    ValsetUpdate { additions: Vec<Validator>, removals: Vec<Validator> },
+    ValsetUpdate {
+        additions: Vec<Validator>,
+        removals: Vec<Validator>,
+    },
 }

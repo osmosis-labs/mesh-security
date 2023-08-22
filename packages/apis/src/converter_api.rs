@@ -34,7 +34,11 @@ pub trait ConverterApi {
     /// will be updated.
     /// TODO: pubkeys need to be part of the Validator struct (requires CosmWasm support).
     #[msg(exec)]
-    fn valset_update(&self, ctx: ExecCtx, additions: Vec<Validator>) -> Result<Response, Self::Error>;
+    fn valset_update(
+        &self,
+        ctx: ExecCtx,
+        additions: Vec<Validator>,
+    ) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]
