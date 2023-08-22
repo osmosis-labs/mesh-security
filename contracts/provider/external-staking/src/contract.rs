@@ -313,8 +313,8 @@ impl ExternalStakingContract<'_> {
             .unwrap_or_default();
 
         ensure!(
-            stake.stake.high() >= amount.amount,
-            ContractError::NotEnoughStake(stake.stake.high())
+            stake.stake.low() >= amount.amount,
+            ContractError::NotEnoughStake(stake.stake.low())
         );
 
         stake.stake.prepare_sub(amount.amount, Uint128::zero())?;
@@ -407,9 +407,6 @@ impl ExternalStakingContract<'_> {
 
         // Commit amount (need to unlock it first)
         stake.stake.commit_sub(tx_amount);
-        // stake_lock.unlock_write()?;
-        // let stake = stake_lock.write()?;
-        // stake.stake -= tx_amount;
 
         // FIXME? Release period being computed after successful IBC tx
         // (Note: this is good for now, but can be revisited in v1 design)
@@ -526,7 +523,6 @@ impl ExternalStakingContract<'_> {
         let released: Uint128 = stakes
             .into_iter()
             .map(|(validator, mut stake)| -> Result<_, ContractError> {
-                // Should we zero out the stake here?
                 let released = stake.release_pending(&ctx.env.block);
 
                 if !released.is_zero() {
@@ -633,7 +629,7 @@ impl ExternalStakingContract<'_> {
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
-        let mut stake = self
+        let stake = self
             .stakes
             .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
             .unwrap_or_default();
@@ -656,12 +652,6 @@ impl ExternalStakingContract<'_> {
             .add_attribute("validator", &validator)
             .add_attribute("recipient", &remote_recipient)
             .add_attribute("amount", amount.to_string());
-
-        // lock the stake. the withdrawn_funds will be updated on a commit,
-        // left unchanged on rollback
-        stake.stake.prepare_add(amount, None)?;
-        self.stakes
-            .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?;
 
         // prepare the pending tx
         let tx_id = self.next_tx_id(ctx.deps.storage)?;
@@ -748,28 +738,8 @@ impl ExternalStakingContract<'_> {
         deps: DepsMut,
         tx_id: u64,
     ) -> Result<(), ContractError> {
-        // Load tx
-        let tx = self.pending_txs.load(deps.storage, tx_id)?;
+        // Remove pending tx
         self.pending_txs.remove(deps.storage, tx_id);
-
-        // Verify tx is of the right type and get data
-        let (tx_amount, staker, validator) = match tx {
-            Tx::InFlightTransferFunds {
-                amount,
-                staker,
-                validator,
-                ..
-            } => (amount, staker, validator),
-            _ => {
-                return Err(ContractError::WrongTypeTx(tx_id, tx));
-            }
-        };
-
-        // release the write lock and leave state unchanged
-        let mut stake = self.stakes.load(deps.storage, (&staker, &validator))?;
-        stake.stake.rollback_add(tx_amount);
-        self.stakes
-            .save(deps.storage, (&staker, &validator), &stake)?;
 
         Ok(())
     }

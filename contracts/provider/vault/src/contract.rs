@@ -690,17 +690,6 @@ impl VaultContract<'_> {
 
         Ok(())
     }
-
-    #[msg(query)]
-    fn user_collateral(&self, ctx: QueryCtx, user: String) -> Result<Uint128, ContractError> {
-        let deps = ctx.deps;
-        let user = deps.api.addr_validate(&user)?;
-        let user_info = self
-            .users
-            .may_load(deps.storage, &user)?
-            .unwrap_or_default();
-        Ok(user_info.collateral)
-    }
 }
 
 impl Default for VaultContract<'_> {

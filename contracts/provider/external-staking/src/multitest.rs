@@ -699,6 +699,8 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
+
+    println!("Stake finished");
     // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
@@ -706,6 +708,8 @@ fn distribution() {
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
+
+    println!("Stake commited");
 
     vault
         .stake_remote(
@@ -739,6 +743,7 @@ fn distribution() {
         .call("test")
         .unwrap();
 
+    println!("Starting distribution");
     // Start with equal distribution:
     // 20 tokens for users[0]
     // 30 tokens for users[1]
@@ -747,12 +752,14 @@ fn distribution() {
         .call(owner)
         .unwrap();
 
+    println!("Distribution finished");
     // Only users[0] stakes on validators[1]
     // 30 tokens for users[0]
     contract
         .test_distribute_rewards(validators[1].to_owned(), coin(30, STAR))
         .call(owner)
         .unwrap();
+    println!("Distribution finished");
 
     // Check how much rewards are pending for withdrawal
     let rewards = contract
@@ -760,6 +767,7 @@ fn distribution() {
         .unwrap()
         .unwrap();
     assert_eq!(rewards.amount.u128(), 20);
+    println!("Pending rewards");
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
@@ -794,6 +802,7 @@ fn distribution() {
         .unwrap();
     let expected = vec![ValidatorPendingRewards::new(validators[0], 30, STAR)];
     assert_eq!(all_rewards.rewards, expected);
+    println!("Back to distribution rewards");
 
     // Some more distribution, this time not divisible by total staken tokens
     // 28 tokens for users[0]
@@ -835,16 +844,20 @@ fn distribution() {
         .unwrap();
     assert_eq!(rewards.amount.u128(), 0);
 
+    println!("Withdraw rewards");
     // Withdraw rewards
     contract
         .withdraw_rewards(validators[0].to_owned(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
+
+    println!("FInished Withdraw rewards");
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
+    println!("FInished Test commit Withdraw rewards");
 
     contract
         .withdraw_rewards(validators[1].to_owned(), remote[0].to_owned())
@@ -865,6 +878,8 @@ fn distribution() {
         .test_commit_withdraw_rewards(tx_id)
         .call(users[1])
         .unwrap();
+
+    println!("Is it here?");
 
     // error if 0 rewards available
     let err = contract
@@ -900,6 +915,7 @@ fn distribution() {
         .unwrap();
     assert_eq!(rewards.amount.u128(), 0);
 
+    println!("Again test distribute");
     // Another distribution - making it equal
     // 4 on users[0]
     // 6 on users[1]
@@ -940,6 +956,7 @@ fn distribution() {
         .call(owner)
         .unwrap();
 
+    println!("Before unstake");
     // Unstaking some funds from validator should change weights - now users split validators[0]
     // 50/50
     //
@@ -949,10 +966,12 @@ fn distribution() {
         .unstake(validators[0].to_owned(), coin(100, OSMO))
         .call(users[1])
         .unwrap();
+    println!("Finished junstake");
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
+    println!("Finished commit unstake");
 
     // Staking also changes weights - now validators[1] also splits rewards:
     // 1/4 for users[0]
@@ -971,10 +990,12 @@ fn distribution() {
         )
         .call(users[1])
         .unwrap();
+    println!("Finished stake");
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
+    println!("Finished commit stake");
 
     // Check if messing up with weights didn't affect withdrawable
     let rewards = contract
@@ -1008,6 +1029,7 @@ fn distribution() {
         .test_distribute_rewards(validators[0].to_owned(), coin(20, STAR))
         .call(owner)
         .unwrap();
+    println!("distribute rewards");
 
     // Also for validator[1]
     // 10 on users[1]
@@ -1016,6 +1038,7 @@ fn distribution() {
         .test_distribute_rewards(validators[1].to_owned(), coin(40, STAR))
         .call(owner)
         .unwrap();
+    println!("distribute rewards");
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
@@ -1051,6 +1074,7 @@ fn distribution() {
         .test_distribute_rewards(validators[0].to_owned(), coin(5, STAR))
         .call(owner)
         .unwrap();
+    println!("distribute rewards");
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
@@ -1092,6 +1116,7 @@ fn distribution() {
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
+    println!("unstakes ");
 
     // Distribute 12 tokens to validator[0]:
     //
@@ -1134,17 +1159,20 @@ fn distribution() {
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
+    println!("lots of withdraw rewards");
 
     // Rollback on users[1]
     contract
         .withdraw_rewards(validators[0].to_owned(), "bad_value".to_owned())
         .call(users[1])
         .unwrap();
+    println!("This should be fine");
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_rollback_withdraw_rewards(tx_id)
         .call(users[1])
         .unwrap();
+    println!("rollback withraw");
 
     // Check withdrawals and accounts
     let rewards = contract
@@ -1185,6 +1213,7 @@ fn distribution() {
         .test_distribute_rewards(validators[1].to_owned(), coin(10, STAR))
         .call(owner)
         .unwrap();
+    println!("test_distribute_rewards");
 
     // Check withdrawals and accounts
     let rewards = contract
