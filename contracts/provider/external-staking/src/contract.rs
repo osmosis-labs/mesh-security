@@ -1044,7 +1044,9 @@ pub mod cross_staking {
                 .may_load(ctx.deps.storage, (&owner, &msg.validator))?
                 .unwrap_or_default();
 
-            // Save stake
+            // Prepare stake addition and save stake.
+            // We don't check for max here, as this call can only come from the `vault` contract, which already
+            // performed the proper check.
             stake.stake.prepare_add(amount.amount, None)?;
             self.stakes
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake)?;
