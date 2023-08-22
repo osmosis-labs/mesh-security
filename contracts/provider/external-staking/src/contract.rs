@@ -20,8 +20,8 @@ use crate::error::ContractError;
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
 use crate::msg::{
     AllPendingRewards, AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse,
-    IbcChannelResponse, ListRemoteValidatorsResponse, MaybePendingRewards, StakeInfo,
-    StakesResponse, TxResponse, ValidatorPendingRewards,
+    IbcChannelResponse, ListRemoteValidatorsResponse, PendingRewards, StakeInfo, StakesResponse,
+    TxResponse, ValidatorPendingRewards,
 };
 use crate::state::{Config, Distribution, Stake};
 
@@ -925,7 +925,7 @@ impl ExternalStakingContract<'_> {
         ctx: QueryCtx,
         user: String,
         validator: String,
-    ) -> Result<MaybePendingRewards, ContractError> {
+    ) -> Result<PendingRewards, ContractError> {
         let user = ctx.deps.api.addr_validate(&user)?;
 
         let stake = self
@@ -941,10 +941,9 @@ impl ExternalStakingContract<'_> {
         let amount = Self::calculate_reward(&stake, &distribution)?;
         let config = self.config.load(ctx.deps.storage)?;
 
-        Ok(MaybePendingRewards::Rewards(coin(
-            amount.u128(),
-            config.rewards_denom,
-        )))
+        Ok(PendingRewards {
+            rewards: coin(amount.u128(), config.rewards_denom),
+        })
     }
 
     /// Returns how much rewards are to be withdrawn by particular user, iterating over all validators.

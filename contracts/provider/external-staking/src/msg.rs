@@ -102,20 +102,10 @@ pub struct UsersResponse {
 
 /// Response for pending rewards query on one validator
 #[cw_serde]
-pub enum MaybePendingRewards {
-    Rewards(Coin),
-    Locked {},
+pub struct PendingRewards {
+    pub rewards: Coin,
 }
 
-impl MaybePendingRewards {
-    /// Designed for test code, unwrap or panic if Locked
-    pub fn unwrap(self) -> Coin {
-        match self {
-            MaybePendingRewards::Rewards(coin) => coin,
-            MaybePendingRewards::Locked {} => panic!("Pending rewards are locked"),
-        }
-    }
-}
 /// Response for pending rewards query on all validator
 #[cw_serde]
 pub struct AllPendingRewards {
@@ -125,20 +115,16 @@ pub struct AllPendingRewards {
 #[cw_serde]
 pub struct ValidatorPendingRewards {
     pub validator: String,
-    pub rewards: MaybePendingRewards,
+    pub rewards: PendingRewards,
 }
 
 impl ValidatorPendingRewards {
     pub fn new(validator: impl Into<String>, amount: u128, denom: impl Into<String>) -> Self {
         Self {
             validator: validator.into(),
-            rewards: MaybePendingRewards::Rewards(coin(amount, denom)),
-        }
-    }
-    pub fn new_locked(validator: impl Into<String>) -> Self {
-        Self {
-            validator: validator.into(),
-            rewards: MaybePendingRewards::Locked {},
+            rewards: PendingRewards {
+                rewards: coin(amount, denom),
+            },
         }
     }
 }

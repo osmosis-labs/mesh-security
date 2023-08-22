@@ -759,25 +759,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 20);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     // Show all rewards skips validators that were never staked on
@@ -815,25 +815,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 48);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 72);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     // Withdraw rewards
@@ -881,25 +881,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     // Another distribution - making it equal
@@ -915,13 +915,13 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 4);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 6);
 
     // Now yet another unequal distribution to play around keeping all correct when weights are
@@ -982,25 +982,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 8);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 12);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 11);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     // Now distribute some nice values
@@ -1022,25 +1022,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 18);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 22);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 21);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     // And some more distribution fun - we are 50/50 on validators[1], so distributing odd number of
@@ -1057,13 +1057,13 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 20);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 25);
 
     // More unstaking - to make it both ways by both stakers on at least one validator, for sake of
@@ -1107,13 +1107,13 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 28);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 29);
 
     // Withdraw only by users[0]
@@ -1152,25 +1152,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 29);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     // Final distribution - 10 tokens to both validators
@@ -1192,25 +1192,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 6);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 33);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 2);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 37);
 
     let all_rewards = contract
