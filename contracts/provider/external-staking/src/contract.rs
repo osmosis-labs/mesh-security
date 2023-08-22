@@ -207,7 +207,7 @@ impl ExternalStakingContract<'_> {
         // Load stake
         let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
 
-        // Release stake lock
+        // Rollback add amount
         stake.stake.rollback_add(tx_amount);
 
         // Save stake
@@ -405,7 +405,7 @@ impl ExternalStakingContract<'_> {
             .may_load(deps.storage, &tx_validator)?
             .unwrap_or_default();
 
-        // Commit amount (need to unlock it first)
+        // Commit sub amount
         stake.stake.commit_sub(tx_amount);
 
         // FIXME? Release period being computed after successful IBC tx
@@ -460,7 +460,7 @@ impl ExternalStakingContract<'_> {
         // Load stake
         let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
 
-        // Release stake lock
+        // Rollback sub amount
         stake.stake.rollback_sub(tx_amount);
 
         // Save stake
@@ -738,8 +738,17 @@ impl ExternalStakingContract<'_> {
         deps: DepsMut,
         tx_id: u64,
     ) -> Result<(), ContractError> {
-        // Remove pending tx
-        self.pending_txs.remove(deps.storage, tx_id);
+        let tx = self.pending_txs.load(deps.storage, tx_id)?;
+
+        // Verify tx is of the right type and remove it from the map
+        match tx {
+            Tx::InFlightTransferFunds { .. } => {
+                self.pending_txs.remove(deps.storage, tx_id);
+            }
+            _ => {
+                return Err(ContractError::WrongTypeTx(tx_id, tx));
+            }
+        };
 
         Ok(())
     }
@@ -768,7 +777,7 @@ impl ExternalStakingContract<'_> {
             }
         };
 
-        // release the write lock and update withdrawn_funds to hold this transfer
+        // Update withdrawn_funds to hold this transfer
         let mut stake = self.stakes.load(deps.storage, (&staker, &validator))?;
         stake.withdrawn_funds += amount;
 
