@@ -650,7 +650,6 @@ impl VaultContract<'_> {
             .range(storage, None, None, Order::Ascending)
             .try_fold(ValueRange::new_val(Uint128::zero()), |max_lien, item| {
                 let (_, lien) = item?;
-                // FIXME: Use max_range here when user lock is removed
                 Ok::<_, ContractError>(max_range(max_lien, lien.amount))
             })?;
         Ok(())
