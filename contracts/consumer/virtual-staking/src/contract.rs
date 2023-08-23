@@ -44,7 +44,7 @@ pub struct VirtualStakingContract<'a> {
 #[contract]
 #[error(ContractError)]
 #[messages(virtual_staking_api as VirtualStakingApi)]
-#[sv::override_entry_point(sudo=crate::contract::sudo(SudoMsg))]
+// #[sv::override_entry_point(sudo=sudo(SudoMsg))] // Disabled because lack of custom query support
 impl VirtualStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -286,7 +286,6 @@ fn withdraw_reward_msgs<T: CustomQuery>(
 
 #[contract]
 #[messages(virtual_staking_api as VirtualStakingApi)]
-#[sv::override_entry_point(sudo=crate::contract::sudo(SudoMsg))]
 impl VirtualStakingApi for VirtualStakingContract<'_> {
     type Error = ContractError;
 
