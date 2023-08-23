@@ -20,7 +20,7 @@ mt = ["library", "sylvia/mt"]
 
 [dependencies]
 mesh-apis        = { workspace = true }
-mesh-bindings        = { workspace = true }
+mesh-bindings    = { workspace = true }
 
 sylvia = { workspace = true }
 cosmwasm-schema  = { workspace = true }
@@ -35,10 +35,12 @@ serde            = { workspace = true }
 thiserror        = { workspace = true }
 
 [dev-dependencies]
-cw-multi-test = { workspace = true }
-test-case     = { workspace = true }
-derivative    = { workspace = true }
-anyhow        = { workspace = true }
+mesh-simple-price-feed = { workspace = true, features = ["mt"] }
+mesh-converter         = { workspace = true, features = ["mt"] }
+cw-multi-test          = { workspace = true }
+test-case              = { workspace = true }
+derivative             = { workspace = true }
+anyhow                 = { workspace = true }
 
 [[bin]]
 name = "schema"

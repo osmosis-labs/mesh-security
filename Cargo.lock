@@ -725,6 +725,8 @@ dependencies = [
  "derivative",
  "mesh-apis",
  "mesh-bindings",
+ "mesh-converter",
+ "mesh-simple-price-feed",
  "schemars",
  "serde",
  "sylvia",
