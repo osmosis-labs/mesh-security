@@ -36,7 +36,7 @@ impl ConverterContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
-            virtual_stake: Item::new("bonded"),
+            virtual_stake: Item::new("virtual_stake"),
         }
     }
 
