@@ -997,8 +997,8 @@ impl ExternalStakingContract<'_> {
         stake: &Stake,
         distribution: &Distribution,
     ) -> Result<Uint128, ContractError> {
-        // Calculating rewards with the `lower` value goes agains the user, but the possible
-        // errors are small and temporary.
+        // Calculating rewards with always the `low` value of the range goes against the user in some
+        // scenario (pending unstakes), but the possible errors are small and temporary.
         let points = distribution.points_per_stake * Uint256::from(stake.stake.low());
 
         let points = stake.points_alignment.align(points);
