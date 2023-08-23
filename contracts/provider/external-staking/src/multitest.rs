@@ -868,6 +868,22 @@ fn distribution() {
         .call(users[1])
         .unwrap();
 
+    // Rewards withrawal should not affect the stake
+    let stake = contract
+        .stake(users[0].to_owned(), validators[0].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(200)));
+
+    let stake = contract
+        .stake(users[0].to_owned(), validators[1].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
+
+    let stake = contract
+        .stake(users[1].to_owned(), validators[0].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(300)));
+
     // error if 0 rewards available
     let err = contract
         .withdraw_rewards(validators[1].to_owned(), remote[1].to_owned())
@@ -876,6 +892,12 @@ fn distribution() {
     assert_eq!(err, ContractError::NoRewards);
     let tx_id = get_last_external_staking_pending_tx_id(&contract);
     assert_eq!(tx_id, None);
+
+    // Stake remains unaffected after rewards withdrawal failure
+    let stake = contract
+        .stake(users[1].to_owned(), validators[1].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(0)));
 
     // Rewards should not be withdrawable anymore
     let rewards = contract
@@ -1147,6 +1169,27 @@ fn distribution() {
         .test_rollback_withdraw_rewards(tx_id)
         .call(users[1])
         .unwrap();
+
+    // Rewards withrawal should not affect the stake
+    let stake = contract
+        .stake(users[0].to_owned(), validators[0].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(150)));
+
+    let stake = contract
+        .stake(users[0].to_owned(), validators[1].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
+
+    let stake = contract
+        .stake(users[1].to_owned(), validators[0].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
+
+    let stake = contract
+        .stake(users[1].to_owned(), validators[1].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(300)));
 
     // Check withdrawals and accounts
     let rewards = contract
