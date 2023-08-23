@@ -1,5 +1,6 @@
-use cosmwasm_std::{Addr, Decimal};
+use cosmwasm_std::{Addr, Decimal, Validator};
 use cw_multi_test::App as MtApp;
+use mesh_apis::virtual_staking_api::SudoMsg;
 use sylvia::multitest::App;
 
 use crate::contract;
@@ -105,4 +106,61 @@ fn instantiation() {
     // let's query virtual staking to find the owner
     let vs_config = virtual_staking.config().unwrap();
     assert_eq!(vs_config.converter, converter.contract_addr.to_string());
+}
+
+#[test]
+fn valset_update_sudo() {
+    let app = App::default();
+
+    let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
+    let admin = "theman";
+    let discount = Decimal::percent(40); // 1 OSMO worth of JUNO should give 0.6 OSMO of stake
+    let native_per_foreign = Decimal::percent(50); // 1 JUNO is worth 0.5 OSMO
+
+    let SetupResponse {
+        price_feed: _,
+        converter: _,
+        virtual_staking,
+    } = setup(
+        &app,
+        SetupArgs {
+            owner,
+            admin,
+            discount,
+            native_per_foreign,
+        },
+    );
+
+    // Send a valset update sudo message
+    let adds = vec![
+        Validator {
+            address: "cosmosval3".to_string(),
+            commission: Decimal::percent(3),
+            max_commission: Decimal::percent(30),
+            max_change_rate: Default::default(),
+        },
+        Validator {
+            address: "cosmosval1".to_string(),
+            commission: Decimal::percent(1),
+            max_commission: Decimal::percent(10),
+            max_change_rate: Default::default(),
+        },
+    ];
+    let rems = vec![Validator {
+        address: "cosmosval2".to_string(),
+        commission: Decimal::percent(2),
+        max_commission: Decimal::percent(20),
+        max_change_rate: Default::default(),
+    }];
+    let msg = SudoMsg::ValsetUpdate {
+        additions: adds,
+        removals: rems,
+    };
+
+    let res = app
+        .app_mut()
+        .wasm_sudo(virtual_staking.contract_addr, &msg)
+        .unwrap();
+
+    println!("res: {:?}", res);
 }
