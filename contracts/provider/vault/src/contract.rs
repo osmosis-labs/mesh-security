@@ -483,20 +483,18 @@ impl VaultContract<'_> {
             lien.amount
                 .prepare_add(amount, user.collateral)
                 .map_err(|_| ContractError::InsufficentBalance)?;
+            // Tentative value
+            user.max_lien = max_range(user.max_lien, lien.amount);
+            user.total_slashable
+                .prepare_add(amount * lien.slashable, user.collateral)
+                .map_err(|_| ContractError::InsufficentBalance)?;
         } else {
             // Update lien immediately
             lien.amount
                 .add(amount, user.collateral)
                 .map_err(|_| ContractError::InsufficentBalance)?;
-        }
-        // Tentative value (for remote)
-        user.max_lien = max_range(user.max_lien, lien.amount);
-        if remote {
-            user.total_slashable
-                .prepare_add(amount * lien.slashable, user.collateral)
-                .map_err(|_| ContractError::InsufficentBalance)?;
-        } else {
-            // Update total slashable immediately
+            // Update max lien and total slashable immediately
+            user.max_lien = max_range(user.max_lien, lien.amount);
             user.total_slashable
                 .add(amount * lien.slashable, user.collateral)
                 .map_err(|_| ContractError::InsufficentBalance)?;
