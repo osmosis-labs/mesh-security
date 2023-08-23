@@ -131,7 +131,7 @@ pub(crate) fn add_validators_msg(
             // TODO: not yet available in CosmWasm APIs. See https://github.com/CosmWasm/cosmwasm/issues/1828
             pub_key: "TODO".to_string(),
             // Use current height/time as start height/time (no slashing before mesh starts).
-            // These will be ignored on updates
+            // Warning: These will be updated as well when updating an already existing validator.
             start_height: env.block.height,
             start_time: env.block.time.seconds(),
         })
