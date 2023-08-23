@@ -1,7 +1,6 @@
-use crate::msg::MaybeAccountResponse::{Account, Locked};
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Binary, Uint128};
-use mesh_sync::Tx;
+use cosmwasm_std::{Binary, Uint128};
+use mesh_sync::{Tx, ValueRange};
 
 /// This is the info used to construct the native staking contract
 #[cw_serde]
@@ -17,34 +16,21 @@ pub struct StakingInitInfo {
 }
 
 #[cw_serde]
-pub enum MaybeAccountResponse {
-    Account(AccountResponse),
-    Locked {},
-}
-
-impl MaybeAccountResponse {
-    pub fn new_unlocked(denom: &str, bonded: Uint128, free: Uint128) -> Self {
-        Account(AccountResponse {
-            denom: denom.to_owned(),
-            bonded,
-            free,
-        })
-    }
-    /// Designed for test code, unwrap or panic if Locked
-    pub fn unwrap(self) -> AccountResponse {
-        match self {
-            Account(acct) => acct,
-            Locked {} => panic!("Account is locked"),
-        }
-    }
-}
-
-#[cw_serde]
 pub struct AccountResponse {
     // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient
     pub denom: String,
     pub bonded: Uint128,
-    pub free: Uint128,
+    pub free: ValueRange<Uint128>,
+}
+
+impl AccountResponse {
+    pub fn new(denom: &str, bonded: Uint128, free: ValueRange<Uint128>) -> Self {
+        Self {
+            denom: denom.to_owned(),
+            bonded,
+            free,
+        }
+    }
 }
 
 #[cw_serde]
@@ -55,27 +41,18 @@ pub struct AllAccountsResponse {
 #[cw_serde]
 pub struct AllAccountsResponseItem {
     pub user: String,
-    pub account: MaybeAccountResponse,
+    pub account: AccountResponse,
 }
 
 #[cw_serde]
 pub struct AccountClaimsResponse {
-    pub claims: Vec<MaybeLienResponse>,
+    pub claims: Vec<LienResponse>,
 }
 
 #[cw_serde]
-pub enum MaybeLienResponse {
-    Lien { lienholder: String, amount: Uint128 },
-    Locked {},
-}
-
-impl MaybeLienResponse {
-    pub fn new_unlocked(lienholder: Addr, amount: Uint128) -> Self {
-        MaybeLienResponse::Lien {
-            lienholder: lienholder.into(),
-            amount,
-        }
-    }
+pub struct LienResponse {
+    pub lienholder: String,
+    pub amount: ValueRange<Uint128>,
 }
 
 #[cw_serde]

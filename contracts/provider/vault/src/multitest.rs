@@ -5,14 +5,11 @@ use crate::contract;
 use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
-use crate::msg::{
-    AccountResponse, AllAccountsResponseItem, MaybeAccountResponse, MaybeLienResponse,
-    StakingInitInfo,
-};
+use crate::msg::{AccountResponse, AllAccountsResponseItem, LienResponse, StakingInitInfo};
 use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
 use mesh_sync::Tx::InFlightStaking;
-use mesh_sync::{LockError, Tx};
+use mesh_sync::{Tx, ValueRange};
 use sylvia::multitest::App;
 
 const OSMO: &str = "OSMO";
@@ -78,11 +75,11 @@ fn bonding() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::zero(),
-            free: Uint128::zero(),
+            free: ValueRange::new_val(Uint128::zero()),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -96,11 +93,11 @@ fn bonding() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(100),
-            free: Uint128::new(100),
+            free: ValueRange::new_val(Uint128::new(100)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -124,11 +121,11 @@ fn bonding() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(250),
-            free: Uint128::new(250),
+            free: ValueRange::new_val(Uint128::new(250)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -149,11 +146,11 @@ fn bonding() {
 
     vault.unbond(coin(200, OSMO)).call(user).unwrap();
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(50),
-            free: Uint128::new(50),
+            free: ValueRange::new_val(Uint128::new(50)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -172,11 +169,11 @@ fn bonding() {
 
     vault.unbond(coin(20, OSMO)).call(user).unwrap();
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(30),
-            free: Uint128::new(30),
+            free: ValueRange::new_val(Uint128::new(30)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -193,10 +190,13 @@ fn bonding() {
         coin(30, OSMO)
     );
 
-    // Unbounding over bounded fails
+    // Unbonding over bounded fails
 
     let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
-    assert_eq!(err, ContractError::ClaimsLocked(Uint128::new(30)));
+    assert_eq!(
+        err,
+        ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(30)))
+    );
 }
 
 #[test]
@@ -242,11 +242,11 @@ fn stake_local() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -274,19 +274,19 @@ fn stake_local() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::new(200)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: local_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
     assert_eq!(
@@ -310,19 +310,19 @@ fn stake_local() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(50),
+            free: ValueRange::new_val(Uint128::new(50)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: local_staking.contract_addr.to_string(),
-            amount: Uint128::new(250)
+            amount: ValueRange::new_val(Uint128::new(250))
         }]
     );
     assert_eq!(
@@ -352,7 +352,10 @@ fn stake_local() {
     // Cannot unbond used collateral
 
     let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
-    assert_eq!(err, ContractError::ClaimsLocked(Uint128::new(50)));
+    assert_eq!(
+        err,
+        ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
+    );
 
     // Unstaking
 
@@ -366,19 +369,19 @@ fn stake_local() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(100),
+            free: ValueRange::new_val(Uint128::new(100)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: local_staking.contract_addr.to_string(),
-            amount: Uint128::new(200)
+            amount: ValueRange::new_val(Uint128::new(200))
         }]
     );
     assert_eq!(
@@ -405,19 +408,19 @@ fn stake_local() {
         .call(owner)
         .unwrap();
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::new(200)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: local_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
     assert_eq!(
@@ -435,7 +438,7 @@ fn stake_local() {
         coin(100, OSMO)
     );
 
-    // Cannot unstake over the lein
+    // Cannot unstake over the lien
     // Error not verified as it is swallowed by intermediate contract
     // int this scenario
     local_staking
@@ -500,11 +503,11 @@ fn stake_cross() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -543,21 +546,21 @@ fn stake_cross() {
         .call(cross_staking.contract_addr.as_str())
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap().unwrap();
+    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::new(200)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
     assert_eq!(
@@ -589,21 +592,21 @@ fn stake_cross() {
         .call(cross_staking.contract_addr.as_str())
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap().unwrap();
+    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(50),
+            free: ValueRange::new_val(Uint128::new(50)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(250)
+            amount: ValueRange::new_val(Uint128::new(250))
         }]
     );
     assert_eq!(
@@ -637,7 +640,10 @@ fn stake_cross() {
     // Cannot unbond used collateral
 
     let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
-    assert_eq!(err, ContractError::ClaimsLocked(Uint128::new(50)));
+    assert_eq!(
+        err,
+        ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
+    );
 
     // Unstaking
 
@@ -650,21 +656,21 @@ fn stake_cross() {
         .call(owner)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap().unwrap();
+    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(100),
+            free: ValueRange::new_val(Uint128::new(100)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(200)
+            amount: ValueRange::new_val(Uint128::new(200))
         }]
     );
     assert_eq!(
@@ -691,21 +697,21 @@ fn stake_cross() {
         .call(owner)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap().unwrap();
+    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::new(200)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
 
@@ -724,7 +730,7 @@ fn stake_cross() {
         coin(0, OSMO)
     );
 
-    // Cannot unstake over the lein
+    // Cannot unstake over the lien
     // Error not verified as it is swallowed by intermediate contract
     // int this scenario
     cross_staking
@@ -788,11 +794,11 @@ fn stake_cross_txs() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -804,11 +810,11 @@ fn stake_cross_txs() {
         .call(user2)
         .unwrap();
     assert_eq!(
-        vault.account(user2.to_owned()).unwrap().unwrap(),
+        vault.account(user2.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(500),
-            free: Uint128::new(500),
+            free: ValueRange::new_val(Uint128::new(500)),
         }
     );
     assert_eq!(
@@ -845,23 +851,22 @@ fn stake_cross_txs() {
 
     // One pending tx
     assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 1);
-
-    // Same user cannot stake while pending tx
-    assert_eq!(
-        vault
-            .stake_remote(
-                cross_staking.contract_addr.to_string(),
-                coin(100, OSMO),
-                Binary::default(),
-            )
-            .call(user)
-            .unwrap_err(),
-        ContractError::Lock(LockError::WriteLocked)
-    );
     // Store for later
     let first_tx = get_last_pending_tx_id(&vault).unwrap();
 
-    // But other user can
+    // Same user can stake while pending tx
+    vault
+        .stake_remote(
+            cross_staking.contract_addr.to_string(),
+            coin(50, OSMO),
+            Binary::default(),
+        )
+        .call(user)
+        .unwrap();
+    // Store for later
+    let second_tx = get_last_pending_tx_id(&vault).unwrap();
+
+    // Other user can as well
     vault
         .stake_remote(
             cross_staking.contract_addr.to_string(),
@@ -871,8 +876,8 @@ fn stake_cross_txs() {
         .call(user2)
         .unwrap();
 
-    // Two pending txs
-    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 2);
+    // Three pending txs
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 3);
 
     // Last tx commit_tx call
     let last_tx = get_last_pending_tx_id(&vault).unwrap();
@@ -882,27 +887,43 @@ fn stake_cross_txs() {
         .call(cross_staking.contract_addr.as_str())
         .unwrap();
 
-    // First tx is still pending
-    let first_id = match vault.all_pending_txs_desc(None, None).unwrap().txs[0] {
+    // Two pending txs now
+    assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 2);
+
+    // First tx (old one) is still pending
+    let first_id = match vault.all_pending_txs_desc(None, None).unwrap().txs[1] {
         InFlightStaking { id, .. } => id,
         _ => panic!("unexpected tx type"),
     };
     assert_eq!(first_id, first_tx);
+    // Second tx (recent one) is still pending
+    let second_id = match vault.all_pending_txs_desc(None, None).unwrap().txs[0] {
+        InFlightStaking { id, .. } => id,
+        _ => panic!("unexpected tx type"),
+    };
+    assert_eq!(second_id, second_tx);
 
-    // Cannot query account while pending
+    // Can query account while pending
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
-        MaybeAccountResponse::Locked {}
-    ); // write locked
-       // Can query claims, and locked are reported
+        AccountResponse::new(
+            OSMO,
+            Uint128::new(300),
+            ValueRange::new(Uint128::new(150), Uint128::new(300))
+        )
+    );
+    // Can query claims, and value ranges are reported
     assert_eq!(
         vault
             .account_claims(user.to_owned(), None, None)
             .unwrap()
             .claims,
-        [MaybeLienResponse::Locked {}]
-    ); // write locked
-       // Can query vault's balance while pending
+        [LienResponse {
+            lienholder: "contract0".to_string(),
+            amount: ValueRange::new(Uint128::zero(), Uint128::new(150))
+        }]
+    );
+    // Can query vault's balance while pending
     assert_eq!(
         app.app()
             .wrap()
@@ -910,43 +931,47 @@ fn stake_cross_txs() {
             .unwrap(),
         coin(800, OSMO)
     );
-    // Can query all accounts, and locked are reported
+    // Can query all accounts, and value ranges are reported
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
         accounts.accounts,
         vec![
             AllAccountsResponseItem {
                 user: user.to_string(),
-                account: MaybeAccountResponse::Locked {}
+                account: AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(300),
+                    free: ValueRange::new(Uint128::new(150), Uint128::new(300)),
+                },
             },
             AllAccountsResponseItem {
                 user: user2.to_string(),
-                account: MaybeAccountResponse::new_unlocked(
-                    OSMO,
-                    Uint128::new(500),
-                    Uint128::new(400)
-                ),
+                account: AccountResponse {
+                    denom: OSMO.to_owned(),
+                    bonded: Uint128::new(500),
+                    free: ValueRange::new_val(Uint128::new(400)),
+                },
             },
         ]
     );
 
-    // Can query the other account
-    let acc = vault.account(user2.to_owned()).unwrap().unwrap();
+    // Can query the other account as well
+    let acc = vault.account(user2.to_owned()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(500),
-            free: Uint128::new(400),
+            free: ValueRange::new_val(Uint128::new(400)),
         }
     );
     // Can query the other account claims
     let claims = vault.account_claims(user2.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
 
@@ -957,23 +982,24 @@ fn stake_cross_txs() {
         .call(cross_staking.contract_addr.as_str())
         .unwrap();
 
-    // Can query account now
-    let acc = vault.account(user.to_owned()).unwrap().unwrap();
+    // Can query account
+    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(200),
+            free: ValueRange::new(Uint128::new(150), Uint128::new(200)),
         }
     );
     // Can query claims
+    // The other tx is still pending, and that is reflected in the reported value range
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(100)
+            amount: ValueRange::new(Uint128::new(100), Uint128::new(150))
         }]
     );
     assert_eq!(
@@ -1031,11 +1057,11 @@ fn stake_cross_rollback_tx() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
 
@@ -1069,22 +1095,22 @@ fn stake_cross_rollback_tx() {
         .is_empty());
 
     // Funds are restored
-    let acc = vault.account(user.to_owned()).unwrap().unwrap();
+    let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: Uint128::new(300),
+            free: ValueRange::new_val(Uint128::new(300)),
         }
     );
     // No non-empty claims
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
-        [MaybeLienResponse::Lien {
+        [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: Uint128::new(0)
+            amount: ValueRange::new_val(Uint128::zero())
         }]
     );
     // Vault has the funds
@@ -1150,11 +1176,11 @@ fn multiple_stakes() {
         .call(user)
         .unwrap();
 
-    // Stake properly, highest collateral usage is local staking (the 300 OSMO lein)
+    // Stake properly, highest collateral usage is local staking (the 300 OSMO lien)
     //
     // When comparing `LienInfo`, for simplification assume their order to be in the order of
-    // leinholder creation. It is guaranteed to work as MT assigns increasing names to the
-    // contracts, and leins are queried ascending by the lienholder.
+    // lienholder creation. It is guaranteed to work as MT assigns increasing names to the
+    // contracts, and liens are queried ascending by the lienholder.
 
     vault
         .stake_local(coin(300, OSMO), Binary::default())
@@ -1190,35 +1216,35 @@ fn multiple_stakes() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
+        vault.account(user.to_owned()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(1000),
-            free: Uint128::new(700),
+            free: ValueRange::new_val(Uint128::new(700)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
         [
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: cross_staking1.contract_addr.to_string(),
-                amount: Uint128::new(200)
+                amount: ValueRange::new_val(Uint128::new(200))
             },
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: cross_staking2.contract_addr.to_string(),
-                amount: Uint128::new(100)
+                amount: ValueRange::new_val(Uint128::new(100))
             },
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: local_staking.contract_addr.to_string(),
-                amount: Uint128::new(300)
+                amount: ValueRange::new_val(Uint128::new(300))
             },
         ]
     );
 
-    // Still staking properly, but lein on `cross_staking1` goes up to 400 OSMO, with `max_slash`
-    // goes up to 240 OSMO, and lein on `cross_staking2` goes up to 500 OSMO, with `mas_slash`
-    // goin up to 300 OSMO. `local_staking` lein is still on 300 OSMO with `max_slash` on
+    // Still staking properly, but lien on `cross_staking1` goes up to 400 OSMO, with `max_slash`
+    // goes up to 240 OSMO, and lien on `cross_staking2` goes up to 500 OSMO, with `mas_slash`
+    // goin up to 300 OSMO. `local_staking` lien is still on 300 OSMO with `max_slash` on
     // 30 OSMO. In total `max_slash` goes to 240 + 300 + 30 = 570 OSMO which becomes collateral
     // usage
 
@@ -1251,34 +1277,34 @@ fn multiple_stakes() {
         .unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap().unwrap(),
-        AccountResponse {
-            denom: OSMO.to_owned(),
-            bonded: Uint128::new(1000),
-            free: Uint128::new(430),
-        }
+        vault.account(user.to_owned()).unwrap(),
+        AccountResponse::new(
+            OSMO,
+            Uint128::new(1000),
+            ValueRange::new_val(Uint128::new(430))
+        ),
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
         claims.claims,
         [
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: cross_staking1.contract_addr.to_string(),
-                amount: Uint128::new(400)
+                amount: ValueRange::new_val(Uint128::new(400))
             },
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: cross_staking2.contract_addr.to_string(),
-                amount: Uint128::new(500)
+                amount: ValueRange::new_val(Uint128::new(500))
             },
-            MaybeLienResponse::Lien {
+            LienResponse {
                 lienholder: local_staking.contract_addr.to_string(),
-                amount: Uint128::new(300)
+                amount: ValueRange::new_val(Uint128::new(300))
             },
         ]
     );
 
-    // Now trying to add more staking to `cross_staking1` and `cross_staking2`, leaving them on 900 OSMO lein,
-    // which is still in the range of collateral, but the `max_slash` on those lein goes up to 540. This makes
+    // Now trying to add more staking to `cross_staking1` and `cross_staking2`, leaving them on 900 OSMO lien,
+    // which is still in the range of collateral, but the `max_slash` on those lien goes up to 540. This makes
     // total `max_slash` on 540 + 540 + 30 = 1110 OSMO which exceeds collateral and fails
 
     vault
@@ -1364,7 +1390,11 @@ fn all_users_fetching() {
         accounts.accounts,
         [AllAccountsResponseItem {
             user: users[0].to_string(),
-            account: MaybeAccountResponse::new_unlocked(OSMO, Uint128::new(100), Uint128::new(100)),
+            account: AccountResponse::new(
+                OSMO,
+                Uint128::new(100),
+                ValueRange::new_val(Uint128::new(100))
+            ),
         }]
     );
 
@@ -1373,7 +1403,11 @@ fn all_users_fetching() {
         accounts.accounts,
         [AllAccountsResponseItem {
             user: users[0].to_string(),
-            account: MaybeAccountResponse::new_unlocked(OSMO, Uint128::new(100), Uint128::new(100),)
+            account: AccountResponse::new(
+                OSMO,
+                Uint128::new(100),
+                ValueRange::new_val(Uint128::new(100),)
+            )
         }]
     );
 
@@ -1391,18 +1425,18 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::new_unlocked(
+                account: AccountResponse::new(
                     OSMO,
                     Uint128::new(100),
-                    Uint128::new(100),
+                    ValueRange::new_val(Uint128::new(100),)
                 )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::new_unlocked(
+                account: AccountResponse::new(
                     OSMO,
                     Uint128::new(200),
-                    Uint128::new(200),
+                    ValueRange::new_val(Uint128::new(200),)
                 )
             }
         ]
@@ -1414,24 +1448,24 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::new_unlocked(
+                account: AccountResponse::new(
                     OSMO,
                     Uint128::new(100),
-                    Uint128::new(100),
+                    ValueRange::new_val(Uint128::new(100),)
                 )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::new_unlocked(
+                account: AccountResponse::new(
                     OSMO,
                     Uint128::new(200),
-                    Uint128::new(200),
+                    ValueRange::new_val(Uint128::new(200),)
                 )
             }
         ]
     );
 
-    // After unbounding some, but not all collateral, user shall still be visible
+    // After unbonding some, but not all collateral, user shall still be visible
 
     vault.unbond(coin(50, OSMO)).call(users[0]).unwrap();
 
@@ -1441,18 +1475,18 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::new_unlocked(
+                account: AccountResponse::new(
                     OSMO,
                     Uint128::new(50),
-                    Uint128::new(50),
+                    ValueRange::new_val(Uint128::new(50),)
                 )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::new_unlocked(
+                account: AccountResponse::new(
                     OSMO,
                     Uint128::new(200),
-                    Uint128::new(200),
+                    ValueRange::new_val(Uint128::new(200),)
                 )
             }
         ]
@@ -1464,18 +1498,18 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::new_unlocked(
+                account: AccountResponse::new(
                     OSMO,
                     Uint128::new(50),
-                    Uint128::new(50),
+                    ValueRange::new_val(Uint128::new(50),)
                 )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::new_unlocked(
+                account: AccountResponse::new(
                     OSMO,
                     Uint128::new(200),
-                    Uint128::new(200),
+                    ValueRange::new_val(Uint128::new(200),)
                 )
             }
         ]
@@ -1490,15 +1524,19 @@ fn all_users_fetching() {
         [
             AllAccountsResponseItem {
                 user: users[0].to_string(),
-                account: MaybeAccountResponse::new_unlocked(
+                account: AccountResponse::new(
                     OSMO,
                     Uint128::new(50),
-                    Uint128::new(50),
+                    ValueRange::new_val(Uint128::new(50),)
                 )
             },
             AllAccountsResponseItem {
                 user: users[1].to_string(),
-                account: MaybeAccountResponse::new_unlocked(OSMO, Uint128::new(0), Uint128::new(0),)
+                account: AccountResponse::new(
+                    OSMO,
+                    Uint128::zero(),
+                    ValueRange::new_val(Uint128::zero(),)
+                )
             }
         ]
     );
@@ -1508,7 +1546,11 @@ fn all_users_fetching() {
         accounts.accounts,
         [AllAccountsResponseItem {
             user: users[0].to_string(),
-            account: MaybeAccountResponse::new_unlocked(OSMO, Uint128::new(50), Uint128::new(50),)
+            account: AccountResponse::new(
+                OSMO,
+                Uint128::new(50),
+                ValueRange::new_val(Uint128::new(50),)
+            )
         },]
     );
 }

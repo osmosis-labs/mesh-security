@@ -1,6 +1,6 @@
 use anyhow::Result as AnyResult;
 
-use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal};
+use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Uint128};
 use mesh_apis::ibc::AddValidator;
 use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
@@ -8,7 +8,7 @@ use mesh_native_staking_proxy::contract::multitest_utils::CodeId as NativeStakin
 use mesh_vault::contract::multitest_utils::{CodeId as VaultCodeId, VaultContractProxy};
 use mesh_vault::msg::StakingInitInfo;
 
-use mesh_sync::Tx;
+use mesh_sync::{Tx, ValueRange};
 
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
@@ -189,6 +189,7 @@ fn staking() {
         )
         .call(users[0])
         .unwrap();
+
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
@@ -263,27 +264,23 @@ fn staking() {
     // Querying for particular stakes
     let stake = contract
         .stake(users[0].to_owned(), validators[0].to_owned())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 200);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(200)));
 
     let stake = contract
         .stake(users[0].to_owned(), validators[1].to_owned())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 100);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
         .stake(users[1].to_owned(), validators[0].to_owned())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 100);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
         .stake(users[1].to_owned(), validators[1].to_owned())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 200);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(200)));
 
     // Querying fo all the stakes
     let stakes = contract.stakes(users[0].to_owned(), None, None).unwrap();
@@ -466,38 +463,34 @@ fn unstaking() {
     // Unstaken should be immediately visible on staken amount
     let stake = contract
         .stake(users[0].to_string(), validators[0].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 150);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(150)));
 
     let stake = contract
         .stake(users[0].to_string(), validators[1].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 100);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
         .stake(users[1].to_string(), validators[0].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 240);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(240)));
 
     let stake = contract
         .stake(users[1].to_string(), validators[1].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 0);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::zero()));
 
     // But not on vault side
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     // Immediately withdrawing liens
     contract.withdraw_unbonded().call(users[0]).unwrap();
@@ -507,12 +500,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     // Very short travel in future - too short for claims to release
     app.app_mut().update_block(|block| {
@@ -528,12 +521,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 300);
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     // Adding some more unstakes
     // users[0] unstakes 70 from validators[0] - 80 left staken
@@ -559,27 +552,23 @@ fn unstaking() {
     // Verify proper stake values
     let stake = contract
         .stake(users[0].to_string(), validators[0].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 80);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(80)));
 
     let stake = contract
         .stake(users[0].to_string(), validators[1].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 10);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(10)));
 
     let stake = contract
         .stake(users[1].to_string(), validators[0].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 240);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(240)));
 
     let stake = contract
         .stake(users[1].to_string(), validators[1].to_string())
-        .unwrap()
         .unwrap();
-    assert_eq!(stake.stake.u128(), 0);
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(0)));
 
     // Another timetravel - just enough for first batch of stakes to release,
     // too early for second batch
@@ -596,12 +585,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 250);
+    assert_eq!(claim.amount.val().unwrap().u128(), 250);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 240);
+    assert_eq!(claim.amount.val().unwrap().u128(), 240);
 
     // Moving forward more, passing through second bath pending duration
     app.app_mut().update_block(|block| {
@@ -613,12 +602,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 250);
+    assert_eq!(claim.amount.val().unwrap().u128(), 250);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 240);
+    assert_eq!(claim.amount.val().unwrap().u128(), 240);
 
     // Withdrawing liens
     contract.withdraw_unbonded().call(users[0]).unwrap();
@@ -628,12 +617,12 @@ fn unstaking() {
     let claim = vault
         .claim(users[0].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 90);
+    assert_eq!(claim.amount.val().unwrap().u128(), 90);
 
     let claim = vault
         .claim(users[1].to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.u128(), 240);
+    assert_eq!(claim.amount.val().unwrap().u128(), 240);
 }
 
 #[test]
@@ -710,6 +699,7 @@ fn distribution() {
         )
         .call(users[0])
         .unwrap();
+
     // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
@@ -769,25 +759,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 20);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     // Show all rewards skips validators that were never staked on
@@ -825,25 +815,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 48);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 72);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     // Withdraw rewards
@@ -851,6 +841,7 @@ fn distribution() {
         .withdraw_rewards(validators[0].to_owned(), remote[0].to_owned())
         .call(users[0])
         .unwrap();
+
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
@@ -877,6 +868,22 @@ fn distribution() {
         .call(users[1])
         .unwrap();
 
+    // Rewards withrawal should not affect the stake
+    let stake = contract
+        .stake(users[0].to_owned(), validators[0].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(200)));
+
+    let stake = contract
+        .stake(users[0].to_owned(), validators[1].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
+
+    let stake = contract
+        .stake(users[1].to_owned(), validators[0].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(300)));
+
     // error if 0 rewards available
     let err = contract
         .withdraw_rewards(validators[1].to_owned(), remote[1].to_owned())
@@ -886,29 +893,35 @@ fn distribution() {
     let tx_id = get_last_external_staking_pending_tx_id(&contract);
     assert_eq!(tx_id, None);
 
+    // Stake remains unaffected after rewards withdrawal failure
+    let stake = contract
+        .stake(users[1].to_owned(), validators[1].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(0)));
+
     // Rewards should not be withdrawable anymore
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     // Another distribution - making it equal
@@ -924,13 +937,13 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 4);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 6);
 
     // Now yet another unequal distribution to play around keeping all correct when weights are
@@ -991,25 +1004,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 8);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 12);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 11);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     // Now distribute some nice values
@@ -1031,25 +1044,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 18);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 22);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 21);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     // And some more distribution fun - we are 50/50 on validators[1], so distributing odd number of
@@ -1066,13 +1079,13 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 20);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 25);
 
     // More unstaking - to make it both ways by both stakers on at least one validator, for sake of
@@ -1116,13 +1129,13 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 28);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 29);
 
     // Withdraw only by users[0]
@@ -1157,29 +1170,50 @@ fn distribution() {
         .call(users[1])
         .unwrap();
 
+    // Rewards withrawal should not affect the stake
+    let stake = contract
+        .stake(users[0].to_owned(), validators[0].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(150)));
+
+    let stake = contract
+        .stake(users[0].to_owned(), validators[1].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
+
+    let stake = contract
+        .stake(users[1].to_owned(), validators[0].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
+
+    let stake = contract
+        .stake(users[1].to_owned(), validators[1].to_owned())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(300)));
+
     // Check withdrawals and accounts
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 29);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     // Final distribution - 10 tokens to both validators
@@ -1201,25 +1235,25 @@ fn distribution() {
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 6);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[0].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 33);
 
     let rewards = contract
         .pending_rewards(users[0].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 2);
 
     let rewards = contract
         .pending_rewards(users[1].to_owned(), validators[1].to_owned())
         .unwrap()
-        .unwrap();
+        .rewards;
     assert_eq!(rewards.amount.u128(), 37);
 
     let all_rewards = contract
