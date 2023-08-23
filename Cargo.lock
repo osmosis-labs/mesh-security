@@ -595,20 +595,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mesh-mocks"
-version = "0.5.0-alpha.1"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-storage-plus",
- "cw-utils",
- "mesh-apis",
- "serde",
- "sylvia",
- "thiserror",
-]
-
-[[package]]
 name = "mesh-native-staking"
 version = "0.5.0-alpha.1"
 dependencies = [
