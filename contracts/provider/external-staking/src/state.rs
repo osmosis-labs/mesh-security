@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{BlockInfo, Decimal, Timestamp, Uint128, Uint256};
 use mesh_apis::vault_api::VaultApiHelper;
+use mesh_sync::ValueRange;
 
 use crate::points_alignment::PointsAlignment;
 
@@ -26,7 +27,7 @@ pub struct Config {
 pub struct Stake {
     /// How much tokens user staken and not in unbonding period
     /// via this contract
-    pub stake: Uint128,
+    pub stake: ValueRange<Uint128>,
     /// List of token batches scheduled for unbonding
     ///
     /// Items should only be added to the end of this list, with `release_at` being
@@ -44,7 +45,7 @@ impl Stake {
     /// Create simplified stake (mostly for tests)
     pub fn from_amount(amount: Uint128) -> Self {
         Self {
-            stake: amount,
+            stake: ValueRange::new_val(amount),
             ..Default::default()
         }
     }

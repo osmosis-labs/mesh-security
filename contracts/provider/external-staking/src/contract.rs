@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, ensure_eq, from_binary, to_binary, Addr, Binary, Coin, Decimal, DepsMut, Env,
-    Event, IbcMsg, Order, Response, StdError, StdResult, Storage, Uint128, Uint256, WasmMsg,
+    coin, ensure, ensure_eq, to_binary, Addr, Coin, Decimal, DepsMut, Env, Event, IbcMsg, Order,
+    Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -9,12 +9,10 @@ use cw_utils::{nonpayable, PaymentError};
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
-use mesh_apis::cross_staking_api::{self, CrossStakingApi};
+use mesh_apis::cross_staking_api::{self};
 use mesh_apis::ibc::AddValidator;
 use mesh_apis::ibc::ProviderPacket;
-use mesh_apis::local_staking_api::MaxSlashResponse;
 use mesh_apis::vault_api::VaultApiHelper;
-use mesh_sync::Lockable;
 use mesh_sync::Tx;
 
 use crate::crdt::CrdtState;
@@ -22,8 +20,8 @@ use crate::error::ContractError;
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
 use crate::msg::{
     AllPendingRewards, AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse,
-    IbcChannelResponse, ListRemoteValidatorsResponse, MaybePendingRewards, MaybeStake,
-    ReceiveVirtualStake, StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
+    IbcChannelResponse, ListRemoteValidatorsResponse, PendingRewards, StakeInfo, StakesResponse,
+    TxResponse, ValidatorPendingRewards,
 };
 use crate::state::{Config, Distribution, Stake};
 
@@ -43,7 +41,7 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
 pub struct ExternalStakingContract<'a> {
     pub config: Item<'a, Config>,
     /// Stakes indexed by `(owner, validator)` pair
-    pub stakes: Map<'a, (&'a Addr, &'a str), Lockable<Stake>>,
+    pub stakes: Map<'a, (&'a Addr, &'a str), Stake>,
     /// Per-validator distribution information
     pub distribution: Map<'a, &'a str, Distribution>,
     /// Pending txs information
@@ -146,7 +144,7 @@ impl ExternalStakingContract<'_> {
         };
 
         // Load stake
-        let mut stake_lock = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+        let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
 
         // Load distribution
         let mut distribution = self
@@ -154,10 +152,8 @@ impl ExternalStakingContract<'_> {
             .may_load(deps.storage, &tx_validator)?
             .unwrap_or_default();
 
-        // Commit amount (need to unlock it first)
-        stake_lock.unlock_write()?;
-        let stake = stake_lock.write()?;
-        stake.stake += tx_amount;
+        // Commit stake
+        stake.stake.commit_add(tx_amount);
 
         // Distribution alignment
         stake
@@ -167,7 +163,7 @@ impl ExternalStakingContract<'_> {
 
         // Save stake
         self.stakes
-            .save(deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
+            .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
 
         // Save distribution
         self.distribution
@@ -198,7 +194,7 @@ impl ExternalStakingContract<'_> {
             ContractError::WrongTypeTx(tx_id, tx)
         );
 
-        let (_tx_amount, tx_user, tx_validator) = match tx {
+        let (tx_amount, tx_user, tx_validator) = match tx {
             Tx::InFlightRemoteStaking {
                 amount,
                 user,
@@ -209,14 +205,14 @@ impl ExternalStakingContract<'_> {
         };
 
         // Load stake
-        let mut stake_lock = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+        let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
 
-        // Release stake lock
-        stake_lock.unlock_write()?;
+        // Rollback add amount
+        stake.stake.rollback_add(tx_amount);
 
         // Save stake
         self.stakes
-            .save(deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
+            .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
 
         // Remove tx
         self.pending_txs.remove(deps.storage, tx_id);
@@ -300,9 +296,10 @@ impl ExternalStakingContract<'_> {
         validator: String,
         amount: Coin,
     ) -> Result<Response, ContractError> {
-        nonpayable(&ctx.info)?;
+        let ExecCtx { info, deps, env } = ctx;
+        nonpayable(&info)?;
 
-        let config = self.config.load(ctx.deps.storage)?;
+        let config = self.config.load(deps.storage)?;
 
         ensure_eq!(
             amount.denom,
@@ -310,43 +307,40 @@ impl ExternalStakingContract<'_> {
             ContractError::InvalidDenom(config.denom)
         );
 
-        let mut stake_lock = self
+        let mut stake = self
             .stakes
-            .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
+            .may_load(deps.storage, (&info.sender, &validator))?
             .unwrap_or_default();
-        let stake = stake_lock.read()?;
 
         ensure!(
-            stake.stake >= amount.amount,
-            ContractError::NotEnoughStake(stake.stake)
+            stake.stake.low() >= amount.amount,
+            ContractError::NotEnoughStake(stake.stake.low())
         );
 
-        stake_lock.lock_write()?;
-        self.stakes.save(
-            ctx.deps.storage,
-            (&ctx.info.sender, &validator),
-            &stake_lock,
-        )?;
+        stake.stake.prepare_sub(amount.amount, Uint128::zero())?;
+
+        self.stakes
+            .save(deps.storage, (&info.sender, &validator), &stake)?;
 
         // Create new tx
-        let tx_id = self.next_tx_id(ctx.deps.storage)?;
+        let tx_id = self.next_tx_id(deps.storage)?;
 
         // Save tx
         let new_tx = Tx::InFlightRemoteUnstaking {
             id: tx_id,
             amount: amount.amount,
-            user: ctx.info.sender.clone(),
+            user: info.sender.clone(),
             validator: validator.clone(),
         };
-        self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
+        self.pending_txs.save(deps.storage, tx_id, &new_tx)?;
 
         #[allow(unused_mut)]
         let mut resp = Response::new()
             .add_attribute("action", "unstake")
             .add_attribute("amount", amount.amount.to_string())
-            .add_attribute("owner", ctx.info.sender);
+            .add_attribute("owner", info.sender);
 
-        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+        let channel = IBC_CHANNEL.load(deps.storage)?;
         let packet = ProviderPacket::Unstake {
             validator,
             unstake: amount,
@@ -355,7 +349,7 @@ impl ExternalStakingContract<'_> {
         let msg = IbcMsg::SendPacket {
             channel_id: channel.endpoint.channel_id,
             data: to_binary(&packet)?,
-            timeout: packet_timeout(&ctx.env),
+            timeout: packet_timeout(&env),
         };
         // send packet if we are ibc enabled
         // TODO: send in test code when we can handle it
@@ -403,7 +397,7 @@ impl ExternalStakingContract<'_> {
         let config = self.config.load(deps.storage)?;
 
         // Load stake
-        let mut stake_lock = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+        let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
 
         // Load distribution
         let mut distribution = self
@@ -411,10 +405,8 @@ impl ExternalStakingContract<'_> {
             .may_load(deps.storage, &tx_validator)?
             .unwrap_or_default();
 
-        // Commit amount (need to unlock it first)
-        stake_lock.unlock_write()?;
-        let stake = stake_lock.write()?;
-        stake.stake -= tx_amount;
+        // Commit sub amount
+        stake.stake.commit_sub(tx_amount);
 
         // FIXME? Release period being computed after successful IBC tx
         // (Note: this is good for now, but can be revisited in v1 design)
@@ -433,7 +425,7 @@ impl ExternalStakingContract<'_> {
 
         // Save stake
         self.stakes
-            .save(deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
+            .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
 
         // Save distribution
         self.distribution
@@ -455,7 +447,7 @@ impl ExternalStakingContract<'_> {
             matches!(tx, Tx::InFlightRemoteUnstaking { .. }),
             ContractError::WrongTypeTx(tx_id, tx)
         );
-        let (_tx_amount, tx_user, tx_validator) = match tx {
+        let (tx_amount, tx_user, tx_validator) = match tx {
             Tx::InFlightRemoteUnstaking {
                 amount,
                 user,
@@ -466,14 +458,14 @@ impl ExternalStakingContract<'_> {
         };
 
         // Load stake
-        let mut stake_lock = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+        let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
 
-        // Release stake lock
-        stake_lock.unlock_write()?;
+        // Rollback sub amount
+        stake.stake.rollback_sub(tx_amount);
 
         // Save stake
         self.stakes
-            .save(deps.storage, (&tx_user, &tx_validator), &stake_lock)?;
+            .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
 
         // Remove tx
         self.pending_txs.remove(deps.storage, tx_id);
@@ -522,24 +514,20 @@ impl ExternalStakingContract<'_> {
 
         let config = self.config.load(ctx.deps.storage)?;
 
-        let stake_locks: Vec<_> = self
+        let stakes: Vec<_> = self
             .stakes
             .prefix(&ctx.info.sender)
             .range(ctx.deps.storage, None, None, Order::Ascending)
             .collect::<Result<_, _>>()?;
 
-        let released: Uint128 = stake_locks
+        let released: Uint128 = stakes
             .into_iter()
-            .map(|(validator, mut stake_lock)| -> Result<_, ContractError> {
-                let stake = stake_lock.write()?;
+            .map(|(validator, mut stake)| -> Result<_, ContractError> {
                 let released = stake.release_pending(&ctx.env.block);
 
                 if !released.is_zero() {
-                    self.stakes.save(
-                        ctx.deps.storage,
-                        (&ctx.info.sender, &validator),
-                        &stake_lock,
-                    )?
+                    self.stakes
+                        .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?
                 }
 
                 Ok(released)
@@ -641,19 +629,17 @@ impl ExternalStakingContract<'_> {
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
-        let mut stake_lock = self
+        let stake = self
             .stakes
             .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
             .unwrap_or_default();
-
-        let stake = stake_lock.read()?;
 
         let distribution = self
             .distribution
             .may_load(ctx.deps.storage, &validator)?
             .unwrap_or_default();
 
-        let amount = Self::calculate_reward(stake, &distribution)?;
+        let amount = Self::calculate_reward(&stake, &distribution)?;
 
         if amount.is_zero() {
             return Err(ContractError::NoRewards);
@@ -666,15 +652,6 @@ impl ExternalStakingContract<'_> {
             .add_attribute("validator", &validator)
             .add_attribute("recipient", &remote_recipient)
             .add_attribute("amount", amount.to_string());
-
-        // lock the stake. the withdrawn_funds will be updated on a commit,
-        // left unchanged on rollback
-        stake_lock.lock_write()?;
-        self.stakes.save(
-            ctx.deps.storage,
-            (&ctx.info.sender, &validator),
-            &stake_lock,
-        )?;
 
         // prepare the pending tx
         let tx_id = self.next_tx_id(ctx.deps.storage)?;
@@ -761,25 +738,17 @@ impl ExternalStakingContract<'_> {
         deps: DepsMut,
         tx_id: u64,
     ) -> Result<(), ContractError> {
-        // Load tx
         let tx = self.pending_txs.load(deps.storage, tx_id)?;
-        self.pending_txs.remove(deps.storage, tx_id);
 
-        // Verify tx is of the right type and get data
-        let (staker, validator) = match tx {
-            Tx::InFlightTransferFunds {
-                staker, validator, ..
-            } => (staker, validator),
+        // Verify tx is of the right type and remove it from the map
+        match tx {
+            Tx::InFlightTransferFunds { .. } => {
+                self.pending_txs.remove(deps.storage, tx_id);
+            }
             _ => {
                 return Err(ContractError::WrongTypeTx(tx_id, tx));
             }
         };
-
-        // release the write lock and leave state unchanged
-        let mut stake_lock = self.stakes.load(deps.storage, (&staker, &validator))?;
-        stake_lock.unlock_write()?;
-        self.stakes
-            .save(deps.storage, (&staker, &validator), &stake_lock)?;
 
         Ok(())
     }
@@ -808,13 +777,12 @@ impl ExternalStakingContract<'_> {
             }
         };
 
-        // release the write lock and update withdrawn_funds to hold this transfer
-        let mut stake_lock = self.stakes.load(deps.storage, (&staker, &validator))?;
-        stake_lock.unlock_write()?;
-        let stake = stake_lock.write()?;
+        // Update withdrawn_funds to hold this transfer
+        let mut stake = self.stakes.load(deps.storage, (&staker, &validator))?;
         stake.withdrawn_funds += amount;
+
         self.stakes
-            .save(deps.storage, (&staker, &validator), &stake_lock)?;
+            .save(deps.storage, (&staker, &validator), &stake)?;
 
         Ok(())
     }
@@ -860,23 +828,21 @@ impl ExternalStakingContract<'_> {
 
     /// Queries for stake info
     ///
-    /// If stake is not existing in the system is queried, the zero-stake is returned
+    /// If stake does not exist for (user, validator) pair, the zero-stake is returned
     #[msg(query)]
     pub fn stake(
         &self,
         ctx: QueryCtx,
         user: String,
         validator: String,
-    ) -> Result<MaybeStake, ContractError> {
+    ) -> Result<Stake, ContractError> {
         let user = ctx.deps.api.addr_validate(&user)?;
-        let stake_lock = self
+        let stake = self
             .stakes
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
-        match stake_lock.read() {
-            Ok(stake) => Ok(MaybeStake::Stake(stake.clone())),
-            Err(_) => Ok(MaybeStake::Locked {}),
-        }
+
+        Ok(stake)
     }
 
     /// Paginated list of user stakes.
@@ -900,14 +866,11 @@ impl ExternalStakingContract<'_> {
             .prefix(&user)
             .range(ctx.deps.storage, bound, None, Order::Ascending)
             .map(|item| {
-                item.map(|(validator, stake_lock)| {
+                item.map(|(validator, stake)| {
                     Ok::<StakeInfo, ContractError>(StakeInfo {
                         owner: user.to_string(),
                         validator,
-                        stake: match stake_lock.read() {
-                            Ok(stake) => MaybeStake::Stake(stake.clone()),
-                            Err(_) => MaybeStake::Locked {},
-                        },
+                        stake,
                     })
                 })?
             })
@@ -962,30 +925,25 @@ impl ExternalStakingContract<'_> {
         ctx: QueryCtx,
         user: String,
         validator: String,
-    ) -> Result<MaybePendingRewards, ContractError> {
+    ) -> Result<PendingRewards, ContractError> {
         let user = ctx.deps.api.addr_validate(&user)?;
 
-        let stake_lock = self
+        let stake = self
             .stakes
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
-        match stake_lock.read() {
-            Ok(stake) => {
-                let distribution = self
-                    .distribution
-                    .may_load(ctx.deps.storage, &validator)?
-                    .unwrap_or_default();
 
-                let amount = Self::calculate_reward(stake, &distribution)?;
-                let config = self.config.load(ctx.deps.storage)?;
+        let distribution = self
+            .distribution
+            .may_load(ctx.deps.storage, &validator)?
+            .unwrap_or_default();
 
-                Ok(MaybePendingRewards::Rewards(coin(
-                    amount.u128(),
-                    config.rewards_denom,
-                )))
-            }
-            Err(_) => Ok(MaybePendingRewards::Locked {}),
-        }
+        let amount = Self::calculate_reward(&stake, &distribution)?;
+        let config = self.config.load(ctx.deps.storage)?;
+
+        Ok(PendingRewards {
+            rewards: coin(amount.u128(), config.rewards_denom),
+        })
     }
 
     /// Returns how much rewards are to be withdrawn by particular user, iterating over all validators.
@@ -1011,22 +969,17 @@ impl ExternalStakingContract<'_> {
             .range(ctx.deps.storage, bound, None, Order::Ascending)
             .take(limit)
             .map(|item| {
-                let (validator, stake_lock) = item?;
-                match stake_lock.read() {
-                    Ok(stake) => {
-                        let distribution = self
-                            .distribution
-                            .may_load(ctx.deps.storage, &validator)?
-                            .unwrap_or_default();
-                        let amount = Self::calculate_reward(stake, &distribution)?;
-                        Ok::<_, ContractError>(ValidatorPendingRewards::new(
-                            validator,
-                            amount.u128(),
-                            &config.rewards_denom,
-                        ))
-                    }
-                    Err(_) => Ok(ValidatorPendingRewards::new_locked(validator)),
-                }
+                let (validator, stake) = item?;
+                let distribution = self
+                    .distribution
+                    .may_load(ctx.deps.storage, &validator)?
+                    .unwrap_or_default();
+                let amount = Self::calculate_reward(&stake, &distribution)?;
+                Ok::<_, ContractError>(ValidatorPendingRewards::new(
+                    validator,
+                    amount.u128(),
+                    &config.rewards_denom,
+                ))
             })
             .collect::<Result<_, _>>()?;
 
@@ -1040,8 +993,13 @@ impl ExternalStakingContract<'_> {
     // could be enforced by taking user and validator in arguments, then fetching data, but
     // sometimes data are used also for different calculations so we want to avoid double
     // fetching.
-    fn calculate_reward(stake: &Stake, distribution: &Distribution) -> Result<Uint128, StdError> {
-        let points = distribution.points_per_stake * Uint256::from(stake.stake);
+    fn calculate_reward(
+        stake: &Stake,
+        distribution: &Distribution,
+    ) -> Result<Uint128, ContractError> {
+        // Calculating rewards with the `lower` value goes agains the user, but the possible
+        // errors are small and temporary.
+        let points = distribution.points_per_stake * Uint256::from(stake.stake.low());
 
         let points = stake.points_alignment.align(points);
         let total = Uint128::try_from(points / DISTRIBUTION_POINTS_SCALE)?;
@@ -1051,10 +1009,14 @@ impl ExternalStakingContract<'_> {
 }
 
 pub mod cross_staking {
-    use super::*;
+    use crate::msg::ReceiveVirtualStake;
 
-    #[contract]
-    #[messages(cross_staking_api as CrossStakingApi)]
+    use super::*;
+    use cosmwasm_std::{from_binary, Binary};
+    use mesh_apis::{cross_staking_api::CrossStakingApi, local_staking_api::MaxSlashResponse};
+
+    #[contract(module=crate::contract)]
+    #[messages(mesh_apis::cross_staking_api as CrossStakingApi)]
     impl CrossStakingApi for ExternalStakingContract<'_> {
         type Error = ContractError;
 
@@ -1087,15 +1049,17 @@ pub mod cross_staking {
             {
                 return Err(ContractError::ValidatorNotActive(msg.validator));
             }
-            let mut stake_lock = self
+            let mut stake = self
                 .stakes
                 .may_load(ctx.deps.storage, (&owner, &msg.validator))?
                 .unwrap_or_default();
 
-            // Write lock and save stake and distribution
-            stake_lock.lock_write()?;
+            // Prepare stake addition and save stake.
+            // We don't check for max here, as this call can only come from the `vault` contract, which already
+            // performed the proper check.
+            stake.stake.prepare_add(amount.amount, None)?;
             self.stakes
-                .save(ctx.deps.storage, (&owner, &msg.validator), &stake_lock)?;
+                .save(ctx.deps.storage, (&owner, &msg.validator), &stake)?;
 
             // Save tx
             let new_tx = Tx::InFlightRemoteStaking {
