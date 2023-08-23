@@ -1,10 +1,13 @@
 mod virtual_staking_mock;
 
-use cosmwasm_std::{coin, Addr, Decimal, Uint128};
+use cosmwasm_std::{coin, Addr, Decimal, StdError, Uint128, Validator};
 use cw_multi_test::App as MtApp;
 use sylvia::multitest::App;
 
 use crate::contract;
+use crate::contract::test_utils::ConverterApi;
+use crate::error::ContractError;
+use crate::error::ContractError::Unauthorized;
 
 const JUNO: &str = "ujuno";
 
@@ -193,5 +196,67 @@ fn ibc_stake_and_unstake() {
             (val1.to_string(), Uint128::new(300)),
             (val2.to_string(), Uint128::new(600)),
         ]
+    );
+}
+
+#[test]
+fn valset_update_works() {
+    let app = App::default();
+
+    let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
+    let admin = "theman";
+    let discount = Decimal::percent(10); // 1 OSMO worth of JUNO should give 0.9 OSMO of stake
+    let native_per_foreign = Decimal::percent(40); // 1 JUNO is worth 0.4 OSMO
+
+    let SetupResponse {
+        price_feed: _,
+        converter,
+        virtual_staking,
+    } = setup(
+        &app,
+        SetupArgs {
+            owner,
+            admin,
+            discount,
+            native_per_foreign,
+        },
+    );
+
+    // Send a valset update
+    let new_validators = vec![
+        Validator {
+            address: "validator1".to_string(),
+            commission: Default::default(),
+            max_commission: Default::default(),
+            max_change_rate: Default::default(),
+        },
+        Validator {
+            address: "validator3".to_string(),
+            commission: Default::default(),
+            max_commission: Default::default(),
+            max_change_rate: Default::default(),
+        },
+    ];
+
+    // Check that only the virtual staking contract can call this handler
+    let res = converter
+        .converter_api_proxy()
+        .valset_update(vec![])
+        .call(owner);
+    assert_eq!(res.unwrap_err(), Unauthorized {});
+
+    let res = converter
+        .converter_api_proxy()
+        .valset_update(new_validators)
+        .call(virtual_staking.contract_addr.as_ref());
+
+    // This fails because of lack of IBC support in mt now.
+    // Cannot be tested further in this setup.
+    // TODO: Change this when IBC support is there in mt.
+    assert_eq!(
+        res.unwrap_err(),
+        ContractError::Std(StdError::NotFound {
+            kind: "cosmwasm_std::ibc::IbcChannel".to_string()
+        })
     );
 }
