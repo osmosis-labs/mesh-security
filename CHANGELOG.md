@@ -2,7 +2,24 @@
 
 ## [Unreleased](https://github.com/osmosis-labs/mesh-security/tree/HEAD)
 
-[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.5.0-alpha.1...HEAD)
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.6.0...HEAD)
+
+## [v0.6.0](https://github.com/osmosis-labs/mesh-security/tree/v0.6.0) (2023-08-23)
+
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.5.0-alpha.1...v0.6.0)
+
+**Closed issues:**
+
+- Implement Value Ranges instead of Locking [\#98](https://github.com/osmosis-labs/mesh-security/issues/98)
+- Set up advanced CI tests [\#16](https://github.com/osmosis-labs/mesh-security/issues/16)
+
+**Merged pull requests:**
+
+- tests: Remove unused `packages/mocks` [\#110](https://github.com/osmosis-labs/mesh-security/pull/110) ([jawoznia](https://github.com/jawoznia))
+- F/value ranges external staking [\#108](https://github.com/osmosis-labs/mesh-security/pull/108) ([jawoznia](https://github.com/jawoznia))
+- F/value range add sub helpers [\#107](https://github.com/osmosis-labs/mesh-security/pull/107) ([maurolacy](https://github.com/maurolacy))
+- F/value ranges [\#106](https://github.com/osmosis-labs/mesh-security/pull/106) ([maurolacy](https://github.com/maurolacy))
+- Update sylvia [\#105](https://github.com/osmosis-labs/mesh-security/pull/105) ([maurolacy](https://github.com/maurolacy))
 
 ## [v0.5.0-alpha.1](https://github.com/osmosis-labs/mesh-security/tree/v0.5.0-alpha.1) (2023-07-25)
 
