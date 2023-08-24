@@ -1,6 +1,6 @@
 use cosmwasm_schema::write_api;
 
-use external_staking::contract::{ContractExecMsg, ContractQueryMsg, InstantiateMsg};
+use mesh_external_staking::contract::{ContractExecMsg, ContractQueryMsg, InstantiateMsg};
 
 #[cfg(not(tarpaulin_include))]
 fn main() {
