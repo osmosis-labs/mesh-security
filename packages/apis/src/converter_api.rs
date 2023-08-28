@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Response, StdError, Uint128};
+use cosmwasm_std::{Response, StdError, Uint128, Validator};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -25,6 +25,19 @@ pub trait ConverterApi {
         &self,
         ctx: ExecCtx,
         payments: Vec<RewardInfo>,
+    ) -> Result<Response, Self::Error>;
+
+    /// Valset updates. Only additions are accepted, as removals (leaving the active validator set)
+    /// are non-permanent and ignored (CRDTs only support permanent removals).
+    ///
+    /// If a validator that already exists in the list is re-sent for addition, its pubkey
+    /// will be updated.
+    /// TODO: pubkeys need to be part of the Validator struct (requires CosmWasm support).
+    #[msg(exec)]
+    fn valset_update(
+        &self,
+        ctx: ExecCtx,
+        additions: Vec<Validator>,
     ) -> Result<Response, Self::Error>;
 }
 

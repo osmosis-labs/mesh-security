@@ -5,7 +5,7 @@ use cosmwasm_std::{
     from_slice, to_binary, DepsMut, Env, Event, Ibc3ChannelOpenResponse, IbcBasicResponse,
     IbcChannel, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg,
     IbcChannelOpenResponse, IbcMsg, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg,
-    IbcReceiveResponse, IbcTimeout,
+    IbcReceiveResponse, IbcTimeout, Validator,
 };
 use cw_storage_plus::Item;
 
@@ -114,13 +114,24 @@ pub fn ibc_channel_connect(
 
     // Send a validator sync packet to arrive with the newly established channel
     let validators = deps.querier.query_all_validators()?;
+    let msg = add_validators_msg(&env, channel, &validators)?;
+
+    Ok(IbcBasicResponse::new().add_message(msg))
+}
+
+pub(crate) fn add_validators_msg(
+    env: &Env,
+    channel: IbcChannel,
+    validators: &[Validator],
+) -> Result<IbcMsg, ContractError> {
     let updates = validators
-        .into_iter()
+        .iter()
         .map(|v| AddValidator {
-            valoper: v.address,
-            // TODO: not yet available in CosmWasm APIs
+            valoper: v.address.clone(),
+            // TODO: not yet available in CosmWasm APIs. See https://github.com/CosmWasm/cosmwasm/issues/1828
             pub_key: "TODO".to_string(),
-            // Use current height/time as start height/time (no slashing before mesh starts)
+            // Use current height/time as start height/time (no slashing before mesh starts).
+            // Warning: These will be updated as well when updating an already existing validator.
             start_height: env.block.height,
             start_time: env.block.time.seconds(),
         })
@@ -129,10 +140,9 @@ pub fn ibc_channel_connect(
     let msg = IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id,
         data: to_binary(&packet)?,
-        timeout: packet_timeout_validator(&env),
+        timeout: packet_timeout_validator(env),
     };
-
-    Ok(IbcBasicResponse::new().add_message(msg))
+    Ok(msg)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

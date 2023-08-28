@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, IbcMsg,
-    Reply, Response, SubMsg, SubMsgResponse, WasmMsg,
+    Reply, Response, SubMsg, SubMsgResponse, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -14,7 +14,7 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
-use crate::ibc::{packet_timeout_rewards, IBC_CHANNEL};
+use crate::ibc::{add_validators_msg, packet_timeout_rewards, IBC_CHANNEL};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -36,7 +36,7 @@ impl ConverterContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
-            virtual_stake: Item::new("bonded"),
+            virtual_stake: Item::new("virtual_stake"),
         }
     }
 
@@ -323,6 +323,40 @@ impl ConverterApi for ConverterContract<'_> {
                 .add_attributes(r.attributes)
                 .add_events(r.events);
         }
+        Ok(resp)
+    }
+
+    /// Valset updates.
+    ///
+    /// Sent validator set additions (entering the active validator set) to the external staking
+    /// contract on the Consumer via IBC.
+    #[msg(exec)]
+    fn valset_update(
+        &self,
+        ctx: ExecCtx,
+        additions: Vec<Validator>,
+    ) -> Result<Response, Self::Error> {
+        let virtual_stake = self.virtual_stake.load(ctx.deps.storage)?;
+        ensure_eq!(
+            ctx.info.sender,
+            virtual_stake,
+            ContractError::Unauthorized {}
+        );
+
+        // Send over IBC to the Consumer
+        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+        let msg = add_validators_msg(&ctx.env, channel, &additions)?;
+
+        let event = Event::new("valset_update").add_attribute(
+            "additions",
+            additions
+                .iter()
+                .map(|v| v.address.clone())
+                .collect::<Vec<String>>()
+                .join(","),
+        );
+        let resp = Response::new().add_event(event).add_message(msg);
+
         Ok(resp)
     }
 }

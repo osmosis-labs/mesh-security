@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use cosmwasm_std::{
     coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
     DistributionMsg, Env, Event, Reply, Response, StdResult, SubMsg, SubMsgResponse, Uint128,
-    WasmMsg,
+    Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -44,6 +44,7 @@ pub struct VirtualStakingContract<'a> {
 #[contract]
 #[error(ContractError)]
 #[messages(virtual_staking_api as VirtualStakingApi)]
+// #[sv::override_entry_point(sudo=sudo(SudoMsg))] // Disabled because lack of custom query support
 impl VirtualStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -131,6 +132,34 @@ impl VirtualStakingContract<'_> {
         let rebalance = calculate_rebalance(current, requests, &config.denom);
         let resp = resp.add_messages(rebalance);
 
+        Ok(resp)
+    }
+
+    /**
+     * This is called every time there's a change of the active validator set.
+     *
+     */
+    fn handle_valset_update(
+        &self,
+        deps: DepsMut<VirtualStakeCustomQuery>,
+        additions: &[Validator],
+        removals: &[Validator],
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
+        // TODO: Store/process removals (and additions) locally, so that they are filtered out from
+        // the `bonded` list
+        let _ = removals;
+
+        // Send additions to the converter. Removals are considered non-permanent and ignored
+        let cfg = self.config.load(deps.storage)?;
+        let msg = converter_api::ExecMsg::ValsetUpdate {
+            additions: additions.to_vec(),
+        };
+        let msg = WasmMsg::Execute {
+            contract_addr: cfg.converter.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
+        };
+        let resp = Response::new().add_message(msg);
         Ok(resp)
     }
 
@@ -325,5 +354,9 @@ pub fn sudo(
 ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
     match msg {
         SudoMsg::Rebalance {} => VirtualStakingContract::new().handle_epoch(deps, env),
+        SudoMsg::ValsetUpdate {
+            additions,
+            removals,
+        } => VirtualStakingContract::new().handle_valset_update(deps, &additions, &removals),
     }
 }
