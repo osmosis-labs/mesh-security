@@ -7,3 +7,5 @@ pub mod msg;
 mod multitest;
 mod points_alignment;
 pub mod state;
+pub mod test_methods;
+pub mod test_methods_impl;
