@@ -944,6 +944,15 @@ fn stake_cross_txs() {
         .call(owner)
         .unwrap();
 
+    // Set active validator
+    let validator = "validator";
+
+    let activate = AddValidator::mock(validator);
+    cross_staking
+        .test_set_active_validator(activate)
+        .call("test")
+        .unwrap();
+
     // Bond some tokens
 
     vault
@@ -1003,7 +1012,10 @@ fn stake_cross_txs() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(100, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user)
         .unwrap();
@@ -1018,7 +1030,10 @@ fn stake_cross_txs() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(50, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user)
         .unwrap();
@@ -1030,7 +1045,10 @@ fn stake_cross_txs() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(100, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user2)
         .unwrap();
@@ -1078,7 +1096,7 @@ fn stake_cross_txs() {
             .unwrap()
             .claims,
         [LienResponse {
-            lienholder: "contract0".to_string(),
+            lienholder: "contract2".to_string(),
             amount: ValueRange::new(Uint128::zero(), Uint128::new(150))
         }]
     );
@@ -1218,6 +1236,15 @@ fn stake_cross_rollback_tx() {
         .call(owner)
         .unwrap();
 
+    // Set active validator
+    let validator = "validator";
+
+    let activate = AddValidator::mock(validator);
+    cross_staking
+        .test_set_active_validator(activate)
+        .call("test")
+        .unwrap();
+
     // Bond some tokens
 
     vault
@@ -1241,7 +1268,10 @@ fn stake_cross_rollback_tx() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(100, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user)
         .unwrap();
@@ -1327,6 +1357,7 @@ fn multiple_stakes() {
         .unwrap();
 
     let unbond_period = 100;
+    let slashing_percentage: u64 = 60;
     let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
 
     let cross_staking1 = cross_staking_code
@@ -1336,7 +1367,7 @@ fn multiple_stakes() {
             vault.contract_addr.to_string(),
             unbond_period,
             remote_contact.clone(),
-            Decimal::percent(SLASHING_PERCENTAGE),
+            Decimal::percent(slashing_percentage),
         )
         .call(owner)
         .unwrap();
@@ -1348,13 +1379,27 @@ fn multiple_stakes() {
             vault.contract_addr.to_string(),
             unbond_period,
             remote_contact,
-            Decimal::percent(SLASHING_PERCENTAGE),
+            Decimal::percent(slashing_percentage),
         )
         .call(owner)
         .unwrap();
 
     let local_staking = Addr::unchecked(vault.config().unwrap().local_staking);
     let local_staking = local_staking::multitest_utils::LocalStakingProxy::new(local_staking, &app);
+
+    // Set active validator
+    let validator = "validator";
+
+    let activate = AddValidator::mock(validator);
+    cross_staking1
+        .test_set_active_validator(activate.clone())
+        .call("test")
+        .unwrap();
+
+    cross_staking2
+        .test_set_active_validator(activate)
+        .call("test")
+        .unwrap();
 
     // Bond some tokens
 
@@ -1379,28 +1424,44 @@ fn multiple_stakes() {
         .stake_remote(
             cross_staking1.contract_addr.to_string(),
             coin(200, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user)
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(cross_staking1.contract_addr.as_str())
+
+    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx =
+        get_last_external_staking_pending_tx_id(&cross_staking1).unwrap();
+    println!("last_external_staking_tx: {:?}", last_external_staking_tx);
+    cross_staking1
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     vault
         .stake_remote(
             cross_staking2.contract_addr.to_string(),
             coin(100, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user)
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(cross_staking2.contract_addr.as_str())
+
+    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx =
+        get_last_external_staking_pending_tx_id(&cross_staking2).unwrap();
+    println!("last_external_staking_tx: {:?}", last_external_staking_tx);
+    cross_staking2
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     assert_eq!(
@@ -1416,16 +1477,16 @@ fn multiple_stakes() {
         claims.claims,
         [
             LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(300))
+            },
+            LienResponse {
                 lienholder: cross_staking1.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(200))
             },
             LienResponse {
                 lienholder: cross_staking2.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(100))
-            },
-            LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(300))
             },
         ]
     );
@@ -1440,28 +1501,44 @@ fn multiple_stakes() {
         .stake_remote(
             cross_staking1.contract_addr.to_string(),
             coin(200, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user)
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(cross_staking1.contract_addr.as_str())
+
+    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx =
+        get_last_external_staking_pending_tx_id(&cross_staking1).unwrap();
+    println!("last_external_staking_tx: {:?}", last_external_staking_tx);
+    cross_staking1
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     vault
         .stake_remote(
             cross_staking2.contract_addr.to_string(),
             coin(400, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user)
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(cross_staking2.contract_addr.as_str())
+
+    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx =
+        get_last_external_staking_pending_tx_id(&cross_staking2).unwrap();
+    println!("last_external_staking_tx: {:?}", last_external_staking_tx);
+    cross_staking2
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     assert_eq!(
@@ -1477,16 +1554,16 @@ fn multiple_stakes() {
         claims.claims,
         [
             LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(300))
+            },
+            LienResponse {
                 lienholder: cross_staking1.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(400))
             },
             LienResponse {
                 lienholder: cross_staking2.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(500))
-            },
-            LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(300))
             },
         ]
     );
@@ -1499,21 +1576,32 @@ fn multiple_stakes() {
         .stake_remote(
             cross_staking1.contract_addr.to_string(),
             coin(500, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user)
         .unwrap();
-    vault
-        .vault_api_proxy()
-        .commit_tx(get_last_pending_tx_id(&vault).unwrap())
-        .call(cross_staking1.contract_addr.as_str())
+
+    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx =
+        get_last_external_staking_pending_tx_id(&cross_staking1).unwrap();
+    println!("last_external_staking_tx: {:?}", last_external_staking_tx);
+    cross_staking1
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
         .unwrap();
 
     let err = vault
         .stake_remote(
             cross_staking2.contract_addr.to_string(),
             coin(400, OSMO),
-            Binary::default(),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.to_string(),
+            })
+            .unwrap(),
         )
         .call(user)
         .unwrap_err();
