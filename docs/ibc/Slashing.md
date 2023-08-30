@@ -110,6 +110,7 @@ This is similar to the way validator set updates are currently being implemented
 
 The `external-staking` contract will then route the evidence to the `vault` contract, which will verify it and slash the associated delegators
 if the evidence is valid.
+
 The `vault` contract has the necessary information to verify the evidence, namely, the updated validator set.
 It also has the mapping between the offending validator and the associated cross-delegators.
 
