@@ -74,8 +74,10 @@ and that the Tendermint headers are valid and can be trusted.
 
 So, this is concerned with a malicious validator on the Consumer chain, double-signing to slash associated delegators
 on the Provider chain.
+
 In principle, nothing prevents a malicious validator on the Consumer to **intentionally** double-sign. So, the only
 thing we can do is limit the damage it can do.
+
 The amount of slashing for misbehaviour is defined by the slashing ratio. Additionally, we can rate limit the amount
 of slashing events, to one slashing event per day or similar. That will limit the damage a malicious validator
 can do to Provider funds, and will give time to cross-delegators on the Provider to unbond from that malicious validator.
