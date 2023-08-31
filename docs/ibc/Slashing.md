@@ -135,6 +135,26 @@ A kind of "immediate unbonding" mechanism (and associated permission) could be n
 Alternatively, the vault can unbond the funds from the Provider chain and wait for the unbonding period to expire in order to slash them.
 This will be effectively the same, as during unbonding those funds are both, blocked from withdrawal, and not providing rewards.
 
-Finally, another option would be, for the vault to delegate the slashing in these cases to the blockchain itself.
+Another option would be for the vault to delegate the slashing in these cases to the blockchain itself.
 That is, by using and interacting with the Provider chain's Staking / Slashing module.
 This may be complicated to implement, as the slashing evidence and origin are effectively from another chain.
+
+## Slashing on the Native Chain
+
+The Provider side blockchain must inform the vault contract (or the local staking contract) of slashing events,
+the same way the Consumer side blockchain(s) informs the Provider of slashing events.
+
+From the point of view of slashing, both local and cross slashing events must be considered and processed almost similarly.
+The only difference being that local slashing events don't need to be verified. But local slashing events
+must be processed, and its effects on collateral must be updated in the vault for each of the affected delegators.
+
+## Slashing Propagation
+
+Slashing affects the amount of total collateral that every affected delegator has on the vault (or natively staked).
+So, it affects the invariants that depend on that collateral. Namely, the maximum lien and / or slashable amount (See [Invariants](../provider/Vault.md#invariants)).
+
+After validating the slashing evidence (in the case of cross-slashing) and executing the slashing,
+that is, discounting the slashing amount from the total collateral each affected delegator has, the associated invariants
+must be checked and adjusted if needed.
+In the case of a broken invariant, a rebalance (unbonding of the now lacking or insufficient funds) must be done to restore it.
+This must be checked, and rebalanced if needed, over all the chains that the affected delegator has funds on.
