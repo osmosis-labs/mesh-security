@@ -64,9 +64,11 @@ impl SimplePriceFeedContract<'_> {
         let mut config = self.config.load(ctx.deps.storage)?;
 
         // Only allow owner to call this
-        if ctx.info.sender != config.owner {
-            return Err(ContractError::Unauthorized {});
-        }
+        ensure_eq!(
+            ctx.info.sender,
+            config.owner,
+            ContractError::Unauthorized {}
+        );
 
         config.native_per_foreign = native_per_foreign;
         self.config.save(ctx.deps.storage, &config)?;
