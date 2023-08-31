@@ -5,6 +5,7 @@ use cw_multi_test::App as MtApp;
 use mesh_apis::ibc::AddValidator;
 use mesh_external_staking::contract::multitest_utils::ExternalStakingContractProxy;
 use mesh_external_staking::msg::{AuthorizedEndpoint, ReceiveVirtualStake};
+use mesh_external_staking::test_methods_impl::test_utils::TestMethods;
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{Tx, ValueRange};
 use sylvia::multitest::App;
@@ -536,6 +537,7 @@ fn stake_cross() {
 
     let activate = AddValidator::mock(validator);
     cross_staking
+        .test_methods_proxy()
         .test_set_active_validator(activate)
         .call("test")
         .unwrap();
@@ -602,6 +604,7 @@ fn stake_cross() {
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -666,6 +669,7 @@ fn stake_cross() {
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -779,6 +783,7 @@ fn stake_cross() {
     skip_time(&app, unbond_period);
     let tx_id = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
     cross_staking
+        .test_methods_proxy()
         .test_commit_unstake(tx_id)
         .call("test")
         .unwrap();
@@ -845,6 +850,7 @@ fn stake_cross() {
 
     let tx_id = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
     cross_staking
+        .test_methods_proxy()
         .test_commit_unstake(tx_id)
         .call("test")
         .unwrap();
@@ -949,6 +955,7 @@ fn stake_cross_txs() {
 
     let activate = AddValidator::mock(validator);
     cross_staking
+        .test_methods_proxy()
         .test_set_active_validator(activate)
         .call("test")
         .unwrap();
@@ -1241,6 +1248,7 @@ fn stake_cross_rollback_tx() {
 
     let activate = AddValidator::mock(validator);
     cross_staking
+        .test_methods_proxy()
         .test_set_active_validator(activate)
         .call("test")
         .unwrap();
@@ -1392,11 +1400,13 @@ fn multiple_stakes() {
 
     let activate = AddValidator::mock(validator);
     cross_staking1
+        .test_methods_proxy()
         .test_set_active_validator(activate.clone())
         .call("test")
         .unwrap();
 
     cross_staking2
+        .test_methods_proxy()
         .test_set_active_validator(activate)
         .call("test")
         .unwrap();
@@ -1438,6 +1448,7 @@ fn multiple_stakes() {
         get_last_external_staking_pending_tx_id(&cross_staking1).unwrap();
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking1
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -1460,6 +1471,7 @@ fn multiple_stakes() {
         get_last_external_staking_pending_tx_id(&cross_staking2).unwrap();
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking2
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -1515,6 +1527,7 @@ fn multiple_stakes() {
         get_last_external_staking_pending_tx_id(&cross_staking1).unwrap();
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking1
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -1537,6 +1550,7 @@ fn multiple_stakes() {
         get_last_external_staking_pending_tx_id(&cross_staking2).unwrap();
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking2
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -1590,6 +1604,7 @@ fn multiple_stakes() {
         get_last_external_staking_pending_tx_id(&cross_staking1).unwrap();
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking1
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();

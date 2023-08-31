@@ -10,7 +10,6 @@ use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use mesh_apis::cross_staking_api::{self};
-use mesh_apis::ibc::AddValidator;
 use mesh_apis::ibc::ProviderPacket;
 use mesh_apis::vault_api::VaultApiHelper;
 use mesh_sync::Tx;
@@ -55,6 +54,7 @@ pub struct ExternalStakingContract<'a> {
 #[contract]
 #[error(ContractError)]
 #[messages(cross_staking_api as CrossStakingApi)]
+#[messages(crate::test_methods as TestMethods)]
 impl ExternalStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -221,70 +221,6 @@ impl ExternalStakingContract<'_> {
         let cfg = self.config.load(deps.storage)?;
         let msg = cfg.vault.rollback_tx(tx_id)?;
         Ok(msg)
-    }
-
-    /// Commits a pending stake.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(any(feature = "mt", test))]
-        {
-            let msg = self.commit_stake(ctx.deps, tx_id)?;
-            Ok(Response::new().add_message(msg))
-        }
-        #[cfg(not(any(feature = "mt", test)))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
-    /// Rollbacks a pending stake.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(any(test, feature = "mt"))]
-        {
-            let msg = self.rollback_stake(ctx.deps, tx_id)?;
-            Ok(Response::new().add_message(msg))
-        }
-        #[cfg(not(any(test, feature = "mt")))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
-    /// Updates the active validator set.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_set_active_validator(
-        &self,
-        ctx: ExecCtx,
-        validator: AddValidator,
-    ) -> Result<Response, ContractError> {
-        #[cfg(any(feature = "mt", test))]
-        {
-            let AddValidator {
-                valoper,
-                pub_key,
-                start_height,
-                start_time,
-            } = validator;
-            let update = crate::crdt::ValUpdate {
-                pub_key,
-                start_height,
-                start_time,
-            };
-            self.val_set
-                .add_validator(ctx.deps.storage, &valoper, update)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(any(feature = "mt", test)))]
-        {
-            let _ = (ctx, validator);
-            Err(ContractError::Unauthorized {})
-        }
     }
 
     /// Schedules tokens for release, adding them to the pending unbonds. After the unbonding period
@@ -472,38 +408,6 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
-    /// Commits a pending unstake.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(any(test, feature = "mt"))]
-        {
-            self.commit_unstake(ctx.deps, ctx.env, tx_id)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(any(test, feature = "mt")))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
-    /// Rollbacks a pending unstake.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(any(test, feature = "mt"))]
-        {
-            self.rollback_unstake(ctx.deps, tx_id)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(any(test, feature = "mt")))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
     /// Withdraws all of their released tokens to the calling user.
     ///
     /// Tokens to be claimed have to be unbond before by calling the `unbond` message, and
@@ -553,27 +457,6 @@ impl ExternalStakingContract<'_> {
         }
 
         Ok(resp)
-    }
-
-    /// Distribute rewards.
-    /// Method used for tests only.
-    #[msg(exec)]
-    pub fn test_distribute_rewards(
-        &self,
-        ctx: ExecCtx,
-        validator: String,
-        rewards: Coin,
-    ) -> Result<Response, ContractError> {
-        #[cfg(any(test, feature = "mt"))]
-        {
-            let event = self.distribute_rewards(ctx.deps, validator, rewards)?;
-            Ok(Response::new().add_event(event))
-        }
-        #[cfg(not(any(test, feature = "mt")))]
-        {
-            let _ = (ctx, validator, rewards);
-            Err(ContractError::Unauthorized)
-        }
     }
 
     /// Distributes reward among users staking via particular validator. Distribution is performed
@@ -689,46 +572,6 @@ impl ExternalStakingContract<'_> {
         }
 
         Ok(resp)
-    }
-
-    /// Commits a withdraw rewards transaction.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_commit_withdraw_rewards(
-        &self,
-        ctx: ExecCtx,
-        tx_id: u64,
-    ) -> Result<Response, ContractError> {
-        #[cfg(any(test, feature = "mt"))]
-        {
-            self.commit_withdraw_rewards(ctx.deps, tx_id)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(any(test, feature = "mt")))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
-    /// Rollbacks a withdraw rewards transaction.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_rollback_withdraw_rewards(
-        &self,
-        ctx: ExecCtx,
-        tx_id: u64,
-    ) -> Result<Response, ContractError> {
-        #[cfg(any(test, feature = "mt"))]
-        {
-            self.rollback_withdraw_rewards(ctx.deps, tx_id)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(any(test, feature = "mt")))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
     }
 
     /// In test code, this is called from `test_rollback_withdraw_rewards`.
