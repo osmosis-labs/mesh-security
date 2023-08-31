@@ -68,6 +68,8 @@ impl ExternalStakingContract<'_> {
     }
 
     pub fn next_tx_id(&self, store: &mut dyn Storage) -> StdResult<u64> {
+        // `vault` and `external-staking` transaction ids are in different ranges for clarity.
+        // The second (`vault`'s) transaction's commit or rollback cannot fail.
         let id: u64 = self.tx_count.may_load(store)?.unwrap_or(u64::MAX >> 1) + 1;
         self.tx_count.save(store, &id)?;
         Ok(id)

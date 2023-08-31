@@ -467,9 +467,6 @@ fn stake_local() {
         .unwrap_err();
 }
 
-// Add comment
-// transaction ids are in different namespaces
-// if one transaction passes the second one cannot fail
 #[track_caller]
 fn get_last_pending_tx_id(vault: &VaultContractProxy<MtApp>) -> Option<u64> {
     let txs = vault.all_pending_txs_desc(None, None).unwrap().txs;
@@ -842,7 +839,8 @@ fn stake_cross() {
         coin(0, OSMO)
     );
 
-    // Unstake further funds
+    // Unstale and receive callback through the IBC.
+    // Wait for the unbonding period and withdraw unbonded tokens.
     cross_staking
         .unstake(validator.to_owned(), coin(100, OSMO))
         .call(user)
@@ -855,13 +853,17 @@ fn stake_cross() {
         .call("test")
         .unwrap();
 
+    skip_time(&app, unbond_period);
+
+    cross_staking.withdraw_unbonded().call(user).unwrap();
+
     let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
-            free: ValueRange::new_val(Uint128::new(100)),
+            free: ValueRange::new_val(Uint128::new(200)),
         }
     );
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
@@ -869,7 +871,7 @@ fn stake_cross() {
         claims.claims,
         [LienResponse {
             lienholder: cross_staking.contract_addr.to_string(),
-            amount: ValueRange::new_val(Uint128::new(200))
+            amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
 
@@ -890,7 +892,7 @@ fn stake_cross() {
 
     // Cannot unstake over the lien
     // Error not verified as it is swallowed by intermediate contract
-    // int this scenario
+    // in this scenario
     cross_staking
         .unstake(user.to_owned(), coin(300, OSMO))
         .call(owner)
