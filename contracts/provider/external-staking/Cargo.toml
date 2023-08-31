@@ -1,5 +1,5 @@
 [package]
-name = "external-staking"
+name = "mesh-external-staking"
 description = "The external staking contract is the window to the other chains participating in Mesh Security protocol via IBC"
 version =    { workspace = true }
 edition =    { workspace = true }

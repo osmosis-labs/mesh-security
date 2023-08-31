@@ -121,12 +121,12 @@ impl ConverterContract<'_> {
         validator: String,
         stake: Coin,
     ) -> Result<Response, ContractError> {
-        #[cfg(test)]
+        #[cfg(any(test, feature = "mt"))]
         {
             // This can only ever be called in tests
             self.stake(ctx.deps, validator, stake)
         }
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "mt")))]
         {
             let _ = (ctx, validator, stake);
             Err(ContractError::Unauthorized)
@@ -142,12 +142,12 @@ impl ConverterContract<'_> {
         validator: String,
         unstake: Coin,
     ) -> Result<Response, ContractError> {
-        #[cfg(test)]
+        #[cfg(any(test, feature = "mt"))]
         {
             // This can only ever be called in tests
             self.unstake(ctx.deps, validator, unstake)
         }
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "mt")))]
         {
             let _ = (ctx, validator, unstake);
             Err(ContractError::Unauthorized)

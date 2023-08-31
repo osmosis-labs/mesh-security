@@ -10,7 +10,6 @@ use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use mesh_apis::cross_staking_api::{self};
-use mesh_apis::ibc::AddValidator;
 use mesh_apis::ibc::ProviderPacket;
 use mesh_apis::vault_api::VaultApiHelper;
 use mesh_sync::Tx;
@@ -55,6 +54,7 @@ pub struct ExternalStakingContract<'a> {
 #[contract]
 #[error(ContractError)]
 #[messages(cross_staking_api as CrossStakingApi)]
+#[messages(crate::test_methods as TestMethods)]
 impl ExternalStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -68,6 +68,8 @@ impl ExternalStakingContract<'_> {
     }
 
     pub fn next_tx_id(&self, store: &mut dyn Storage) -> StdResult<u64> {
+        // `vault` and `external-staking` transaction ids are in different ranges for clarity.
+        // The second (`vault`'s) transaction's commit or rollback cannot fail.
         let id: u64 = self.tx_count.may_load(store)?.unwrap_or(u64::MAX >> 1) + 1;
         self.tx_count.save(store, &id)?;
         Ok(id)
@@ -108,7 +110,7 @@ impl ExternalStakingContract<'_> {
         crate::ibc::AUTH_ENDPOINT.save(ctx.deps.storage, &remote_contact)?;
 
         // test code sets a channel, so we can closer approximate ibc in test code
-        #[cfg(test)]
+        #[cfg(any(feature = "mt", test))]
         {
             let channel = cosmwasm_std::testing::mock_ibc_channel(
                 "channel-172",
@@ -223,70 +225,6 @@ impl ExternalStakingContract<'_> {
         Ok(msg)
     }
 
-    /// Commits a pending stake.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            let msg = self.commit_stake(ctx.deps, tx_id)?;
-            Ok(Response::new().add_message(msg))
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
-    /// Rollbacks a pending stake.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            let msg = self.rollback_stake(ctx.deps, tx_id)?;
-            Ok(Response::new().add_message(msg))
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
-    /// Updates the active validator set.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_set_active_validator(
-        &self,
-        ctx: ExecCtx,
-        validator: AddValidator,
-    ) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            let AddValidator {
-                valoper,
-                pub_key,
-                start_height,
-                start_time,
-            } = validator;
-            let update = crate::crdt::ValUpdate {
-                pub_key,
-                start_height,
-                start_time,
-            };
-            self.val_set
-                .add_validator(ctx.deps.storage, &valoper, update)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, validator);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
     /// Schedules tokens for release, adding them to the pending unbonds. After the unbonding period
     /// passes, funds are ready to be released through a `withdraw_unbonded` call by the user.
     #[msg(exec)]
@@ -353,11 +291,11 @@ impl ExternalStakingContract<'_> {
         };
         // send packet if we are ibc enabled
         // TODO: send in test code when we can handle it
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "mt")))]
         {
             resp = resp.add_message(msg);
         }
-        #[cfg(test)]
+        #[cfg(any(test, feature = "mt"))]
         {
             let _ = msg;
         }
@@ -472,38 +410,6 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
-    /// Commits a pending unstake.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            self.commit_unstake(ctx.deps, ctx.env, tx_id)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
-    /// Rollbacks a pending unstake.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            self.rollback_unstake(ctx.deps, tx_id)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
     /// Withdraws all of their released tokens to the calling user.
     ///
     /// Tokens to be claimed have to be unbond before by calling the `unbond` message, and
@@ -553,27 +459,6 @@ impl ExternalStakingContract<'_> {
         }
 
         Ok(resp)
-    }
-
-    /// Distribute rewards.
-    /// Method used for tests only.
-    #[msg(exec)]
-    pub fn test_distribute_rewards(
-        &self,
-        ctx: ExecCtx,
-        validator: String,
-        rewards: Coin,
-    ) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            let event = self.distribute_rewards(ctx.deps, validator, rewards)?;
-            Ok(Response::new().add_event(event))
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, validator, rewards);
-            Err(ContractError::Unauthorized)
-        }
     }
 
     /// Distributes reward among users staking via particular validator. Distribution is performed
@@ -679,56 +564,16 @@ impl ExternalStakingContract<'_> {
         };
 
         // TODO: send in test code when we can handle it
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "mt")))]
         {
             resp = resp.add_message(send_msg);
         }
-        #[cfg(test)]
+        #[cfg(any(test, feature = "mt"))]
         {
             let _ = send_msg;
         }
 
         Ok(resp)
-    }
-
-    /// Commits a withdraw rewards transaction.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_commit_withdraw_rewards(
-        &self,
-        ctx: ExecCtx,
-        tx_id: u64,
-    ) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            self.commit_withdraw_rewards(ctx.deps, tx_id)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
-    }
-
-    /// Rollbacks a withdraw rewards transaction.
-    /// Method used for tests only.
-    #[msg(exec)]
-    fn test_rollback_withdraw_rewards(
-        &self,
-        ctx: ExecCtx,
-        tx_id: u64,
-    ) -> Result<Response, ContractError> {
-        #[cfg(test)]
-        {
-            self.rollback_withdraw_rewards(ctx.deps, tx_id)?;
-            Ok(Response::new())
-        }
-        #[cfg(not(test))]
-        {
-            let _ = (ctx, tx_id);
-            Err(ContractError::Unauthorized {})
-        }
     }
 
     /// In test code, this is called from `test_rollback_withdraw_rewards`.
@@ -1084,11 +929,11 @@ pub mod cross_staking {
                 timeout: packet_timeout(&ctx.env),
             };
             // add ibc packet if we are ibc enabled (skip in tests)
-            #[cfg(not(test))]
+            #[cfg(not(any(feature = "mt", test)))]
             {
                 resp = resp.add_message(msg);
             }
-            #[cfg(test)]
+            #[cfg(any(feature = "mt", test))]
             {
                 let _ = msg;
             }

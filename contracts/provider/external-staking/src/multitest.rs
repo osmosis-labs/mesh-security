@@ -18,6 +18,7 @@ use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
 use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo, ValidatorPendingRewards};
 use crate::state::Stake;
+use crate::test_methods_impl::test_utils::TestMethods;
 
 const OSMO: &str = "osmo";
 const STAR: &str = "star";
@@ -118,6 +119,7 @@ fn staking() {
     for val in validators {
         let activate = AddValidator::mock(val);
         contract
+            .test_methods_proxy()
             .test_set_active_validator(activate)
             .call("test")
             .unwrap();
@@ -174,6 +176,7 @@ fn staking() {
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     contract
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -191,6 +194,7 @@ fn staking() {
         .unwrap();
 
     contract
+        .test_methods_proxy()
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -207,6 +211,7 @@ fn staking() {
         .call(users[0])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -223,6 +228,7 @@ fn staking() {
         .call(users[1])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -239,6 +245,7 @@ fn staking() {
         .call(users[1])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -336,6 +343,7 @@ fn unstaking() {
     for val in validators {
         let activate = AddValidator::mock(val);
         contract
+            .test_methods_proxy()
             .test_set_active_validator(activate)
             .call("test")
             .unwrap();
@@ -373,6 +381,7 @@ fn unstaking() {
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -390,6 +399,7 @@ fn unstaking() {
         .unwrap();
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -407,6 +417,7 @@ fn unstaking() {
         .unwrap();
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -419,6 +430,7 @@ fn unstaking() {
         .call(users[0])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -428,6 +440,7 @@ fn unstaking() {
         .call(users[0])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -437,6 +450,7 @@ fn unstaking() {
         .call(users[1])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -536,6 +550,7 @@ fn unstaking() {
         .call(users[0])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -545,6 +560,7 @@ fn unstaking() {
         .call(users[0])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -661,6 +677,7 @@ fn distribution() {
     for val in validators {
         let activate = AddValidator::mock(val);
         contract
+            .test_methods_proxy()
             .test_set_active_validator(activate)
             .call("test")
             .unwrap();
@@ -704,6 +721,7 @@ fn distribution() {
     // This should be through `IbcPacketAckMsg`
     let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(last_external_staking_tx)
         .call("test")
         .unwrap();
@@ -720,6 +738,7 @@ fn distribution() {
         .call(users[0])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -736,6 +755,7 @@ fn distribution() {
         .call(users[1])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -744,6 +764,7 @@ fn distribution() {
     // 20 tokens for users[0]
     // 30 tokens for users[1]
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[0].to_owned(), coin(50, STAR))
         .call(owner)
         .unwrap();
@@ -751,6 +772,7 @@ fn distribution() {
     // Only users[0] stakes on validators[1]
     // 30 tokens for users[0]
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[1].to_owned(), coin(30, STAR))
         .call(owner)
         .unwrap();
@@ -801,12 +823,14 @@ fn distribution() {
     // 42 tokens for users[1]
     // 1 token is not distributed
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[0].to_owned(), coin(71, STAR))
         .call(owner)
         .unwrap();
 
     // Distribution in invalid coin should fail
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[1].to_owned(), coin(100, OSMO))
         .call(owner)
         .unwrap_err();
@@ -844,6 +868,7 @@ fn distribution() {
 
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
@@ -854,6 +879,7 @@ fn distribution() {
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
@@ -864,6 +890,7 @@ fn distribution() {
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_withdraw_rewards(tx_id)
         .call(users[1])
         .unwrap();
@@ -930,6 +957,7 @@ fn distribution() {
     //
     // The additional 1 token is leftover after previous allocation
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[0].to_owned(), coin(9, STAR))
         .call(owner)
         .unwrap();
@@ -952,6 +980,7 @@ fn distribution() {
     // 4 on users[0] (+ ~0.4)
     // 6 on users[1] (+ ~0.6)
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[0].to_owned(), coin(11, STAR))
         .call(owner)
         .unwrap();
@@ -960,6 +989,7 @@ fn distribution() {
     //
     // 11 on users[0]
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[1].to_owned(), coin(11, STAR))
         .call(owner)
         .unwrap();
@@ -974,6 +1004,7 @@ fn distribution() {
         .call(users[1])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -996,6 +1027,7 @@ fn distribution() {
         .call(users[1])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -1029,6 +1061,7 @@ fn distribution() {
     // 10 on users[0] (~0.4 still not distributed)
     // 10 on users[1] (~0.6 still not distributed)
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[0].to_owned(), coin(20, STAR))
         .call(owner)
         .unwrap();
@@ -1037,6 +1070,7 @@ fn distribution() {
     // 10 on users[1]
     // 30 on users[2]
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[1].to_owned(), coin(40, STAR))
         .call(owner)
         .unwrap();
@@ -1072,6 +1106,7 @@ fn distribution() {
     // 3 for users[1] (+ ~0.5 from this distribution + ~0.6 accumulated -> ~1.1 tokens, we give one
     //   back leaving ~0.1 accumulated)
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[0].to_owned(), coin(5, STAR))
         .call(owner)
         .unwrap();
@@ -1104,6 +1139,7 @@ fn distribution() {
         .call(users[0])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -1113,6 +1149,7 @@ fn distribution() {
         .call(users[1])
         .unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
@@ -1122,6 +1159,7 @@ fn distribution() {
     // 7 + 1 = 8 to users[0] (~0.9 accumulated + ~0.2 = ~1.1 leftover, 1.0 payed back, ~0.1 accumulated)
     // 4 to users[0] (~0.1 accumulated + ~0.8 -> leaving at ~0.9)
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[0].to_owned(), coin(12, STAR))
         .call(owner)
         .unwrap();
@@ -1145,6 +1183,7 @@ fn distribution() {
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
@@ -1155,6 +1194,7 @@ fn distribution() {
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
@@ -1166,6 +1206,7 @@ fn distribution() {
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_rollback_withdraw_rewards(tx_id)
         .call(users[1])
         .unwrap();
@@ -1222,11 +1263,13 @@ fn distribution() {
     // 2 tokens to users[0] via validators[1] (~0.5 leftover)
     // 7 tokens to users[1] via validators[1] (~0.5 lefover)
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[0].to_owned(), coin(10, STAR))
         .call(owner)
         .unwrap();
 
     contract
+        .test_methods_proxy()
         .test_distribute_rewards(validators[1].to_owned(), coin(10, STAR))
         .call(owner)
         .unwrap();
@@ -1281,6 +1324,7 @@ fn distribution() {
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
@@ -1291,6 +1335,7 @@ fn distribution() {
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
@@ -1301,6 +1346,7 @@ fn distribution() {
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
@@ -1311,6 +1357,7 @@ fn distribution() {
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
+        .test_methods_proxy()
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
