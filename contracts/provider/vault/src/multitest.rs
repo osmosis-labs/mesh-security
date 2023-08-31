@@ -799,7 +799,7 @@ fn stake_cross() {
         }
     );
 
-    // After the unbounding period user can withdraw unbonded tokens
+    // After the unbonding period user can withdraw unbonded tokens
     let remaining_time = 1;
     skip_time(&app, remaining_time);
 
