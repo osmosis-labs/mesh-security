@@ -89,13 +89,14 @@ Another possibility is, a malicious validator on the Consumer double signing for
 He could, by example, allocate all or most of his funds through cross-delegators on the Provider, and then tamper with
 the validator set updates, so that his public key, or associated block height and times, are invalid. This would prevent the
 Provider from slashing him, as the **provided evidence for misbehaviour would fail to verify**.
-This is a complex scenario, included here for completeness. It shows that the trust assumptions extend beyond the
-misbehaviour's evidence, and should include the validator set updates as well. Along with the Consumer chain itself.
+This last scenario is only possible if the entire Consumer chain goes Byzantine, and included here just for completeness.
+It shows that the trust assumptions extend beyond the misbehaviour's evidence, and should include
+the validator set updates as well. Along with the Consumer chain itself.
 
-This indicates that it makes sense to re-utilize the same infrastructure and mechanisms that are used for
-communication between the Provider and the Consumer, for the specific case of slashing evidence submission.
+This indicates that, barring Byzantine Consumer chains, it makes sense to re-utilize the same infrastructure and mechanisms
+that are used for communication between the Provider and the Consumer, for the specific case of slashing evidence submission.
 Both, slashing evidence handling and submission, and validator set updates, share similar trust assumptions and concerns.
-They should then be part of the same security model.
+They can and must then be part of the same security model.
 
 Conversely, if, for complexity control and auditability, we decide to keep slashing evidence handling and submission
 separate from the rest of the Mesh Security infrastructure (in their own smart contracts on Consumer and Provider, by example),
