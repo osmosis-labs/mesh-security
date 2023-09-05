@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, Response};
+use cosmwasm_std::{ensure_eq, Decimal, Response};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
