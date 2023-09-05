@@ -1,5 +1,6 @@
 [workspace]
-members = ["packages/*", "contracts/provider/*", "contracts/consumer/*"]
+members = ["packages/*", "contracts/provider/*", "contracts/consumer/converter",  "contracts/consumer/virtual-staking", "contracts/consumer/price-feeders/*"]
+exclude = ["contracts/consumer/price-feeders/band-price-feeder"]
 resolver = "2"
 
 [workspace.package]
