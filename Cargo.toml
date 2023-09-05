@@ -19,7 +19,7 @@ mesh-native-staking    = { path = "./contracts/provider/native-staking" }
 mesh-native-staking-proxy    = { path = "./contracts/provider/native-staking-proxy" }
 
 mesh-converter    = { path = "./contracts/consumer/converter" }
-mesh-simple-price-feed    = { path = "./contracts/consumer/simple-price-feed" }
+mesh-simple-price-feed    = { path = "./contracts/consumer/price-feeders/simple-price-feed" }
 mesh-virtual-staking    = { path = "./contracts/consumer/virtual-staking" }
 
 sylvia           = "0.7.1"
