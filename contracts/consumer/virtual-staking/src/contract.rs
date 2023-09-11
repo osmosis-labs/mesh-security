@@ -150,7 +150,7 @@ impl VirtualStakingContract<'_> {
         // the `bonded` list
         let _ = removals;
 
-        // Send additions to the converter. Removals are considered non-permanent and ignored
+        // Send additions and tombstones to the Converter. Removals are non-permanent and ignored
         let cfg = self.config.load(deps.storage)?;
         let msg = converter_api::ExecMsg::ValsetUpdate {
             additions: additions.to_vec(),
