@@ -223,7 +223,7 @@ fn valset_update_works() {
     );
 
     // Send a valset update
-    let new_validators = vec![
+    let add_validators = vec![
         Validator {
             address: "validator1".to_string(),
             commission: Default::default(),
@@ -237,17 +237,23 @@ fn valset_update_works() {
             max_change_rate: Default::default(),
         },
     ];
+    let rem_validators = vec![Validator {
+        address: "validator3".to_string(),
+        commission: Default::default(),
+        max_commission: Default::default(),
+        max_change_rate: Default::default(),
+    }];
 
     // Check that only the virtual staking contract can call this handler
     let res = converter
         .converter_api_proxy()
-        .valset_update(vec![])
+        .valset_update(vec![], vec![])
         .call(owner);
     assert_eq!(res.unwrap_err(), Unauthorized {});
 
     let res = converter
         .converter_api_proxy()
-        .valset_update(new_validators)
+        .valset_update(add_validators, rem_validators)
         .call(virtual_staking.contract_addr.as_ref());
 
     // This fails because of lack of IBC support in mt now.

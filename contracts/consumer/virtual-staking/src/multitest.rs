@@ -153,9 +153,16 @@ fn valset_update_sudo() {
         max_commission: Decimal::percent(20),
         max_change_rate: Default::default(),
     }];
+    let tombs = vec![Validator {
+        address: "cosmosval3".to_string(),
+        commission: Decimal::percent(3),
+        max_commission: Decimal::percent(30),
+        max_change_rate: Default::default(),
+    }];
     let msg = SudoMsg::ValsetUpdate {
         additions: adds,
         removals: rems,
+        tombstones: tombs,
     };
 
     let res = app

@@ -14,7 +14,9 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
-use crate::ibc::{add_validators_msg, packet_timeout_rewards, IBC_CHANNEL};
+use crate::ibc::{
+    add_validators_msg, packet_timeout_rewards, tombstone_validators_msg, IBC_CHANNEL,
+};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -335,6 +337,7 @@ impl ConverterApi for ConverterContract<'_> {
         &self,
         ctx: ExecCtx,
         additions: Vec<Validator>,
+        tombstones: Vec<Validator>,
     ) -> Result<Response, Self::Error> {
         let virtual_stake = self.virtual_stake.load(ctx.deps.storage)?;
         ensure_eq!(
@@ -345,7 +348,8 @@ impl ConverterApi for ConverterContract<'_> {
 
         // Send over IBC to the Consumer
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
-        let msg = add_validators_msg(&ctx.env, channel, &additions)?;
+        let add_msg = add_validators_msg(&ctx.env, &channel, &additions)?;
+        let tomb_msg = tombstone_validators_msg(&ctx.env, &channel, &tombstones)?;
 
         let event = Event::new("valset_update").add_attribute(
             "additions",
@@ -355,7 +359,18 @@ impl ConverterApi for ConverterContract<'_> {
                 .collect::<Vec<String>>()
                 .join(","),
         );
-        let resp = Response::new().add_event(event).add_message(msg);
+        let event = event.add_attribute(
+            "tombstones",
+            tombstones
+                .iter()
+                .map(|v| v.address.clone())
+                .collect::<Vec<String>>()
+                .join(","),
+        );
+        let resp = Response::new()
+            .add_event(event)
+            .add_message(add_msg)
+            .add_message(tomb_msg);
 
         Ok(resp)
     }

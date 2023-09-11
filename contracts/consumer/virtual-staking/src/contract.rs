@@ -144,15 +144,17 @@ impl VirtualStakingContract<'_> {
         deps: DepsMut<VirtualStakeCustomQuery>,
         additions: &[Validator],
         removals: &[Validator],
+        tombstones: &[Validator],
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         // TODO: Store/process removals (and additions) locally, so that they are filtered out from
         // the `bonded` list
         let _ = removals;
 
-        // Send additions to the converter. Removals are considered non-permanent and ignored
+        // Send additions and tombstones to the Converter. Removals are non-permanent and ignored
         let cfg = self.config.load(deps.storage)?;
         let msg = converter_api::ExecMsg::ValsetUpdate {
             additions: additions.to_vec(),
+            tombstones: tombstones.to_vec(),
         };
         let msg = WasmMsg::Execute {
             contract_addr: cfg.converter.to_string(),
@@ -357,6 +359,12 @@ pub fn sudo(
         SudoMsg::ValsetUpdate {
             additions,
             removals,
-        } => VirtualStakingContract::new().handle_valset_update(deps, &additions, &removals),
+            tombstones,
+        } => VirtualStakingContract::new().handle_valset_update(
+            deps,
+            &additions,
+            &removals,
+            &tombstones,
+        ),
     }
 }

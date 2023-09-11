@@ -27,8 +27,11 @@ pub trait ConverterApi {
         payments: Vec<RewardInfo>,
     ) -> Result<Response, Self::Error>;
 
-    /// Valset updates. Only additions are accepted, as removals (leaving the active validator set)
-    /// are non-permanent and ignored (CRDTs only support permanent removals).
+    /// Valset updates.
+    ///
+    /// Only additions and permanent removals are accepted, as removals (leaving the active
+    /// validator set) are non-permanent and ignored on the Provider (CRDTs only support permanent
+    /// removals).
     ///
     /// If a validator that already exists in the list is re-sent for addition, its pubkey
     /// will be updated.
@@ -38,6 +41,7 @@ pub trait ConverterApi {
         &self,
         ctx: ExecCtx,
         additions: Vec<Validator>,
+        tombstones: Vec<Validator>,
     ) -> Result<Response, Self::Error>;
 }
 
