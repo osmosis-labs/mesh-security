@@ -271,7 +271,13 @@ mod tests {
         crdt.add_validator(
             &mut storage,
             "alice",
-            mock_update_pubkey("alice_pubkey_2", 201),
+            mock_update_pubkey("alice_pubkey_2", 202),
+        )
+        .unwrap();
+        crdt.add_validator(
+            &mut storage,
+            "alice",
+            mock_update_pubkey("alice_pubkey_3", 203),
         )
         .unwrap();
 
@@ -288,15 +294,15 @@ mod tests {
             })
         );
 
-        // query at update height
+        // query at 2nd update height
         let alice = crdt
-            .active_validator_at_height(&storage, "alice", 201)
+            .active_validator_at_height(&storage, "alice", 202)
             .unwrap();
         assert_eq!(
             alice,
             Some(ValUpdate {
                 pub_key: "alice_pubkey_2".to_string(),
-                start_height: 201,
+                start_height: 202,
                 start_time: 1687339542,
             })
         );
@@ -308,8 +314,8 @@ mod tests {
         assert_eq!(
             alice,
             Some(ValUpdate {
-                pub_key: "alice_pubkey_2".to_string(),
-                start_height: 201,
+                pub_key: "alice_pubkey_3".to_string(),
+                start_height: 203,
                 start_time: 1687339542,
             })
         );
