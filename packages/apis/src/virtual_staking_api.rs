@@ -18,7 +18,7 @@ pub trait VirtualStakingApi {
 
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
-    /// If the virtual staking contract doesn't have at least amont tokens staked to the given validator, this will return an error.
+    /// If the virtual staking contract doesn't have at least amount tokens staked to the given validator, this will return an error.
     #[msg(exec)]
     fn unbond(
         &self,
@@ -37,10 +37,12 @@ pub enum SudoMsg {
     /// It should also withdraw all pending rewards here, and send them to the converter contract.
     Rebalance {},
     /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update: addition
-    /// of a new validator to the active validator set, or removal of a validator from the
-    /// active validator set.
+    /// of a new validator to the active validator set, removal of a validator from the
+    /// active validator set, or permanent removal (i.e. tombstoning) of a validator from the active
+    /// validator set.
     ValsetUpdate {
         additions: Vec<Validator>,
         removals: Vec<Validator>,
+        tombstones: Vec<Validator>,
     },
 }

@@ -114,14 +114,14 @@ pub fn ibc_channel_connect(
 
     // Send a validator sync packet to arrive with the newly established channel
     let validators = deps.querier.query_all_validators()?;
-    let msg = add_validators_msg(&env, channel, &validators)?;
+    let msg = add_validators_msg(&env, &channel, &validators)?;
 
     Ok(IbcBasicResponse::new().add_message(msg))
 }
 
 pub(crate) fn add_validators_msg(
     env: &Env,
-    channel: IbcChannel,
+    channel: &IbcChannel,
     validators: &[Validator],
 ) -> Result<IbcMsg, ContractError> {
     let updates = validators
@@ -138,7 +138,22 @@ pub(crate) fn add_validators_msg(
         .collect();
     let packet = ConsumerPacket::AddValidators(updates);
     let msg = IbcMsg::SendPacket {
-        channel_id: channel.endpoint.channel_id,
+        channel_id: channel.endpoint.channel_id.clone(),
+        data: to_binary(&packet)?,
+        timeout: packet_timeout_validator(env),
+    };
+    Ok(msg)
+}
+
+pub(crate) fn tombstone_validators_msg(
+    env: &Env,
+    channel: &IbcChannel,
+    validators: &[Validator],
+) -> Result<IbcMsg, ContractError> {
+    let updates = validators.iter().map(|v| v.address.clone()).collect();
+    let packet = ConsumerPacket::RemoveValidators(updates);
+    let msg = IbcMsg::SendPacket {
+        channel_id: channel.endpoint.channel_id.clone(),
         data: to_binary(&packet)?,
         timeout: packet_timeout_validator(env),
     };
