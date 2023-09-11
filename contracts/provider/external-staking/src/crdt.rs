@@ -28,6 +28,10 @@ impl ActiveState {
         self.0.sort_by(|a, b| b.start_height.cmp(&a.start_height));
         self.0.dedup();
     }
+
+    pub fn query_at_height(&self, height: u64) -> Option<&ValUpdate> {
+        self.0.iter().find(|u| u.start_height <= height)
+    }
 }
 
 #[cw_serde]
