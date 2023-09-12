@@ -28,6 +28,10 @@ impl ActiveState {
         self.0.sort_by(|a, b| b.start_height.cmp(&a.start_height));
         self.0.dedup();
     }
+
+    pub fn query_at_height(&self, height: u64) -> Option<&ValUpdate> {
+        self.0.iter().find(|u| u.start_height <= height)
+    }
 }
 
 #[cw_serde]
@@ -124,6 +128,31 @@ impl<'a> CrdtState<'a> {
             .take(limit)
             .collect()
     }
+
+    pub fn active_validator(
+        &self,
+        storage: &dyn Storage,
+        valoper: &str,
+    ) -> StdResult<Option<ValUpdate>> {
+        let state = self.validators.load(storage, valoper)?;
+        match state {
+            ValidatorState::Active(active) => Ok(active.0.first().cloned()),
+            ValidatorState::Tombstoned {} => Ok(None),
+        }
+    }
+
+    pub fn active_validator_at_height(
+        &self,
+        storage: &dyn Storage,
+        valoper: &str,
+        height: u64,
+    ) -> StdResult<Option<ValUpdate>> {
+        let state = self.validators.load(storage, valoper)?;
+        match state {
+            ValidatorState::Active(active) => Ok(active.query_at_height(height).cloned()),
+            ValidatorState::Tombstoned {} => Ok(None),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -133,8 +162,12 @@ mod tests {
     use cosmwasm_std::MemoryStorage;
 
     fn mock_update(start_height: u64) -> ValUpdate {
+        mock_update_pubkey("TODO", start_height)
+    }
+
+    fn mock_update_pubkey(pubkey: &str, start_height: u64) -> ValUpdate {
         ValUpdate {
-            pub_key: "TODO".to_string(),
+            pub_key: pubkey.to_string(),
             start_height,
             start_time: 1687339542,
         }
@@ -222,5 +255,69 @@ mod tests {
         assert_eq!(active, Vec::<String>::new());
     }
 
-    // TODO: test key rotation later
+    #[test]
+    fn key_rotation_works() {
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        crdt.add_validator(
+            &mut storage,
+            "alice",
+            mock_update_pubkey("alice_pubkey_1", 123),
+        )
+        .unwrap();
+        crdt.add_validator(&mut storage, "bob", mock_update_pubkey("bob_pubkey_1", 200))
+            .unwrap();
+        crdt.add_validator(
+            &mut storage,
+            "alice",
+            mock_update_pubkey("alice_pubkey_2", 202),
+        )
+        .unwrap();
+        crdt.add_validator(
+            &mut storage,
+            "alice",
+            mock_update_pubkey("alice_pubkey_3", 203),
+        )
+        .unwrap();
+
+        // query before update
+        let alice = crdt
+            .active_validator_at_height(&storage, "alice", 200)
+            .unwrap();
+        assert_eq!(
+            alice,
+            Some(ValUpdate {
+                pub_key: "alice_pubkey_1".to_string(),
+                start_height: 123,
+                start_time: 1687339542,
+            })
+        );
+
+        // query at 2nd update height
+        let alice = crdt
+            .active_validator_at_height(&storage, "alice", 202)
+            .unwrap();
+        assert_eq!(
+            alice,
+            Some(ValUpdate {
+                pub_key: "alice_pubkey_2".to_string(),
+                start_height: 202,
+                start_time: 1687339542,
+            })
+        );
+
+        // query after last update height
+        let alice = crdt
+            .active_validator_at_height(&storage, "alice", 500)
+            .unwrap();
+        assert_eq!(
+            alice,
+            Some(ValUpdate {
+                pub_key: "alice_pubkey_3".to_string(),
+                start_height: 203,
+                start_time: 1687339542,
+            })
+        );
+    }
 }
