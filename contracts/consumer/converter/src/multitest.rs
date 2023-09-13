@@ -1,7 +1,8 @@
 mod virtual_staking_mock;
 
-use cosmwasm_std::{coin, Addr, Decimal, StdError, Uint128, Validator};
+use cosmwasm_std::{coin, coins, Addr, Decimal, StdError, Uint128, Validator};
 use cw_multi_test::App as MtApp;
+use mesh_apis::converter_api::RewardInfo;
 use sylvia::multitest::App;
 
 use crate::contract;
@@ -265,4 +266,127 @@ fn valset_update_works() {
             kind: "cosmwasm_std::ibc::IbcChannel".to_string()
         })
     );
+}
+
+#[test]
+fn distribute_rewards_invalid_amount_is_rejected() {
+    let owner = "sunny";
+    let admin = "theman";
+    let discount = Decimal::percent(10); // 1 OSMO worth of JUNO should give 0.9 OSMO of stake
+    let native_per_foreign = Decimal::percent(40); // 1 JUNO is worth 0.4 OSMO
+
+    let app = App::new(MtApp::new(|router, _, storage| {
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(owner), coins(99999, "TOKEN"))
+            .unwrap();
+    }));
+
+    let SetupResponse {
+        price_feed: _,
+        converter,
+        ..
+    } = setup(
+        &app,
+        SetupArgs {
+            owner,
+            admin,
+            discount,
+            native_per_foreign,
+        },
+    );
+
+    let err = converter
+        .converter_api_proxy()
+        .distribute_rewards(vec![
+            RewardInfo {
+                validator: "alice".to_string(),
+                reward: 33u128.into(),
+            },
+            RewardInfo {
+                validator: "bob".to_string(),
+                reward: 53u128.into(),
+            },
+        ])
+        .with_funds(&[coin(80, "TOKEN")])
+        .call(owner)
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        ContractError::DistributeRewardsInvalidAmount {
+            sum: 86u128.into(),
+            sent: 80u128.into()
+        }
+    );
+
+    let err = converter
+        .converter_api_proxy()
+        .distribute_rewards(vec![
+            RewardInfo {
+                validator: "alice".to_string(),
+                reward: 33u128.into(),
+            },
+            RewardInfo {
+                validator: "bob".to_string(),
+                reward: 53u128.into(),
+            },
+        ])
+        .with_funds(&[coin(90, "TOKEN")])
+        .call(owner)
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        ContractError::DistributeRewardsInvalidAmount {
+            sum: 86u128.into(),
+            sent: 90u128.into()
+        }
+    );
+}
+
+#[test]
+#[ignore = "unsupported by Sylvia"]
+fn distribute_rewards_valid_amount() {
+    let owner = "sunny";
+    let admin = "theman";
+    let discount = Decimal::percent(10); // 1 OSMO worth of JUNO should give 0.9 OSMO of stake
+    let native_per_foreign = Decimal::percent(40); // 1 JUNO is worth 0.4 OSMO
+
+    let app = App::new(MtApp::new(|router, _, storage| {
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(owner), coins(99999, "TOKEN"))
+            .unwrap();
+    }));
+
+    let SetupResponse {
+        price_feed: _,
+        converter,
+        ..
+    } = setup(
+        &app,
+        SetupArgs {
+            owner,
+            admin,
+            discount,
+            native_per_foreign,
+        },
+    );
+
+    converter
+        .converter_api_proxy()
+        .distribute_rewards(vec![
+            RewardInfo {
+                validator: "alice".to_string(),
+                reward: 33u128.into(),
+            },
+            RewardInfo {
+                validator: "bob".to_string(),
+                reward: 53u128.into(),
+            },
+        ])
+        .with_funds(&[coin(86, "TOKEN")])
+        .call(owner)
+        .unwrap();
 }

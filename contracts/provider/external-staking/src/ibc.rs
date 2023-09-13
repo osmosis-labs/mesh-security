@@ -157,6 +157,7 @@ pub fn ibc_packet_receive(
             let ack = ack_success(&DistributeAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_event(evt)
         }
+        ConsumerPacket::DistributeRewards { rewards } => {}
     };
 
     // return empty success ack
