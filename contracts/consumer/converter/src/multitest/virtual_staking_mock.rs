@@ -30,8 +30,8 @@ pub enum ContractError {
     WrongDenom(String),
 }
 
-/// This is a stub implementation of the local staking proxy contract, for test purposes only.
-/// When proper local staking proxy contract is available, this should be replaced in multitests
+/// This is a stub implementation of the virtual staking contract, for test purposes only.
+/// When proper virtual staking contract is available, this should be replaced in multitests
 pub struct VirtualStakingMock<'a> {
     config: Item<'a, Config>,
     stake: Map<'a, &'a str, Uint128>,

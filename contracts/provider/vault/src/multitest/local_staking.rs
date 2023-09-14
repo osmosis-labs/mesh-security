@@ -4,7 +4,7 @@ use mesh_apis::vault_api;
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
-/// This is a stub implementation of local staking contract, for test purposes only
+/// This is a stub implementation of local staking contract, for test purposes only.
 /// When proper local staking contract is available, this should be replaced
 /// in multitests
 pub struct LocalStaking;
