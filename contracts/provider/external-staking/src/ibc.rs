@@ -153,11 +153,16 @@ pub fn ibc_packet_receive(
         }
         ConsumerPacket::Distribute { validator, rewards } => {
             let contract = ExternalStakingContract::new();
-            let evt = contract.distribute_rewards(deps, validator, rewards)?;
+            let evt = contract.distribute_rewards(deps, &validator, rewards)?;
             let ack = ack_success(&DistributeAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_event(evt)
         }
-        ConsumerPacket::DistributeRewards { rewards } => {}
+        ConsumerPacket::DistributeBatch { rewards, denom } => {
+            let contract = ExternalStakingContract::new();
+            let evts = contract.distribute_rewards_batch(deps, &denom, &rewards)?;
+            let ack = ack_success(&DistributeAck {})?;
+            IbcReceiveResponse::new().set_ack(ack).add_events(evts)
+        }
     };
 
     // return empty success ack

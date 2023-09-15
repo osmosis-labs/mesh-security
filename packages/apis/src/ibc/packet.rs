@@ -73,7 +73,7 @@ pub enum ConsumerPacket {
         rewards: Coin,
     },
     /// This is part of the rewards protocol
-    DistributeRewards {
+    DistributeBatch {
         /// Per-validator reward amounts
         rewards: Vec<RewardInfo>,
         /// Rewards denom

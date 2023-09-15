@@ -326,7 +326,7 @@ impl ConverterApi for ConverterContract<'_> {
             }))
             .add_message(make_ibc_packet(
                 &mut ctx,
-                ConsumerPacket::DistributeRewards {
+                ConsumerPacket::DistributeBatch {
                     rewards: payments,
                     denom,
                 },

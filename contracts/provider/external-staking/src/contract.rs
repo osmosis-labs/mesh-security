@@ -6,6 +6,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
 use cw_utils::{nonpayable, PaymentError};
 
+use mesh_apis::converter_api::RewardInfo;
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
@@ -467,8 +468,8 @@ impl ExternalStakingContract<'_> {
     /// In non-test code, this is called from `ibc_packet_receive`
     pub(crate) fn distribute_rewards(
         &self,
-        deps: DepsMut,
-        validator: String,
+        mut deps: DepsMut,
+        validator: &str,
         rewards: Coin,
     ) -> Result<Event, ContractError> {
         // check we have the proper denom
@@ -478,11 +479,19 @@ impl ExternalStakingContract<'_> {
             config.rewards_denom,
             PaymentError::MissingDenom(rewards.denom)
         );
-        let amount = rewards.amount;
 
+        self.distribute_rewards_unchecked(&mut deps, validator, rewards.amount)
+    }
+
+    fn distribute_rewards_unchecked(
+        &self,
+        deps: &mut DepsMut,
+        validator: &str,
+        amount: Uint128,
+    ) -> Result<Event, ContractError> {
         let mut distribution = self
             .distribution
-            .may_load(deps.storage, &validator)?
+            .may_load(deps.storage, validator)?
             .unwrap_or_default();
 
         let total_stake = Uint256::from(distribution.total_stake);
@@ -494,13 +503,39 @@ impl ExternalStakingContract<'_> {
         distribution.points_per_stake += points_per_stake;
 
         self.distribution
-            .save(deps.storage, &validator, &distribution)?;
+            .save(deps.storage, validator, &distribution)?;
 
         let event = Event::new("distribute_rewards")
             .add_attribute("validator", validator)
             .add_attribute("amount", amount.to_string());
 
         Ok(event)
+    }
+
+    pub(crate) fn distribute_rewards_batch(
+        &self,
+        mut deps: DepsMut,
+        denom: &str,
+        rewards: &[RewardInfo],
+    ) -> Result<Vec<Event>, ContractError> {
+        // check we have the proper denom
+        let config = self.config.load(deps.storage)?;
+        ensure_eq!(
+            denom,
+            config.rewards_denom,
+            PaymentError::MissingDenom(denom.to_string())
+        );
+
+        rewards
+            .iter()
+            .map(|reward_info| {
+                self.distribute_rewards_unchecked(
+                    &mut deps,
+                    &reward_info.validator,
+                    reward_info.reward,
+                )
+            })
+            .collect()
     }
 
     /// Withdraw rewards from staking via given validator

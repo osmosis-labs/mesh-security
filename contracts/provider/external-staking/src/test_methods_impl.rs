@@ -114,7 +114,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
-            let event = self.distribute_rewards(ctx.deps, validator, rewards)?;
+            let event = self.distribute_rewards(ctx.deps, &validator, rewards)?;
             Ok(Response::new().add_event(event))
         }
         #[cfg(not(any(test, feature = "mt")))]
