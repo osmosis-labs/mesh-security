@@ -5,16 +5,18 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
-use mesh_apis::ibc::ConsumerPacket;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::converter_api::{self, ConverterApi, RewardInfo};
+use mesh_apis::ibc::ConsumerPacket;
 use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
-use crate::ibc::{add_validators_msg, make_ibc_packet, tombstone_validators_msg, IBC_CHANNEL};
+use crate::ibc::{
+    add_validators_msg, make_ibc_packet, slash_msg, tombstone_validators_msg, IBC_CHANNEL,
+};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -344,7 +346,7 @@ impl ConverterApi for ConverterContract<'_> {
 
     /// Valset updates.
     ///
-    /// Sent validator set additions (entering the active validator set) to the external staking
+    /// Send validator set additions (entering the active validator set) to the external staking
     /// contract on the Consumer via IBC.
     #[msg(exec)]
     fn valset_update(
@@ -373,6 +375,39 @@ impl ConverterApi for ConverterContract<'_> {
             .add_event(event)
             .add_message(add_msg)
             .add_message(tomb_msg);
+
+        Ok(resp)
+    }
+
+    /// Misbehaviour routing.
+    ///
+    /// Send slashing to the external staking contract on the Consumer via IBC.
+    #[msg(exec)]
+    fn slash(
+        &self,
+        ctx: ExecCtx,
+        validator: String,
+        height: u64,
+        time: u64,
+        tombstone: bool,
+    ) -> Result<Response, Self::Error> {
+        let virtual_stake = self.virtual_stake.load(ctx.deps.storage)?;
+        ensure_eq!(
+            ctx.info.sender,
+            virtual_stake,
+            ContractError::Unauthorized {}
+        );
+
+        // Send over IBC to the Consumer
+        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+        let msg = slash_msg(&ctx.env, &channel, &validator, height, time, tombstone)?;
+
+        let event = Event::new("misbehaviour")
+            .add_attribute("validator", validator)
+            .add_attribute("height", height.to_string())
+            .add_attribute("time", time.to_string())
+            .add_attribute("tombstone", tombstone.to_string());
+        let resp = Response::new().add_event(event).add_message(msg);
 
         Ok(resp)
     }

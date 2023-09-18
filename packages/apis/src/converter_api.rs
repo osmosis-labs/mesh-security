@@ -43,6 +43,18 @@ pub trait ConverterApi {
         additions: Vec<Validator>,
         tombstoned: Vec<String>,
     ) -> Result<Response, Self::Error>;
+
+    /// Slashing routing.
+    /// To be sent to the Provider for processing
+    #[msg(exec)]
+    fn slash(
+        &self,
+        ctx: ExecCtx,
+        validator: String,
+        height: u64,
+        time: u64,
+        tombstone: bool,
+    ) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]
