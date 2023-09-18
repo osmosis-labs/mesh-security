@@ -97,22 +97,13 @@ fn instantiate() {
 fn staking() {
     let users = ["user1", "user2"];
     let owner = "owner";
-    let validators = ["validator1", "validator2"];
 
     let app =
         App::new_with_balances(&[(users[0], &coins(300, OSMO)), (users[1], &coins(300, OSMO))]);
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
-    // set these validators to be active
-    for val in validators {
-        let activate = AddValidator::mock(val);
-        contract
-            .test_methods_proxy()
-            .test_set_active_validator(activate)
-            .call("test")
-            .unwrap();
-    }
+    let validators = activate_validators(&contract, ["validator1", "validator2"]);
 
     // Bond tokens
     vault
@@ -314,19 +305,10 @@ fn unstaking() {
         App::new_with_balances(&[(users[0], &coins(300, OSMO)), (users[1], &coins(300, OSMO))]);
 
     let owner = "owner";
-    let validators = ["validator1", "validator2"];
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
-    // set these validators to be active
-    for val in validators {
-        let activate = AddValidator::mock(val);
-        contract
-            .test_methods_proxy()
-            .test_set_active_validator(activate)
-            .call("test")
-            .unwrap();
-    }
+    let validators = activate_validators(&contract, ["validator1", "validator2"]);
 
     // Bond and stake tokens
     //
@@ -632,19 +614,9 @@ fn distribution() {
         (owner, &[coin(1000, STAR), coin(1000, OSMO)]),
     ]);
 
-    let validators = ["validator1", "validator2"];
-
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
-    // set these validators to be active
-    for val in validators {
-        let activate = AddValidator::mock(val);
-        contract
-            .test_methods_proxy()
-            .test_set_active_validator(activate)
-            .call("test")
-            .unwrap();
-    }
+    let validators = activate_validators(&contract, ["validator1", "validator2"]);
 
     // Bond and stake tokens
     //
@@ -1326,6 +1298,8 @@ fn distribution() {
         .unwrap();
 }
 
+// Helpers follow!
+
 trait AppExt {
     fn new_with_balances(balances: &[(&str, &[Coin])]) -> Self;
 }
@@ -1342,4 +1316,20 @@ impl AppExt for App<MtApp> {
         });
         Self::new(app)
     }
+}
+
+fn activate_validators<const N: usize>(
+    contract: &ExternalStakingContractProxy<'_, MtApp>,
+    validators: [&'static str; N],
+) -> [&'static str; N] {
+    for val in validators {
+        let activate = AddValidator::mock(val);
+        contract
+            .test_methods_proxy()
+            .test_set_active_validator(activate)
+            .call("test")
+            .unwrap();
+    }
+
+    validators
 }
