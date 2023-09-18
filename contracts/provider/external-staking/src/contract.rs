@@ -523,7 +523,7 @@ impl ExternalStakingContract<'_> {
         ensure_eq!(
             denom,
             config.rewards_denom,
-            PaymentError::MissingDenom(denom.to_string())
+            ContractError::InvalidDenom(config.rewards_denom)
         );
 
         rewards

@@ -1104,6 +1104,104 @@ fn distribution() {
         .unwrap();
 }
 
+#[test]
+fn batch_distribution() {
+    let owner = "owner";
+    let users = ["user1", "user2"];
+
+    let app =
+        App::new_with_balances(&[(users[0], &coins(600, OSMO)), (users[1], &coins(600, OSMO))]);
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1", "validator2"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(600, OSMO))
+        .call(users[0])
+        .unwrap();
+    vault
+        .bond()
+        .with_funds(&coins(600, OSMO))
+        .call(users[1])
+        .unwrap();
+
+    vault.stake(&contract, users[0], validators[0], coin(200, OSMO));
+    vault.stake(&contract, users[0], validators[1], coin(100, OSMO));
+    vault.stake(&contract, users[1], validators[0], coin(300, OSMO));
+
+    contract
+        .distribute_batch(owner, STAR, &[(validators[0], 50), (validators[1], 30)])
+        .unwrap();
+
+    assert_rewards!(contract, users[0], validators[0], 20);
+    assert_rewards!(contract, users[1], validators[0], 30);
+    assert_rewards!(contract, users[0], validators[1], 30);
+    assert_rewards!(contract, users[1], validators[1], 0);
+
+    contract
+        .distribute_batch(owner, STAR, &[(validators[0], 100), (validators[1], 30)])
+        .unwrap();
+
+    assert_rewards!(contract, users[0], validators[0], 60);
+    assert_rewards!(contract, users[1], validators[0], 90);
+    assert_rewards!(contract, users[0], validators[1], 60);
+    assert_rewards!(contract, users[1], validators[1], 0);
+}
+
+#[test]
+fn batch_distribution_invalid_token() {
+    let owner = "owner";
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(600, OSMO))]);
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validator = contract.activate_validators(["validator1"])[0];
+
+    vault
+        .bond()
+        .with_funds(&coins(600, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validator, coin(200, OSMO));
+
+    let err = contract
+        .distribute_batch(owner, "supertoken", &[(validator, 50)])
+        .unwrap_err();
+    assert_eq!(err, ContractError::InvalidDenom(STAR.to_string()));
+}
+
+#[test]
+fn batch_distribution_invalid_validator() {
+    let owner = "owner";
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(600, OSMO))]);
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validator = contract.activate_validators(["validator1"])[0];
+
+    vault
+        .bond()
+        .with_funds(&coins(600, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validator, coin(200, OSMO));
+
+    assert_eq!(
+        contract
+            .distribute_batch(owner, STAR, &[(validator, 50), ("invalid", 50)])
+            .unwrap_err(),
+        ContractError::InvalidValidator("invalid".to_string()),
+    );
+}
+
 // Helpers follow!
 
 #[track_caller]
