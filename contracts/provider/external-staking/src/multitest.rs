@@ -1,6 +1,7 @@
 use anyhow::Result as AnyResult;
 
 use cosmwasm_std::{coin, coins, to_binary, Addr, Coin, Decimal, Uint128};
+use mesh_apis::converter_api::RewardInfo;
 use mesh_apis::ibc::AddValidator;
 use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
@@ -10,7 +11,7 @@ use mesh_vault::msg::StakingInitInfo;
 
 use mesh_sync::{Tx, ValueRange};
 
-use cw_multi_test::App as MtApp;
+use cw_multi_test::{App as MtApp, AppResponse};
 use sylvia::multitest::App;
 
 use crate::contract::cross_staking::test_utils::CrossStakingApi;
@@ -75,6 +76,22 @@ fn setup<'app>(
         .call(owner)?;
 
     Ok((vault, contract))
+}
+
+macro_rules! assert_rewards {
+    ($contract:expr, $user:expr, $validator:expr, $expected:expr) => {
+        let rewards = $contract
+            .pending_rewards($user.to_string(), $validator.to_string())
+            .unwrap()
+            .rewards;
+        let expected = $expected;
+        let actual = rewards.amount.u128();
+        assert_eq!(
+            actual, expected,
+            "expected {} reward tokens, found: {}",
+            expected, actual
+        );
+    };
 }
 
 #[test]
@@ -1124,6 +1141,13 @@ trait ContractExt {
         &self,
         validators: [&'static str; N],
     ) -> [&'static str; N];
+
+    fn distribute_batch(
+        &self,
+        caller: impl AsRef<str>,
+        denom: impl Into<String>,
+        rewards: &[(&str, u128)],
+    ) -> Result<AppResponse, ContractError>;
 }
 
 impl ContractExt for Contract<'_> {
@@ -1141,6 +1165,23 @@ impl ContractExt for Contract<'_> {
         }
 
         validators
+    }
+
+    #[track_caller]
+    fn distribute_batch(
+        &self,
+        caller: impl AsRef<str>,
+        denom: impl Into<String>,
+        rewards: &[(&str, u128)],
+    ) -> Result<AppResponse, ContractError> {
+        let rewards: Vec<_> = rewards
+            .iter()
+            .map(|(validator, amount)| reward_info(*validator, *amount))
+            .collect();
+
+        self.test_methods_proxy()
+            .test_distribute_rewards_batch(denom.into(), rewards)
+            .call(caller.as_ref())
     }
 }
 
@@ -1170,5 +1211,12 @@ impl VaultExt for Vault<'_> {
             .test_commit_stake(last_external_staking_tx)
             .call("test")
             .unwrap();
+    }
+}
+
+fn reward_info(validator: impl Into<String>, reward: u128) -> RewardInfo {
+    RewardInfo {
+        validator: validator.into(),
+        reward: reward.into(),
     }
 }

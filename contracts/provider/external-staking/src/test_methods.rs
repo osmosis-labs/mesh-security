@@ -1,4 +1,5 @@
 use cosmwasm_std::{Coin, Response, StdError};
+use mesh_apis::converter_api::RewardInfo;
 use mesh_apis::ibc::AddValidator;
 use sylvia::interface;
 use sylvia::types::ExecCtx;
@@ -40,6 +41,15 @@ pub trait TestMethods {
         ctx: ExecCtx,
         validator: String,
         rewards: Coin,
+    ) -> Result<Response, Self::Error>;
+
+    /// Batch distribute rewards.
+    #[msg(exec)]
+    fn test_distribute_rewards_batch(
+        &self,
+        ctx: ExecCtx,
+        denom: String,
+        rewards: Vec<RewardInfo>,
     ) -> Result<Response, Self::Error>;
 
     /// Commits a withdraw rewards transaction.
