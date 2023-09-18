@@ -688,6 +688,23 @@ impl VaultContract<'_> {
 
         Ok(())
     }
+
+    /// Processes a (remote or local) slashing event.
+    ///
+    /// This slashes the users that have funds delegated to the validator involved in the
+    /// misbehaviour.
+    ///
+    /// In case of remote slashing, it makes sure to unbond native user funds from the native
+    /// staking contract, if they are needed for slashing.
+    ///
+    /// It also checks that the mesh security invariants are not violated after slashing,
+    /// i.e. perform slashing propagation across mesh security chains, for all of the involved users.
+    fn slash(&self, _ctx: &mut ExecCtx, _users: &[String]) -> Result<(), ContractError> {
+        // Process users that belong to lien_holder (ctx.info.sender)
+        // Slash them. Unbond them from the local staking contract if needed
+        // Check mesh security invariants (i.e. slashing propagation)
+        Ok(())
+    }
 }
 
 impl Default for VaultContract<'_> {
@@ -743,6 +760,25 @@ impl VaultApi for VaultContract<'_> {
             .add_attribute("sender", ctx.info.sender)
             .add_attribute("owner", owner)
             .add_attribute("amount", amount.to_string());
+
+        Ok(resp)
+    }
+
+    /// This must be called by the external staking contract to process a misbehaviour
+    #[msg(exec)]
+    fn process_cross_slashing(
+        &self,
+        mut ctx: ExecCtx,
+        users: Vec<String>,
+    ) -> Result<Response, Self::Error> {
+        nonpayable(&ctx.info)?;
+
+        self.slash(&mut ctx, &users)?;
+
+        let resp = Response::new()
+            .add_attribute("action", "process_cross_slashing")
+            .add_attribute("lien_holder", ctx.info.sender)
+            .add_attribute("users", users.join(", "));
 
         Ok(resp)
     }

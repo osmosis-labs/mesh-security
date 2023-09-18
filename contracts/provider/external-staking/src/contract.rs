@@ -667,6 +667,40 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
+    /// In test code, this is called from `test_handle_slashing`.
+    /// In non-test code, this is called from `ibc_packet_receive`
+    pub(crate) fn handle_slashing(
+        &self,
+        deps: DepsMut,
+        _validator: String,
+        _height: u64,
+        _time: u64,
+        _tombstone: bool,
+    ) -> Result<WasmMsg, ContractError> {
+        // If `tombstone` is true:
+        //   - Unbond all the associated stakes from that validator
+        //   - Tombstone the validator
+
+        // Route associated users to vault for slashing of their collateral
+        let users = vec![];
+        /*
+        let users = self
+            .stakes
+            .idx
+            .users
+            .prefix(&validator)
+            .range(deps.storage, None, None, Order::Ascending)
+            .map(|item| {
+                let ((_, user), _) = item?;
+                Ok::<_, ContractError>(user.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        */
+        let config = self.config.load(deps.storage)?;
+        let msg = config.vault.process_cross_slashing(users)?;
+        Ok(msg)
+    }
+
     /// Queries for contract configuration
     #[msg(query)]
     pub fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {

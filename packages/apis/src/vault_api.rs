@@ -39,6 +39,15 @@ pub trait VaultApi {
     /// Transaction ID is used to identify the original (vault contract originated) transaction.
     #[msg(exec)]
     fn rollback_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
+
+    /// This must be called by the external staking contract to process a slashing event
+    /// because of a misbehaviour on the Consumer chain
+    #[msg(exec)]
+    fn process_cross_slashing(
+        &self,
+        ctx: ExecCtx,
+        users: Vec<String>,
+    ) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]
@@ -78,6 +87,16 @@ impl VaultApiHelper {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,
             funds,
+        };
+        Ok(wasm)
+    }
+
+    pub fn process_cross_slashing(&self, users: Vec<String>) -> Result<WasmMsg, StdError> {
+        let msg = VaultApiExecMsg::ProcessCrossSlashing { users };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
         };
         Ok(wasm)
     }
