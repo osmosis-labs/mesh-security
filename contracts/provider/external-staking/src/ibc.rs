@@ -9,7 +9,8 @@ use cosmwasm_std::{
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, AddValidatorsAck,
-    ConsumerPacket, DistributeAck, ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
+    ConsumerPacket, DistributeAck, MisbehaviourAck, ProtocolVersion, ProviderPacket,
+    RemoveValidatorsAck,
 };
 
 use crate::contract::ExternalStakingContract;
@@ -162,6 +163,18 @@ pub fn ibc_packet_receive(
             let evts = contract.distribute_rewards_batch(deps, &rewards, &denom)?;
             let ack = ack_success(&DistributeAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_events(evts)
+        ConsumerPacket::Slash {
+            validator,
+            height,
+            time,
+            tombstone,
+        } => {
+            let contract = ExternalStakingContract::new();
+            let msg = contract.handle_slashing(deps, validator, height, time, tombstone)?;
+            // TODO? Make it transactional, and generate event on the Consumer only after successful
+            // misbehaviour processing
+            let ack = ack_success(&MisbehaviourAck {})?;
+            IbcReceiveResponse::new().set_ack(ack).add_message(msg)
         }
     };
 
