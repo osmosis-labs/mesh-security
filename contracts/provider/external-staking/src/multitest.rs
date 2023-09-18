@@ -1,6 +1,6 @@
 use anyhow::Result as AnyResult;
 
-use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Uint128};
+use cosmwasm_std::{coin, coins, to_binary, Addr, Coin, Decimal, Uint128};
 use mesh_apis::ibc::AddValidator;
 use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
@@ -96,22 +96,11 @@ fn instantiate() {
 #[test]
 fn staking() {
     let users = ["user1", "user2"];
-
-    let app = MtApp::new(|router, _api, storage| {
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(users[0]), coins(300, OSMO))
-            .unwrap();
-
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(users[1]), coins(300, OSMO))
-            .unwrap();
-    });
-    let app = App::new(app);
-
     let owner = "owner";
     let validators = ["validator1", "validator2"];
+
+    let app =
+        App::new_with_balances(&[(users[0], &coins(300, OSMO)), (users[1], &coins(300, OSMO))]);
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
@@ -321,18 +310,8 @@ fn get_last_external_staking_pending_tx_id(
 fn unstaking() {
     let users = ["user1", "user2"];
 
-    let app = MtApp::new(|router, _api, storage| {
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(users[0]), coins(300, OSMO))
-            .unwrap();
-
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(users[1]), coins(300, OSMO))
-            .unwrap();
-    });
-    let app = App::new(app);
+    let app =
+        App::new_with_balances(&[(users[0], &coins(300, OSMO)), (users[1], &coins(300, OSMO))]);
 
     let owner = "owner";
     let validators = ["validator1", "validator2"];
@@ -647,27 +626,11 @@ fn distribution() {
     let users = ["user1", "user2"];
     let remote = ["remote1", "remote2"];
 
-    let app = MtApp::new(|router, _api, storage| {
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(users[0]), coins(600, OSMO))
-            .unwrap();
-
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(users[1]), coins(600, OSMO))
-            .unwrap();
-
-        router
-            .bank
-            .init_balance(
-                storage,
-                &Addr::unchecked(owner),
-                vec![coin(1000, STAR), coin(1000, OSMO)],
-            )
-            .unwrap();
-    });
-    let app = App::new(app);
+    let app = App::new_with_balances(&[
+        (users[0], &coins(600, OSMO)),
+        (users[1], &coins(600, OSMO)),
+        (owner, &[coin(1000, STAR), coin(1000, OSMO)]),
+    ]);
 
     let validators = ["validator1", "validator2"];
 
@@ -1361,4 +1324,22 @@ fn distribution() {
         .test_commit_withdraw_rewards(tx_id)
         .call(users[0])
         .unwrap();
+}
+
+trait AppExt {
+    fn new_with_balances(balances: &[(&str, &[Coin])]) -> Self;
+}
+
+impl AppExt for App<MtApp> {
+    fn new_with_balances(balances: &[(&str, &[Coin])]) -> Self {
+        let app = MtApp::new(|router, _api, storage| {
+            for (addr, coins) in balances {
+                router
+                    .bank
+                    .init_balance(storage, &Addr::unchecked(*addr), coins.to_vec())
+                    .unwrap();
+            }
+        });
+        Self::new(app)
+    }
 }
