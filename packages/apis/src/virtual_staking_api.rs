@@ -51,4 +51,17 @@ pub enum SudoMsg {
         unjailed: Vec<String>,
         tombstoned: Vec<String>,
     },
+    /// SudoMsg::Slash{} should be called to execute a validator (cross-) slashing event.
+    /// If the validator is already tombstoned at the slashing height, the slashing will be ignored.
+    /// `tombstone` can be set to true, to tombstone the validator in passing after slashing.
+    Slash {
+        /// Validator address. The first 20 bytes of SHA256(public key)
+        validator: String,
+        /// Height at which the offense occurred
+        height: u64,
+        /// Time at which the offense occurred, in nanoseconds
+        time: u64,
+        /// Tombstone the validator
+        tombstone: bool,
+    },
 }
