@@ -103,7 +103,7 @@ fn staking() {
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
-    let validators = activate_validators(&contract, ["validator1", "validator2"]);
+    let validators = contract.activate_validators(["validator1", "validator2"]);
 
     // Bond tokens
     vault
@@ -135,100 +135,11 @@ fn staking() {
     assert!(res.is_err());
     */
 
-    // Perform couple stakes
-    // users[0] stakes 200 on validators[0] in 2 batches
-    // users[0] stakes 100 on validators[1]
-    // users[1] stakes 100 on validators[0]
-    // users[1] stakes 200 on validators[1]
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[0].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[0])
-        .unwrap();
-    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
-    // This should be through `IbcPacketAckMsg`
-    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
-    println!("last_external_staking_tx: {:?}", last_external_staking_tx);
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(last_external_staking_tx)
-        .call("test")
-        .unwrap();
-
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[1].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[0])
-        .unwrap();
-
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
-        .unwrap();
-
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[0].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[0])
-        .unwrap();
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
-        .unwrap();
-
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(200, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[1].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[1])
-        .unwrap();
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
-        .unwrap();
-
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[0].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[1])
-        .unwrap();
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
-        .unwrap();
+    vault.stake(&contract, users[0], validators[0], coin(100, OSMO));
+    vault.stake(&contract, users[0], validators[1], coin(100, OSMO));
+    vault.stake(&contract, users[0], validators[0], coin(100, OSMO));
+    vault.stake(&contract, users[1], validators[0], coin(100, OSMO));
+    vault.stake(&contract, users[1], validators[1], coin(200, OSMO));
 
     // All tokens should be only on the vault contract
     assert_eq!(app.app().wrap().query_all_balances(users[0]).unwrap(), []);
@@ -289,14 +200,6 @@ fn staking() {
     );
 }
 
-#[track_caller]
-fn get_last_external_staking_pending_tx_id(
-    contract: &ExternalStakingContractProxy<MtApp>,
-) -> Option<u64> {
-    let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
-    txs.first().map(Tx::id)
-}
-
 #[test]
 fn unstaking() {
     let users = ["user1", "user2"];
@@ -308,13 +211,8 @@ fn unstaking() {
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
-    let validators = activate_validators(&contract, ["validator1", "validator2"]);
+    let validators = contract.activate_validators(["validator1", "validator2"]);
 
-    // Bond and stake tokens
-    //
-    // users[0] stakes 200 on validators[0]
-    // users[0] stakes 100 on validators[1]
-    // users[1] stakes 300 on validators[0]
     vault
         .bond()
         .with_funds(&coins(300, OSMO))
@@ -327,61 +225,9 @@ fn unstaking() {
         .call(users[1])
         .unwrap();
 
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(200, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[0].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[0])
-        .unwrap();
-    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
-    // This should be through `IbcPacketAckMsg`
-    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(last_external_staking_tx)
-        .call("test")
-        .unwrap();
-
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[1].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[0])
-        .unwrap();
-    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(last_external_staking_tx)
-        .call("test")
-        .unwrap();
-
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(300, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[0].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[1])
-        .unwrap();
-    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(last_external_staking_tx)
-        .call("test")
-        .unwrap();
+    vault.stake(&contract, users[0], validators[0], coin(200, OSMO));
+    vault.stake(&contract, users[0], validators[1], coin(100, OSMO));
+    vault.stake(&contract, users[1], validators[0], coin(300, OSMO));
 
     // Properly unstake some tokens
     // users[0] unstakes 50 from validators[0] - 150 left staken in 2 batches
@@ -616,14 +462,8 @@ fn distribution() {
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
-    let validators = activate_validators(&contract, ["validator1", "validator2"]);
+    let validators = contract.activate_validators(["validator1", "validator2"]);
 
-    // Bond and stake tokens
-    //
-    // users[0] stakes 200 on validators[0]
-    // users[0] stakes 100 on validators[1]
-    // users[1] stakes 300 on validators[0]
-    //
     // Weights proportion:
     // 2/5 of validators[0] to users[0]
     // 3/5 of validators[0] to users[1]
@@ -640,60 +480,9 @@ fn distribution() {
         .call(users[1])
         .unwrap();
 
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(200, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[0].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[0])
-        .unwrap();
-
-    // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
-    // This should be through `IbcPacketAckMsg`
-    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&contract).unwrap();
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(last_external_staking_tx)
-        .call("test")
-        .unwrap();
-
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[1].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[0])
-        .unwrap();
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
-        .unwrap();
-
-    vault
-        .stake_remote(
-            contract.contract_addr.to_string(),
-            coin(300, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validators[0].to_string(),
-            })
-            .unwrap(),
-        )
-        .call(users[1])
-        .unwrap();
-    contract
-        .test_methods_proxy()
-        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
-        .unwrap();
+    vault.stake(&contract, users[0], validators[0], coin(200, OSMO));
+    vault.stake(&contract, users[0], validators[1], coin(100, OSMO));
+    vault.stake(&contract, users[1], validators[0], coin(300, OSMO));
 
     // Start with equal distribution:
     // 20 tokens for users[0]
@@ -1300,11 +1089,20 @@ fn distribution() {
 
 // Helpers follow!
 
+#[track_caller]
+fn get_last_external_staking_pending_tx_id(
+    contract: &ExternalStakingContractProxy<MtApp>,
+) -> Option<u64> {
+    let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
+    txs.first().map(Tx::id)
+}
+
 trait AppExt {
     fn new_with_balances(balances: &[(&str, &[Coin])]) -> Self;
 }
 
 impl AppExt for App<MtApp> {
+    #[track_caller]
     fn new_with_balances(balances: &[(&str, &[Coin])]) -> Self {
         let app = MtApp::new(|router, _api, storage| {
             for (addr, coins) in balances {
@@ -1318,18 +1116,59 @@ impl AppExt for App<MtApp> {
     }
 }
 
-fn activate_validators<const N: usize>(
-    contract: &ExternalStakingContractProxy<'_, MtApp>,
-    validators: [&'static str; N],
-) -> [&'static str; N] {
-    for val in validators {
-        let activate = AddValidator::mock(val);
+type Vault<'app> = VaultContractProxy<'app, MtApp>;
+type Contract<'app> = ExternalStakingContractProxy<'app, MtApp>;
+
+trait ContractExt {
+    fn activate_validators<const N: usize>(
+        &self,
+        validators: [&'static str; N],
+    ) -> [&'static str; N];
+}
+
+impl ContractExt for Contract<'_> {
+    #[track_caller]
+    fn activate_validators<const N: usize>(
+        &self,
+        validators: [&'static str; N],
+    ) -> [&'static str; N] {
+        for val in validators {
+            let activate = AddValidator::mock(val);
+            self.test_methods_proxy()
+                .test_set_active_validator(activate)
+                .call("test")
+                .unwrap();
+        }
+
+        validators
+    }
+}
+
+trait VaultExt {
+    fn stake(&self, contract: &Contract, user: &str, validator: impl Into<String>, coin: Coin);
+}
+
+impl VaultExt for Vault<'_> {
+    #[track_caller]
+    fn stake(&self, contract: &Contract, user: &str, validator: impl Into<String>, coin: Coin) {
+        self.stake_remote(
+            contract.contract_addr.to_string(),
+            coin,
+            to_binary(&ReceiveVirtualStake {
+                validator: validator.into(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
+        // TODO: Hardcoded external-staking's commit_stake call (lack of IBC support yet).
+        // This should be through `IbcPacketAckMsg`
+        let last_external_staking_tx = get_last_external_staking_pending_tx_id(contract).unwrap();
         contract
             .test_methods_proxy()
-            .test_set_active_validator(activate)
+            .test_commit_stake(last_external_staking_tx)
             .call("test")
             .unwrap();
     }
-
-    validators
 }
