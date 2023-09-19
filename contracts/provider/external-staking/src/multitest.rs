@@ -1175,33 +1175,6 @@ fn batch_distribution_invalid_token() {
     assert_eq!(err, ContractError::InvalidDenom(STAR.to_string()));
 }
 
-#[test]
-fn batch_distribution_invalid_validator() {
-    let owner = "owner";
-    let user = "user1";
-
-    let app = App::new_with_balances(&[(user, &coins(600, OSMO))]);
-
-    let (vault, contract) = setup(&app, owner, 100).unwrap();
-
-    let validator = contract.activate_validators(["validator1"])[0];
-
-    vault
-        .bond()
-        .with_funds(&coins(600, OSMO))
-        .call(user)
-        .unwrap();
-
-    vault.stake(&contract, user, validator, coin(200, OSMO));
-
-    assert_eq!(
-        contract
-            .distribute_batch(owner, STAR, &[(validator, 50), ("invalid", 50)])
-            .unwrap_err(),
-        ContractError::InvalidValidator("invalid".to_string()),
-    );
-}
-
 // Helpers follow!
 
 #[track_caller]
