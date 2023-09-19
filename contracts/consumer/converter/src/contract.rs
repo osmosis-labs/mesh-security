@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Reply,
-    Response, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg,
+    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event,
+    MessageInfo, Reply, Response, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -265,13 +265,9 @@ impl ConverterContract<'_> {
         Ok(msg.into())
     }
 
-    fn ensure_authorized(&self, ctx: &ExecCtx) -> Result<(), ContractError> {
-        let virtual_stake = self.virtual_stake.load(ctx.deps.storage)?;
-        ensure_eq!(
-            ctx.info.sender,
-            virtual_stake,
-            ContractError::Unauthorized {}
-        );
+    fn ensure_authorized(&self, deps: &DepsMut, info: &MessageInfo) -> Result<(), ContractError> {
+        let virtual_stake = self.virtual_stake.load(deps.storage)?;
+        ensure_eq!(info.sender, virtual_stake, ContractError::Unauthorized {});
 
         Ok(())
     }
@@ -290,7 +286,7 @@ impl ConverterApi for ConverterContract<'_> {
         mut ctx: ExecCtx,
         validator: String,
     ) -> Result<Response, Self::Error> {
-        self.ensure_authorized(&ctx)?;
+        self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
         let denom = config.local_denom;
@@ -316,7 +312,7 @@ impl ConverterApi for ConverterContract<'_> {
         mut ctx: ExecCtx,
         payments: Vec<RewardInfo>,
     ) -> Result<Response, Self::Error> {
-        self.ensure_authorized(&ctx)?;
+        self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
         let denom = config.local_denom;
@@ -357,7 +353,7 @@ impl ConverterApi for ConverterContract<'_> {
         additions: Vec<Validator>,
         tombstones: Vec<Validator>,
     ) -> Result<Response, Self::Error> {
-        self.ensure_authorized(&ctx)?;
+        self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         // Send over IBC to the Consumer
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
