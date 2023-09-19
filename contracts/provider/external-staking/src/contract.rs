@@ -707,28 +707,39 @@ impl ExternalStakingContract<'_> {
         &self,
         deps: DepsMut,
         validator: String,
-        _height: u64,
+        height: u64,
         _time: u64,
-        _tombstone: bool,
+        tombstone: bool,
     ) -> Result<WasmMsg, ContractError> {
-        // If `tombstone` is true:
-        //   - Unbond all the associated stakes from that validator
-        //   - Tombstone the validator
+        // If already tombstoned or not found, ignore
+        if self
+            .val_set
+            .active_validator_at_height(deps.storage, &validator, height)?
+            .is_none()
+        {
+            return Err(ContractError::AlreadyTombstoned(validator, height));
+        }
 
         // Route associated users to vault for slashing of their collateral
+        let config = self.config.load(deps.storage)?;
         let users = self
             .stakes
             .stake
             .idx
             .rev
-            .sub_prefix(validator)
+            .sub_prefix(validator.clone())
             .range(deps.storage, None, None, Order::Ascending)
             .map(|item| {
                 let ((_, user), _) = item?;
                 Ok::<_, ContractError>(user.to_string())
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let config = self.config.load(deps.storage)?;
+
+        if tombstone {
+            // TODO: Unbond all the associated stakes from that validator
+            // Tombstone validator
+            self.val_set.remove_validator(deps.storage, &validator)?;
+        }
         let msg = config.vault.process_cross_slashing(users)?;
         Ok(msg)
     }

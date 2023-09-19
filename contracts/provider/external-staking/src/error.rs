@@ -54,6 +54,9 @@ pub enum ContractError {
     #[error("No staking rewards to be withdrawn")]
     NoRewards,
 
+    #[error("Validator '{0}' already tombstoned / not found at height {1}")]
+    AlreadyTombstoned(String, u64),
+
     #[error("{0}")]
     Range(#[from] RangeError),
 }
