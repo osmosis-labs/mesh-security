@@ -52,6 +52,12 @@ pub struct ExternalStakingContract<'a> {
     pub val_set: CrdtState<'a>,
 }
 
+impl Default for ExternalStakingContract<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
@@ -700,7 +706,7 @@ impl ExternalStakingContract<'_> {
     pub(crate) fn handle_slashing(
         &self,
         deps: DepsMut,
-        _validator: String,
+        validator: String,
         _height: u64,
         _time: u64,
         _tombstone: bool,
@@ -710,20 +716,18 @@ impl ExternalStakingContract<'_> {
         //   - Tombstone the validator
 
         // Route associated users to vault for slashing of their collateral
-        let users = vec![];
-        /*
         let users = self
             .stakes
+            .stake
             .idx
-            .users
-            .prefix(&validator)
+            .rev
+            .sub_prefix(validator)
             .range(deps.storage, None, None, Order::Ascending)
             .map(|item| {
                 let ((_, user), _) = item?;
                 Ok::<_, ContractError>(user.to_string())
             })
             .collect::<Result<Vec<_>, _>>()?;
-        */
         let config = self.config.load(deps.storage)?;
         let msg = config.vault.process_cross_slashing(users)?;
         Ok(msg)
