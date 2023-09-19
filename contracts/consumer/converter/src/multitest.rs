@@ -269,6 +269,54 @@ fn valset_update_works() {
 }
 
 #[test]
+fn unauthorized() {
+    let app = App::default();
+
+    let SetupResponse { converter, .. } = setup(
+        &app,
+        SetupArgs {
+            owner: "owner",
+            admin: "admin",
+            discount: Decimal::percent(10),
+            native_per_foreign: Decimal::percent(40),
+        },
+    );
+
+    let err = converter
+        .converter_api_proxy()
+        .distribute_rewards(vec![
+            RewardInfo {
+                validator: "alice".to_string(),
+                reward: 33u128.into(),
+            },
+            RewardInfo {
+                validator: "bob".to_string(),
+                reward: 53u128.into(),
+            },
+        ])
+        .call("mallory")
+        .unwrap_err();
+
+    assert_eq!(err, ContractError::Unauthorized);
+
+    let err = converter
+        .converter_api_proxy()
+        .distribute_reward("validator".to_string())
+        .call("mallory")
+        .unwrap_err();
+
+    assert_eq!(err, ContractError::Unauthorized);
+
+    let err = converter
+        .converter_api_proxy()
+        .valset_update(vec![], vec![])
+        .call("mallory")
+        .unwrap_err();
+
+    assert_eq!(err, ContractError::Unauthorized);
+}
+
+#[test]
 fn distribute_rewards_invalid_amount_is_rejected() {
     let owner = "sunny";
     let admin = "theman";
