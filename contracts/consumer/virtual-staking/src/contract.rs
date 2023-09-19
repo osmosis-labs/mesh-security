@@ -3,13 +3,13 @@ use std::collections::BTreeMap;
 
 use cosmwasm_std::{
     coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
-    DistributionMsg, Env, Event, Reply, Response, StdResult, SubMsg, SubMsgResponse, Uint128,
-    Validator, WasmMsg,
+    DistributionMsg, Env, Event, Reply, Response, StdError, StdResult, Storage, SubMsg,
+    SubMsgResponse, Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::nonpayable;
-use mesh_apis::converter_api;
+use mesh_apis::converter_api::{self, RewardInfo};
 use mesh_bindings::{
     TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
 };
@@ -171,7 +171,7 @@ impl VirtualStakingContract<'_> {
             (REPLY_REWARDS_ID, Ok(result)) => self.reply_rewards(ctx.deps, ctx.env, result),
             (REPLY_REWARDS_ID, Err(e)) => {
                 // We need to pop the REWARD_TARGETS so it doesn't get out of sync
-                let target = pop_target(ctx.deps)?;
+                let (target, _) = pop_target(ctx.deps)?;
                 // Ignore errors, so the rest doesn't fail, but report them.
                 let evt = Event::new("rewards_error")
                     .add_attribute("error", e)
@@ -190,7 +190,7 @@ impl VirtualStakingContract<'_> {
         _reply: SubMsgResponse,
     ) -> Result<Response, ContractError> {
         // Find the validator to assign the rewards to
-        let target = pop_target(deps.branch())?;
+        let (target, finished) = pop_target(deps.branch())?;
 
         // Find all the tokens received here (consider it rewards to that validator)
         let cfg = self.config.load(deps.storage)?;
@@ -201,23 +201,34 @@ impl VirtualStakingContract<'_> {
             return Ok(Response::new());
         }
 
-        // Send them to the converter, assigned to proper validator
-        let msg = converter_api::ExecMsg::DistributeReward { validator: target };
-        let msg = WasmMsg::Execute {
-            contract_addr: cfg.converter.into_string(),
-            msg: to_binary(&msg)?,
-            funds: vec![reward],
-        };
-        let resp = Response::new().add_message(msg);
+        let all_rewards = VALIDATOR_REWARDS_BATCH.push(deps.storage, target, reward.amount)?;
+
+        let mut resp = Response::new();
+
+        if finished {
+            VALIDATOR_REWARDS_BATCH.wipe(deps.storage);
+            let msg = converter_api::ExecMsg::DistributeRewards {
+                payments: all_rewards,
+            };
+            let msg = WasmMsg::Execute {
+                contract_addr: cfg.converter.into_string(),
+                msg: to_binary(&msg)?,
+                funds: vec![reward],
+            };
+            resp = resp.add_message(msg);
+        }
+
         Ok(resp)
     }
 }
 
-fn pop_target(deps: DepsMut) -> StdResult<String> {
+/// Returns a tuple containing the reward target and a boolean value
+/// specifying if we've exhausted the list.
+fn pop_target(deps: DepsMut) -> StdResult<(String, bool)> {
     let mut targets = REWARD_TARGETS.load(deps.storage)?;
     let target = targets.pop().unwrap();
     REWARD_TARGETS.save(deps.storage, &targets)?;
-    Ok(target)
+    Ok((target, targets.is_empty()))
 }
 
 fn calculate_rebalance(
@@ -256,7 +267,35 @@ fn calculate_rebalance(
 }
 
 const REWARD_TARGETS: Item<Vec<String>> = Item::new("reward_targets");
+const VALIDATOR_REWARDS_BATCH: ValidatorRewardsBatch = ValidatorRewardsBatch::new();
 const REPLY_REWARDS_ID: u64 = 1;
+
+struct ValidatorRewardsBatch<'a>(Item<'a, Vec<RewardInfo>>);
+
+impl<'a> ValidatorRewardsBatch<'a> {
+    const fn new() -> Self {
+        Self(Item::new("validator_rewards_batch"))
+    }
+
+    fn push(
+        &self,
+        store: &mut dyn Storage,
+        validator: impl Into<String>,
+        reward: impl Into<Uint128>,
+    ) -> Result<Vec<RewardInfo>, StdError> {
+        self.0.update::<_, StdError>(store, |mut vec| {
+            vec.push(RewardInfo {
+                validator: validator.into(),
+                reward: reward.into(),
+            });
+            Ok(vec)
+        })
+    }
+
+    fn wipe(&self, store: &mut dyn Storage) {
+        self.0.remove(store);
+    }
+}
 
 /// Each of these messages will need to get a callback to distribute received rewards to the proper validator
 /// To manage that, we store a queue of validators in an Item, one item for each SubMsg, and read them in reply.
