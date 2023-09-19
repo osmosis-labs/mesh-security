@@ -135,7 +135,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     ) -> Result<Response, Self::Error> {
         #[cfg(any(test, feature = "mt"))]
         {
-            let events = self.distribute_rewards_batch(ctx.deps, &denom, &rewards)?;
+            let events = self.distribute_rewards_batch(ctx.deps, &rewards, &denom)?;
             Ok(Response::new().add_events(events))
         }
         #[cfg(not(any(test, feature = "mt")))]

@@ -515,8 +515,8 @@ impl ExternalStakingContract<'_> {
     pub(crate) fn distribute_rewards_batch(
         &self,
         mut deps: DepsMut,
-        denom: &str,
         rewards: &[RewardInfo],
+        denom: &str,
     ) -> Result<Vec<Event>, ContractError> {
         // check we have the proper denom
         let config = self.config.load(deps.storage)?;

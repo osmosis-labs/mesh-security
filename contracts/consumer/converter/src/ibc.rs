@@ -13,6 +13,7 @@ use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, ProtocolVersion,
     ProviderPacket, StakeAck, TransferRewardsAck, UnstakeAck, PROTOCOL_NAME,
 };
+use sylvia::types::ExecCtx;
 
 use crate::{contract::ConverterContract, error::ContractError};
 
@@ -260,4 +261,16 @@ pub fn ibc_packet_timeout(
         timeout: packet_timeout_validator(&env),
     };
     Ok(IbcBasicResponse::new().add_message(msg))
+}
+
+pub(crate) fn make_ibc_packet(
+    ctx: &mut ExecCtx,
+    packet: ConsumerPacket,
+) -> Result<IbcMsg, ContractError> {
+    let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+    Ok(IbcMsg::SendPacket {
+        channel_id: channel.endpoint.channel_id,
+        data: to_binary(&packet)?,
+        timeout: packet_timeout_rewards(&ctx.env),
+    })
 }

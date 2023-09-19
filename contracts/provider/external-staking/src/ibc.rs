@@ -159,7 +159,7 @@ pub fn ibc_packet_receive(
         }
         ConsumerPacket::DistributeBatch { rewards, denom } => {
             let contract = ExternalStakingContract::new();
-            let evts = contract.distribute_rewards_batch(deps, &denom, &rewards)?;
+            let evts = contract.distribute_rewards_batch(deps, &rewards, &denom)?;
             let ack = ack_success(&DistributeAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_events(evts)
         }

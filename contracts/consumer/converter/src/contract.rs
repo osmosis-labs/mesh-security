@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, IbcMsg,
-    Reply, Response, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg,
+    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Reply,
+    Response, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -14,9 +14,7 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
-use crate::ibc::{
-    add_validators_msg, packet_timeout_rewards, tombstone_validators_msg, IBC_CHANNEL,
-};
+use crate::ibc::{add_validators_msg, make_ibc_packet, tombstone_validators_msg, IBC_CHANNEL};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -379,13 +377,4 @@ impl ConverterApi for ConverterContract<'_> {
 
         Ok(resp)
     }
-}
-
-fn make_ibc_packet(ctx: &mut ExecCtx, packet: ConsumerPacket) -> Result<IbcMsg, ContractError> {
-    let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
-    Ok(IbcMsg::SendPacket {
-        channel_id: channel.endpoint.channel_id,
-        data: to_binary(&packet)?,
-        timeout: packet_timeout_rewards(&ctx.env),
-    })
 }
