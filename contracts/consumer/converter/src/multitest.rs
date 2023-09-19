@@ -275,17 +275,12 @@ fn distribute_rewards_invalid_amount_is_rejected() {
     let discount = Decimal::percent(10); // 1 OSMO worth of JUNO should give 0.9 OSMO of stake
     let native_per_foreign = Decimal::percent(40); // 1 JUNO is worth 0.4 OSMO
 
-    let app = App::new(MtApp::new(|router, _, storage| {
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(owner), coins(99999, "TOKEN"))
-            .unwrap();
-    }));
+    let app = App::default();
 
     let SetupResponse {
         price_feed: _,
         converter,
-        ..
+        virtual_staking,
     } = setup(
         &app,
         SetupArgs {
@@ -295,6 +290,17 @@ fn distribute_rewards_invalid_amount_is_rejected() {
             native_per_foreign,
         },
     );
+
+    app.app_mut().init_modules(|router, _, storage| {
+        router
+            .bank
+            .init_balance(
+                storage,
+                &virtual_staking.contract_addr,
+                coins(99999, "TOKEN"),
+            )
+            .unwrap();
+    });
 
     let err = converter
         .converter_api_proxy()
@@ -309,7 +315,7 @@ fn distribute_rewards_invalid_amount_is_rejected() {
             },
         ])
         .with_funds(&[coin(80, "TOKEN")])
-        .call(owner)
+        .call(virtual_staking.contract_addr.as_str())
         .unwrap_err();
 
     assert_eq!(
@@ -333,7 +339,7 @@ fn distribute_rewards_invalid_amount_is_rejected() {
             },
         ])
         .with_funds(&[coin(90, "TOKEN")])
-        .call(owner)
+        .call(virtual_staking.contract_addr.as_str())
         .unwrap_err();
 
     assert_eq!(
@@ -353,17 +359,12 @@ fn distribute_rewards_valid_amount() {
     let discount = Decimal::percent(10); // 1 OSMO worth of JUNO should give 0.9 OSMO of stake
     let native_per_foreign = Decimal::percent(40); // 1 JUNO is worth 0.4 OSMO
 
-    let app = App::new(MtApp::new(|router, _, storage| {
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(owner), coins(99999, "TOKEN"))
-            .unwrap();
-    }));
+    let app = App::default();
 
     let SetupResponse {
         price_feed: _,
         converter,
-        ..
+        virtual_staking,
     } = setup(
         &app,
         SetupArgs {
@@ -373,6 +374,17 @@ fn distribute_rewards_valid_amount() {
             native_per_foreign,
         },
     );
+
+    app.app_mut().init_modules(|router, _, storage| {
+        router
+            .bank
+            .init_balance(
+                storage,
+                &virtual_staking.contract_addr,
+                coins(99999, "TOKEN"),
+            )
+            .unwrap();
+    });
 
     converter
         .converter_api_proxy()
@@ -387,6 +399,6 @@ fn distribute_rewards_valid_amount() {
             },
         ])
         .with_funds(&[coin(86, "TOKEN")])
-        .call(owner)
+        .call(virtual_staking.contract_addr.as_str())
         .unwrap();
 }

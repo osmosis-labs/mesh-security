@@ -264,6 +264,17 @@ impl ConverterContract<'_> {
         };
         Ok(msg.into())
     }
+
+    fn ensure_authorized(&self, ctx: &ExecCtx) -> Result<(), ContractError> {
+        let virtual_stake = self.virtual_stake.load(ctx.deps.storage)?;
+        ensure_eq!(
+            ctx.info.sender,
+            virtual_stake,
+            ContractError::Unauthorized {}
+        );
+
+        Ok(())
+    }
 }
 
 #[contract]
@@ -279,6 +290,8 @@ impl ConverterApi for ConverterContract<'_> {
         mut ctx: ExecCtx,
         validator: String,
     ) -> Result<Response, Self::Error> {
+        self.ensure_authorized(&ctx)?;
+
         let config = self.config.load(ctx.deps.storage)?;
         let denom = config.local_denom;
         must_pay(&ctx.info, &denom)?;
@@ -303,6 +316,8 @@ impl ConverterApi for ConverterContract<'_> {
         mut ctx: ExecCtx,
         payments: Vec<RewardInfo>,
     ) -> Result<Response, Self::Error> {
+        self.ensure_authorized(&ctx)?;
+
         let config = self.config.load(ctx.deps.storage)?;
         let denom = config.local_denom;
 
@@ -342,12 +357,7 @@ impl ConverterApi for ConverterContract<'_> {
         additions: Vec<Validator>,
         tombstones: Vec<Validator>,
     ) -> Result<Response, Self::Error> {
-        let virtual_stake = self.virtual_stake.load(ctx.deps.storage)?;
-        ensure_eq!(
-            ctx.info.sender,
-            virtual_stake,
-            ContractError::Unauthorized {}
-        );
+        self.ensure_authorized(&ctx)?;
 
         // Send over IBC to the Consumer
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
