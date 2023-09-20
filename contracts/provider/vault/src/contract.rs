@@ -10,7 +10,7 @@ use mesh_apis::cross_staking_api::CrossStakingApiHelper;
 use mesh_apis::local_staking_api::{
     LocalStakingApiHelper, LocalStakingApiQueryMsg, MaxSlashResponse,
 };
-use mesh_apis::vault_api::{self, VaultApi};
+use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
@@ -698,12 +698,34 @@ impl VaultContract<'_> {
     /// staking contract, if they are needed for slashing.
     ///
     /// It also checks that the mesh security invariants are not violated after slashing,
-    /// i.e. perform slashing propagation across mesh security chains, for all of the involved users.
-    fn slash(&self, _ctx: &mut ExecCtx, _users: &[String]) -> Result<(), ContractError> {
+    /// i.e. performs slashing propagation across mesh security lien holders, for all the slashed users.
+    fn slash(&self, ctx: &mut ExecCtx, slashes: &[SlashInfo]) -> Result<(), ContractError> {
         // Process users that belong to lien_holder (ctx.info.sender)
-        // Slash them. Unbond them from the local staking contract if needed
-        // Check mesh security invariants (i.e. slashing propagation)
+        let lien_holder = ctx.info.sender.clone();
+        for slash in slashes {
+            let user = Addr::unchecked(slash.user.clone());
+            // User must have a lien with this lien holder
+            let lien = self.liens.load(ctx.deps.storage, (&user, &lien_holder))?;
+            let slash_amount = slash.stake * lien.slashable;
+            let mut user_info = self.users.load(ctx.deps.storage, &user)?;
+            let free_collateral = user_info.free_collateral().low(); // FIXME? Consider using value ranges
+            let new_collateral = user_info.collateral - slash_amount;
+            if free_collateral < slash_amount {
+                // We need to unbond / burn collateral from the native staking contract
+                let _required_amount = slash_amount - free_collateral;
+                // TODO: unbond `required_amount` from native staking on behalf of the vault
+                // And check / adjust mesh security invariants according to the new collateral
+                self.propagate_slash(&user, new_collateral)?;
+            }
+            user_info.collateral = new_collateral;
+            self.users.save(ctx.deps.storage, &user, &user_info)?;
+            // TODO: Burn `slash_amount` from the vault's balance
+        }
         Ok(())
+    }
+
+    fn propagate_slash(&self, _user: &Addr, _new_collateral: Uint128) -> Result<(), ContractError> {
+        todo!()
     }
 }
 
@@ -769,16 +791,23 @@ impl VaultApi for VaultContract<'_> {
     fn process_cross_slashing(
         &self,
         mut ctx: ExecCtx,
-        users: Vec<String>,
+        slashes: Vec<SlashInfo>,
     ) -> Result<Response, Self::Error> {
         nonpayable(&ctx.info)?;
 
-        self.slash(&mut ctx, &users)?;
+        self.slash(&mut ctx, &slashes)?;
 
         let resp = Response::new()
             .add_attribute("action", "process_cross_slashing")
             .add_attribute("lien_holder", ctx.info.sender)
-            .add_attribute("users", users.join(", "));
+            .add_attribute(
+                "users",
+                slashes
+                    .iter()
+                    .map(|s| s.user.clone())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
 
         Ok(resp)
     }

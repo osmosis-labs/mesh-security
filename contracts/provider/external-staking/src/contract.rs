@@ -12,7 +12,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use mesh_apis::cross_staking_api::{self};
 use mesh_apis::ibc::ProviderPacket;
-use mesh_apis::vault_api::VaultApiHelper;
+use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
 use mesh_sync::Tx;
 
 use crate::crdt::CrdtState;
@@ -730,13 +730,15 @@ impl ExternalStakingContract<'_> {
             .sub_prefix(validator.clone())
             .range(deps.storage, None, None, Order::Ascending)
             .map(|item| {
-                let ((_, user), _) = item?;
-                Ok::<_, ContractError>(user.to_string())
+                let ((_, user), stake) = item?;
+                Ok::<_, ContractError>(SlashInfo {
+                    user: user.to_string(),
+                    stake: stake.stake.high(), // FIXME? Send a value range
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         if tombstone {
-            // TODO: Unbond all the associated stakes from that validator
             // Tombstone validator
             self.val_set.remove_validator(deps.storage, &validator)?;
         }

@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_binary, Addr, Coin, Response, StdError, WasmMsg};
+use cosmwasm_std::{to_binary, Addr, Coin, Response, StdError, Uint128, WasmMsg};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -46,8 +46,14 @@ pub trait VaultApi {
     fn process_cross_slashing(
         &self,
         ctx: ExecCtx,
-        users: Vec<String>,
+        slashes: Vec<SlashInfo>,
     ) -> Result<Response, Self::Error>;
+}
+
+#[cw_serde]
+pub struct SlashInfo {
+    pub user: String,
+    pub stake: Uint128,
 }
 
 #[cw_serde]
@@ -91,8 +97,8 @@ impl VaultApiHelper {
         Ok(wasm)
     }
 
-    pub fn process_cross_slashing(&self, users: Vec<String>) -> Result<WasmMsg, StdError> {
-        let msg = VaultApiExecMsg::ProcessCrossSlashing { users };
+    pub fn process_cross_slashing(&self, slashes: Vec<SlashInfo>) -> Result<WasmMsg, StdError> {
+        let msg = VaultApiExecMsg::ProcessCrossSlashing { slashes };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,
