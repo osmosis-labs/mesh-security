@@ -709,21 +709,19 @@ impl VaultContract<'_> {
             let lien = self.liens.load(ctx.deps.storage, (&user, &lien_holder))?;
             let slash_amount = slash.stake * lien.slashable;
             let mut user_info = self.users.load(ctx.deps.storage, &user)?;
-            let free_collateral = user_info.free_collateral().low(); // FIXME? Consider using value ranges
+            // FIXME: Use value ranges
+            let free_collateral = user_info.free_collateral().low();
             let new_collateral = user_info.collateral - slash_amount;
             if free_collateral < slash_amount {
-                // We need to unbond / burn collateral from the native staking contract
-                let _required_amount = slash_amount - free_collateral;
-                // TODO: unbond `required_amount` from native staking on behalf of the vault
-                // And check / adjust mesh security invariants according to the new collateral
-                self.propagate_slash(ctx.deps.storage, &user, new_collateral)?;
+                // Check / adjust mesh security invariants according to the new collateral
+                self.propagate_slash(ctx.deps.storage, &user, &mut user_info, new_collateral)?;
                 // Recompute max lien
                 self.recalculate_max_lien(ctx.deps.storage, &user, &mut user_info)?;
             }
-            // Adjust collateral
+            // Finally, adjust collateral
             user_info.collateral = new_collateral;
+            // And save user info
             self.users.save(ctx.deps.storage, &user, &user_info)?;
-            // TODO: Burn `slash_amount` from the vault's balance
         }
         Ok(())
     }
@@ -732,6 +730,7 @@ impl VaultContract<'_> {
         &self,
         storage: &mut dyn Storage,
         user: &Addr,
+        user_info: &mut UserInfo,
         new_collateral: Uint128,
     ) -> Result<(), ContractError> {
         let broken_liens = self
@@ -743,17 +742,22 @@ impl VaultContract<'_> {
                     .map(|(_, lien)| lien.amount.high() > new_collateral) // Skip in range liens
                     .unwrap_or(false) // Skip other errors
             })
-            .map(|item| item.map(|(lien_holder, lien)| (lien_holder, lien)))
             .collect::<StdResult<Vec<_>>>()?;
-        // Keep lien invariants
         for (lien_holder, mut lien) in broken_liens {
             let new_low_amount = min(lien.amount.low(), new_collateral);
             let new_high_amount = min(lien.amount.high(), new_collateral);
+            // Adjust the user's total slashable amount
+            user_info.total_slashable = ValueRange::new(
+                user_info.total_slashable.low()
+                    - (lien.amount.low() - new_low_amount) * lien.slashable,
+                user_info.total_slashable.high()
+                    - (lien.amount.high() - new_high_amount) * lien.slashable,
+            );
+            // Keep the invariant over the lien
             lien.amount = ValueRange::new(new_low_amount, new_high_amount);
             self.liens.save(storage, (user, &lien_holder), &lien)?;
-            // TODO: Remove required amount from the user's stake (burn / adjust / rebalance msg)
+            // TODO: Remove required amount from the user's stake (needs burn / adjust / rebalance msg)
         }
-        // TODO: Keep `total_slashable` invariant for  the user
         Ok(())
     }
 }
