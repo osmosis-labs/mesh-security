@@ -717,7 +717,10 @@ impl VaultContract<'_> {
                 // TODO: unbond `required_amount` from native staking on behalf of the vault
                 // And check / adjust mesh security invariants according to the new collateral
                 self.propagate_slash(ctx.deps.storage, &user, new_collateral)?;
+                // Recompute max lien
+                self.recalculate_max_lien(ctx.deps.storage, &user, &mut user_info)?;
             }
+            // Adjust collateral
             user_info.collateral = new_collateral;
             self.users.save(ctx.deps.storage, &user, &user_info)?;
             // TODO: Burn `slash_amount` from the vault's balance
@@ -748,9 +751,9 @@ impl VaultContract<'_> {
             let new_high_amount = min(lien.amount.high(), new_collateral);
             lien.amount = ValueRange::new(new_low_amount, new_high_amount);
             self.liens.save(storage, (user, &lien_holder), &lien)?;
-            // TODO: Remove required amount from the lien's stake (burn / adjust / rebalance msg)
+            // TODO: Remove required amount from the user's stake (burn / adjust / rebalance msg)
         }
-        // TODO: Adjust `total_slashable` invariant
+        // TODO: Keep `total_slashable` invariant for  the user
         Ok(())
     }
 }
