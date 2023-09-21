@@ -5,6 +5,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
 use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
+use std::cmp::min;
 
 use mesh_apis::cross_staking_api::CrossStakingApiHelper;
 use mesh_apis::local_staking_api::{
@@ -715,7 +716,7 @@ impl VaultContract<'_> {
                 let _required_amount = slash_amount - free_collateral;
                 // TODO: unbond `required_amount` from native staking on behalf of the vault
                 // And check / adjust mesh security invariants according to the new collateral
-                self.propagate_slash(&user, new_collateral)?;
+                self.propagate_slash(ctx.deps.storage, &user, new_collateral)?;
             }
             user_info.collateral = new_collateral;
             self.users.save(ctx.deps.storage, &user, &user_info)?;
@@ -724,8 +725,33 @@ impl VaultContract<'_> {
         Ok(())
     }
 
-    fn propagate_slash(&self, _user: &Addr, _new_collateral: Uint128) -> Result<(), ContractError> {
-        todo!()
+    fn propagate_slash(
+        &self,
+        storage: &mut dyn Storage,
+        user: &Addr,
+        new_collateral: Uint128,
+    ) -> Result<(), ContractError> {
+        let broken_liens = self
+            .liens
+            .prefix(user)
+            .range(storage, None, None, Order::Ascending)
+            .filter(|item| {
+                item.as_ref()
+                    .map(|(_, lien)| lien.amount.high() > new_collateral) // Skip in range liens
+                    .unwrap_or(false) // Skip other errors
+            })
+            .map(|item| item.map(|(lien_holder, lien)| (lien_holder, lien)))
+            .collect::<StdResult<Vec<_>>>()?;
+        // Keep lien invariants
+        for (lien_holder, mut lien) in broken_liens {
+            let new_low_amount = min(lien.amount.low(), new_collateral);
+            let new_high_amount = min(lien.amount.high(), new_collateral);
+            lien.amount = ValueRange::new(new_low_amount, new_high_amount);
+            self.liens.save(storage, (user, &lien_holder), &lien)?;
+            // TODO: Remove required amount from the lien's stake (burn / adjust / rebalance msg)
+        }
+        // TODO: Adjust `total_slashable` invariant
+        Ok(())
     }
 }
 
