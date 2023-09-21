@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 
 use cosmwasm_std::{
     coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
-    DistributionMsg, Env, Event, Reply, Response, StdError, StdResult, Storage, SubMsg,
-    SubMsgResponse, Uint128, Validator, WasmMsg,
+    DistributionMsg, Env, Event, Reply, Response, StdError, StdResult, Storage, SubMsg, Uint128,
+    Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -66,6 +66,8 @@ impl VirtualStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         // initialize this to no one, so no issue when reading for the first time
         self.bonded.save(ctx.deps.storage, &vec![])?;
+        VALIDATOR_REWARDS_BATCH.init(ctx.deps.storage)?;
+
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         Ok(Response::new())
     }
@@ -168,7 +170,7 @@ impl VirtualStakingContract<'_> {
     #[msg(reply)]
     fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match (reply.id, reply.result.into_result()) {
-            (REPLY_REWARDS_ID, Ok(result)) => self.reply_rewards(ctx.deps, ctx.env, result),
+            (REPLY_REWARDS_ID, Ok(_)) => self.reply_rewards(ctx.deps, ctx.env),
             (REPLY_REWARDS_ID, Err(e)) => {
                 // We need to pop the REWARD_TARGETS so it doesn't get out of sync
                 let (target, _) = pop_target(ctx.deps)?;
@@ -183,12 +185,7 @@ impl VirtualStakingContract<'_> {
     }
 
     /// This is called on each successful withdrawal
-    fn reply_rewards(
-        &self,
-        mut deps: DepsMut,
-        env: Env,
-        _reply: SubMsgResponse,
-    ) -> Result<Response, ContractError> {
+    fn reply_rewards(&self, mut deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         // Find the validator to assign the rewards to
         let (target, finished) = pop_target(deps.branch())?;
 
@@ -289,6 +286,12 @@ impl<'a> ValidatorRewardsBatch<'a> {
             rewards: Item::new("validator_rewards_batch"),
             total: Item::new("validator_rewards_batch_total"),
         }
+    }
+
+    fn init(&self, store: &mut dyn Storage) -> StdResult<()> {
+        self.0.save(store, &vec![])?;
+
+        Ok(())
     }
 
     fn push(
@@ -431,5 +434,118 @@ pub fn sudo(
             &removals,
             &tombstones,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use cosmwasm_std::{
+        coins, from_binary,
+        testing::{
+            mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage,
+            MOCK_CONTRACT_ADDR,
+        },
+        Empty, QuerierWrapper,
+    };
+
+    use super::*;
+
+    type OwnedDeps = cosmwasm_std::OwnedDeps<MockStorage, MockApi, MockQuerier>;
+
+    #[test]
+    fn reply_rewards() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract
+            .instantiate(InstantiateCtx {
+                deps: deps.as_mut(),
+                env: mock_env(),
+                info: mock_info("me", &[]),
+            })
+            .unwrap();
+        REWARD_TARGETS
+            .save(
+                &mut deps.storage,
+                &vec![
+                    "validator3".to_string(),
+                    "validator2".to_string(),
+                    "validator1".to_string(),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(push_rewards(&contract, &mut deps, 10).len(), 0);
+        assert_eq!(push_rewards(&contract, &mut deps, 20).len(), 0);
+
+        let msgs = push_rewards(&contract, &mut deps, 30);
+        assert_eq!(msgs.len(), 1);
+        if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = msgs[0].clone().msg {
+            if let converter_api::ExecMsg::DistributeRewards { payments } =
+                from_binary(&msg).unwrap()
+            {
+                let payments = payments
+                    .into_iter()
+                    .map(|RewardInfo { validator, reward }| (validator, reward))
+                    .collect::<HashMap<_, _>>();
+                assert_eq!(
+                    payments,
+                    [
+                        ("validator1".to_string(), 10u128.into()),
+                        ("validator2".to_string(), 20u128.into()),
+                        ("validator3".to_string(), 30u128.into())
+                    ]
+                    .into()
+                );
+            } else {
+                panic!("invalid message");
+            }
+        } else {
+            panic!("invalid message");
+        }
+    }
+
+    #[test]
+    fn reply_rewards_zero() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract
+            .instantiate(InstantiateCtx {
+                deps: deps.as_mut(),
+                env: mock_env(),
+                info: mock_info("me", &[]),
+            })
+            .unwrap();
+        REWARD_TARGETS
+            .save(
+                &mut deps.storage,
+                &vec![
+                    "validator3".to_string(),
+                    "validator2".to_string(),
+                    "validator1".to_string(),
+                ],
+            )
+            .unwrap();
+
+        for _ in 0..3 {
+            assert_eq!(push_rewards(&contract, &mut deps, 0).len(), 0);
+        }
+    }
+
+    fn push_rewards(
+        contract: &VirtualStakingContract,
+        deps: &mut OwnedDeps,
+        amount: u128,
+    ) -> Vec<SubMsg> {
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+        deps.querier =
+            MockQuerier::new(&[(mock_env().contract.address.as_str(), &coins(amount, denom))]);
+        contract
+            .reply_rewards(deps.as_mut(), mock_env())
+            .unwrap()
+            .messages
     }
 }
