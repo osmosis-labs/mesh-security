@@ -699,29 +699,59 @@ impl VaultContract<'_> {
     /// staking contract, if they are needed for slashing.
     ///
     /// It also checks that the mesh security invariants are not violated after slashing,
-    /// i.e. performs slashing propagation across mesh security lien holders, for all the slashed users.
+    /// i.e. performs slashing propagation across lien holders, for all of the slashed users.
     fn slash(&self, ctx: &mut ExecCtx, slashes: &[SlashInfo]) -> Result<(), ContractError> {
-        // Process users that belong to lien_holder (ctx.info.sender)
+        // Process users that belong to lien_holder
         let lien_holder = ctx.info.sender.clone();
         for slash in slashes {
-            let user = Addr::unchecked(slash.user.clone());
+            let slash_user = Addr::unchecked(slash.user.clone());
             // User must have a lien with this lien holder
-            let lien = self.liens.load(ctx.deps.storage, (&user, &lien_holder))?;
+            let lien = self
+                .liens
+                .load(ctx.deps.storage, (&slash_user, &lien_holder))?;
             let slash_amount = slash.stake * lien.slashable;
-            let mut user_info = self.users.load(ctx.deps.storage, &user)?;
-            // FIXME: Use value ranges
-            let free_collateral = user_info.free_collateral().low();
+            let mut user_info = self.users.load(ctx.deps.storage, &slash_user)?;
             let new_collateral = user_info.collateral - slash_amount;
-            if free_collateral < slash_amount {
-                // Check / adjust mesh security invariants according to the new collateral
-                self.propagate_slash(ctx.deps.storage, &user, &mut user_info, new_collateral)?;
-                // Recompute max lien
-                self.recalculate_max_lien(ctx.deps.storage, &user, &mut user_info)?;
-            }
-            // Finally, adjust collateral
+            let free_collateral = user_info.free_collateral().low(); // For simplicity
+                                                                     // Slash user
             user_info.collateral = new_collateral;
-            // And save user info
-            self.users.save(ctx.deps.storage, &user, &user_info)?;
+            // Adjust total slashable and max lien (below)
+            user_info
+                .total_slashable
+                .sub(slash_amount * lien.slashable, Uint128::zero())?;
+            // TODO: Remove required amount from the user's stake (needs rebalance msg)
+            if free_collateral < slash_amount {
+                // Native collateral unbonding
+                let local_staking = self.local_staking.load(ctx.deps.storage)?;
+                let mut native_lien = self
+                    .liens
+                    .load(ctx.deps.storage, (&slash_user, &local_staking.contract.0))?;
+                native_lien
+                    .amount
+                    .sub(slash_amount - free_collateral, Uint128::zero())?;
+                self.liens.save(
+                    ctx.deps.storage,
+                    (&slash_user, &local_staking.contract.0),
+                    &lien,
+                )?;
+                // Adjust total slashable and max lien (below)
+                user_info.total_slashable.sub(
+                    (slash_amount - free_collateral) * lien.slashable,
+                    Uint128::zero(),
+                )?;
+                // TODO: Remove required amount from the user's stake (needs rebalance msg)
+                // Check / adjust mesh security invariants according to the new collateral
+                self.propagate_slash(
+                    ctx.deps.storage,
+                    &slash_user,
+                    &mut user_info,
+                    new_collateral,
+                )?;
+            }
+            // Recompute max lien
+            self.recalculate_max_lien(ctx.deps.storage, &slash_user, &mut user_info)?;
+            // Save user info
+            self.users.save(ctx.deps.storage, &slash_user, &user_info)?;
         }
         Ok(())
     }
@@ -756,7 +786,7 @@ impl VaultContract<'_> {
             // Keep the invariant over the lien
             lien.amount = ValueRange::new(new_low_amount, new_high_amount);
             self.liens.save(storage, (user, &lien_holder), &lien)?;
-            // TODO: Remove required amount from the user's stake (needs burn / adjust / rebalance msg)
+            // TODO: Remove required amount from the user's stake (needs rebalance msg)
         }
         Ok(())
     }
