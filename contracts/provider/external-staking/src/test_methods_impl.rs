@@ -195,8 +195,8 @@ impl TestMethods for ExternalStakingContract<'_> {
     ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
-            self.handle_slashing(ctx.deps, validator, height, time, tombstone)?;
-            Ok(Response::new())
+            let msg = self.handle_slashing(ctx.deps, validator, height, time, tombstone)?;
+            Ok(Response::new().add_message(msg))
         }
         #[cfg(not(any(test, feature = "mt")))]
         {
