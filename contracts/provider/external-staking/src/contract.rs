@@ -733,9 +733,9 @@ impl ExternalStakingContract<'_> {
             .sub_prefix(validator.clone())
             .range(deps.storage, None, None, Order::Ascending)
             .map(|item| {
-                let ((_, user), stake) = item?;
+                let ((user, _), stake) = item?;
                 Ok::<_, ContractError>(SlashInfo {
-                    user: user.to_string(),
+                    user,
                     stake: stake.stake.high(),
                 })
             })
