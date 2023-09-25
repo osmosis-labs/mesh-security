@@ -605,20 +605,18 @@ mod tests {
         fn assert_eq(&self, expected: &[(&str, u128)]) {
             if expected.is_empty() {
                 self.assert_empty();
+            } else if let Self::Batch(rewards) = self {
+                let mut expected = expected
+                    .iter()
+                    .map(|(val, reward)| RewardInfo {
+                        validator: val.to_string(),
+                        reward: (*reward).into(),
+                    })
+                    .collect::<Vec<_>>();
+                expected.sort();
+                assert_eq!(rewards, &expected);
             } else {
-                if let Self::Batch(rewards) = self {
-                    let mut expected = expected
-                        .iter()
-                        .map(|(val, reward)| RewardInfo {
-                            validator: val.to_string(),
-                            reward: (*reward).into(),
-                        })
-                        .collect::<Vec<_>>();
-                    expected.sort();
-                    assert_eq!(rewards, &expected);
-                } else {
-                    panic!("empty result")
-                }
+                panic!("empty result")
             }
         }
     }
