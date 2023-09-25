@@ -739,6 +739,9 @@ impl VaultContract<'_> {
 
             // Slash user
             lien.amount.sub(slash_amount, Uint128::zero())?;
+            // Save lien
+            self.liens
+                .save(ctx.deps.storage, (&slash_user, &lien_holder), &lien)?;
             // Adjust collateral, slashable total and max lien (below)
             user_info.collateral = new_collateral;
             user_info
@@ -761,7 +764,7 @@ impl VaultContract<'_> {
                 )?;
                 // Adjust total slashable and max lien (below)
                 user_info.total_slashable.sub(
-                    (slash_amount - free_collateral) * lien.slashable,
+                    (slash_amount - free_collateral) * native_lien.slashable,
                     Uint128::zero(),
                 )?;
                 // TODO: Remove required amount from the user's stake (needs rebalance msg)
@@ -775,9 +778,6 @@ impl VaultContract<'_> {
             }
             // Recompute max lien
             self.recalculate_max_lien(ctx.deps.storage, &slash_user, &mut user_info)?;
-            // Save lien
-            self.liens
-                .save(ctx.deps.storage, (&slash_user, &lien_holder), &lien)?;
             // Save user info
             self.users.save(ctx.deps.storage, &slash_user, &user_info)?;
         }
