@@ -470,7 +470,7 @@ mod tests {
     }
 
     #[test]
-    fn reply_rewards_zero() {
+    fn reply_rewards_all_zero() {
         let mut deps = mock_dependencies();
         let contract = VirtualStakingContract::new();
 
@@ -483,6 +483,24 @@ mod tests {
         for _ in 0..3 {
             contract.push_rewards(&mut deps, 0).assert_empty();
         }
+    }
+
+    #[test]
+    fn reply_rewards_mid_push_is_zero() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(
+            &mut deps.storage,
+            &["validator3", "validator2", "validator1"],
+        );
+
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract.push_rewards(&mut deps, 0).assert_empty();
+        contract
+            .push_rewards(&mut deps, 10)
+            .assert_eq(&[("validator1", 20), ("validator3", 10)]);
     }
 
     #[test]
