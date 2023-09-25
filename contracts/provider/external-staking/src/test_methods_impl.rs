@@ -182,4 +182,26 @@ impl TestMethods for ExternalStakingContract<'_> {
             Err(ContractError::Unauthorized {})
         }
     }
+
+    /// Slashes a validator
+    #[msg(exec)]
+    fn test_handle_slashing(
+        &self,
+        ctx: ExecCtx,
+        validator: String,
+        height: u64,
+        time: u64,
+        tombstone: bool,
+    ) -> Result<Response, ContractError> {
+        #[cfg(any(test, feature = "mt"))]
+        {
+            self.handle_slashing(ctx.deps, validator, height, time, tombstone)?;
+            Ok(Response::new())
+        }
+        #[cfg(not(any(test, feature = "mt")))]
+        {
+            let _ = (ctx, validator, height, time, tombstone);
+            Err(ContractError::Unauthorized {})
+        }
+    }
 }

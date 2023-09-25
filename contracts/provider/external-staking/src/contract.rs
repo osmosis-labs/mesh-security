@@ -701,6 +701,9 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
+    /// Slashes a validator.
+    /// Validator has to be active at height `height`.
+    ///
     /// In test code, this is called from `test_handle_slashing`.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub(crate) fn handle_slashing(
@@ -733,7 +736,7 @@ impl ExternalStakingContract<'_> {
                 let ((_, user), stake) = item?;
                 Ok::<_, ContractError>(SlashInfo {
                     user: user.to_string(),
-                    stake: stake.stake.high(), // FIXME? Send a value range
+                    stake: stake.stake.high(),
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
