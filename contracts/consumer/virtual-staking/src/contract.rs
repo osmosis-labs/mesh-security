@@ -194,15 +194,16 @@ impl VirtualStakingContract<'_> {
 
         // Find all the tokens received here (consider it rewards to that validator)
         let cfg = self.config.load(deps.storage)?;
+        let total = VALIDATOR_REWARDS_BATCH.total(deps.storage)?;
         let reward = deps
             .querier
             .query_balance(env.contract.address, &cfg.denom)?
             .amount
-            - VALIDATOR_REWARDS_BATCH.total(deps.storage)?;
+            - total;
 
         let mut resp = Response::new();
 
-        if reward.is_zero() && !finished {
+        if reward.is_zero() && (!finished || total.is_zero()) {
             return Ok(resp);
         }
 
