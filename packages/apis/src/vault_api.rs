@@ -43,7 +43,7 @@ pub trait VaultApi {
     /// This must be called by the external staking contract to process a slashing event
     /// because of a misbehaviour on the Consumer chain
     #[msg(exec)]
-    fn process_cross_slashing(
+    fn cross_slash(
         &self,
         ctx: ExecCtx,
         slashes: Vec<SlashInfo>,
@@ -98,7 +98,7 @@ impl VaultApiHelper {
     }
 
     pub fn process_cross_slashing(&self, slashes: Vec<SlashInfo>) -> Result<WasmMsg, StdError> {
-        let msg = VaultApiExecMsg::ProcessCrossSlashing { slashes };
+        let msg = VaultApiExecMsg::CrossSlash { slashes };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,

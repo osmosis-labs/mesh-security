@@ -874,7 +874,7 @@ impl VaultApi for VaultContract<'_> {
 
     /// This must be called by the external staking contract to process a misbehaviour
     #[msg(exec)]
-    fn process_cross_slashing(
+    fn cross_slash(
         &self,
         mut ctx: ExecCtx,
         slashes: Vec<SlashInfo>,
