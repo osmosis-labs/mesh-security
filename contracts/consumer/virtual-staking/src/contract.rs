@@ -196,14 +196,21 @@ impl VirtualStakingContract<'_> {
         let cfg = self.config.load(deps.storage)?;
         let reward = deps
             .querier
-            .query_balance(env.contract.address, cfg.denom)?;
-        if reward.amount.is_zero() {
-            return Ok(Response::new());
-        }
-
-        let all_rewards = VALIDATOR_REWARDS_BATCH.push(deps.storage, target, reward.amount)?;
+            .query_balance(env.contract.address, &cfg.denom)?
+            .amount
+            - VALIDATOR_REWARDS_BATCH.total(deps.storage)?;
 
         let mut resp = Response::new();
+
+        if reward.is_zero() && !finished {
+            return Ok(resp);
+        }
+
+        let all_rewards = if reward.is_zero() {
+            VALIDATOR_REWARDS_BATCH.get(deps.storage)?
+        } else {
+            VALIDATOR_REWARDS_BATCH.push(deps.storage, target, reward)?
+        };
 
         if finished {
             VALIDATOR_REWARDS_BATCH.wipe(deps.storage);
@@ -213,7 +220,7 @@ impl VirtualStakingContract<'_> {
             let msg = WasmMsg::Execute {
                 contract_addr: cfg.converter.into_string(),
                 msg: to_binary(&msg)?,
-                funds: vec![reward],
+                funds: vec![coin(reward.into(), cfg.denom)],
             };
             resp = resp.add_message(msg);
         }
@@ -270,11 +277,17 @@ const REWARD_TARGETS: Item<Vec<String>> = Item::new("reward_targets");
 const VALIDATOR_REWARDS_BATCH: ValidatorRewardsBatch = ValidatorRewardsBatch::new();
 const REPLY_REWARDS_ID: u64 = 1;
 
-struct ValidatorRewardsBatch<'a>(Item<'a, Vec<RewardInfo>>);
+struct ValidatorRewardsBatch<'a> {
+    rewards: Item<'a, Vec<RewardInfo>>,
+    total: Item<'a, Uint128>,
+}
 
 impl<'a> ValidatorRewardsBatch<'a> {
     const fn new() -> Self {
-        Self(Item::new("validator_rewards_batch"))
+        Self {
+            rewards: Item::new("validator_rewards_batch"),
+            total: Item::new("validator_rewards_batch_total"),
+        }
     }
 
     fn push(
@@ -282,18 +295,30 @@ impl<'a> ValidatorRewardsBatch<'a> {
         store: &mut dyn Storage,
         validator: impl Into<String>,
         reward: impl Into<Uint128>,
-    ) -> Result<Vec<RewardInfo>, StdError> {
-        self.0.update::<_, StdError>(store, |mut vec| {
+    ) -> StdResult<Vec<RewardInfo>> {
+        let reward = reward.into();
+        self.total
+            .update(store, |old| Ok::<_, StdError>(old + reward))?;
+        self.rewards.update::<_, StdError>(store, |mut vec| {
             vec.push(RewardInfo {
                 validator: validator.into(),
-                reward: reward.into(),
+                reward,
             });
             Ok(vec)
         })
     }
 
+    fn get(&self, store: &mut dyn Storage) -> StdResult<Vec<RewardInfo>> {
+        self.rewards.load(store)
+    }
+
     fn wipe(&self, store: &mut dyn Storage) {
-        self.0.remove(store);
+        self.rewards.remove(store);
+    }
+
+    /// The total of all rewards currently in the batch.
+    fn total(&self, store: &mut dyn Storage) -> StdResult<Uint128> {
+        self.total.load(store)
     }
 }
 
