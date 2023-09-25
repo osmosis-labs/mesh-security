@@ -19,8 +19,9 @@ use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
 use crate::msg::{
-    AccountClaimsResponse, AccountResponse, AllAccountsResponse, AllAccountsResponseItem,
-    AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienResponse, StakingInitInfo, TxResponse,
+    AccountClaimsResponse, AccountDetailsResponse, AccountResponse, AllAccountsResponse,
+    AllAccountsResponseItem, AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienResponse,
+    StakingInitInfo, TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
@@ -262,6 +263,28 @@ impl VaultContract<'_> {
             denom,
             bonded: user.collateral,
             free: user.free_collateral(),
+        })
+    }
+
+    #[msg(query)]
+    fn account_details(
+        &self,
+        ctx: QueryCtx,
+        account: String,
+    ) -> Result<AccountDetailsResponse, ContractError> {
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+        let account = ctx.deps.api.addr_validate(&account)?;
+
+        let user = self
+            .users
+            .may_load(ctx.deps.storage, &account)?
+            .unwrap_or_default();
+        Ok(AccountDetailsResponse {
+            denom,
+            bonded: user.collateral,
+            free: user.free_collateral(),
+            max_lien: user.max_lien,
+            total_slashable: user.total_slashable,
         })
     }
 
