@@ -2187,30 +2187,9 @@ fn slash_scenario_2() {
     vault
         .stake_remote(
             cross_staking.contract_addr.to_string(),
-            coin(150, OSMO),
+            coin(200, OSMO),
             to_binary(&ReceiveVirtualStake {
                 validator: validator1.to_string(),
-            })
-            .unwrap(),
-        )
-        .call(user)
-        .unwrap();
-
-    // TODO: Hardcoded `external-staking`'s commit_stake call (lack of IBC support yet).
-    // This should be through `IbcPacketAckMsg`
-    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
-    cross_staking
-        .test_methods_proxy()
-        .test_commit_stake(last_external_staking_tx)
-        .call("test")
-        .unwrap();
-
-    vault
-        .stake_remote(
-            cross_staking.contract_addr.to_string(),
-            coin(50, OSMO),
-            to_binary(&ReceiveVirtualStake {
-                validator: validator2.to_string(),
             })
             .unwrap(),
         )
@@ -2274,25 +2253,25 @@ fn slash_scenario_2() {
         [
             LienResponse {
                 lienholder: local_staking_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(185))
+                amount: ValueRange::new_val(Uint128::new(180))
             },
             LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(185))
+                amount: ValueRange::new_val(Uint128::new(180))
             },
         ]
     );
 
     let acc_details = vault.account_details(user.to_owned()).unwrap();
     // Max lien
-    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(185)));
+    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(180)));
     // Total slashable
     assert_eq!(
         acc_details.total_slashable,
-        ValueRange::new_val(Uint128::new(37))
+        ValueRange::new_val(Uint128::new(36))
     );
     // Collateral
-    assert_eq!(acc_details.bonded, Uint128::new(185));
+    assert_eq!(acc_details.bonded, Uint128::new(180));
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
 }
