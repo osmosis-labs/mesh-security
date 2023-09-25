@@ -46,6 +46,7 @@ pub trait ConverterApi {
 }
 
 #[cw_serde]
+#[derive(PartialOrd, Eq, Ord)]
 pub struct RewardInfo {
     pub validator: String,
     pub reward: Uint128,

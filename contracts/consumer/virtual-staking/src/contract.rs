@@ -439,15 +439,9 @@ pub fn sudo(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use cosmwasm_std::{
         coins, from_binary,
-        testing::{
-            mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage,
-            MOCK_CONTRACT_ADDR,
-        },
-        Empty, QuerierWrapper,
+        testing::{mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage},
     };
 
     use super::*;
@@ -459,52 +453,19 @@ mod tests {
         let mut deps = mock_dependencies();
         let contract = VirtualStakingContract::new();
 
-        contract
-            .instantiate(InstantiateCtx {
-                deps: deps.as_mut(),
-                env: mock_env(),
-                info: mock_info("me", &[]),
-            })
-            .unwrap();
-        REWARD_TARGETS
-            .save(
-                &mut deps.storage,
-                &vec![
-                    "validator3".to_string(),
-                    "validator2".to_string(),
-                    "validator1".to_string(),
-                ],
-            )
-            .unwrap();
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(
+            &mut deps.storage,
+            &["validator3", "validator2", "validator1"],
+        );
 
-        assert_eq!(push_rewards(&contract, &mut deps, 10).len(), 0);
-        assert_eq!(push_rewards(&contract, &mut deps, 20).len(), 0);
-
-        let msgs = push_rewards(&contract, &mut deps, 30);
-        assert_eq!(msgs.len(), 1);
-        if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = msgs[0].clone().msg {
-            if let converter_api::ExecMsg::DistributeRewards { payments } =
-                from_binary(&msg).unwrap()
-            {
-                let payments = payments
-                    .into_iter()
-                    .map(|RewardInfo { validator, reward }| (validator, reward))
-                    .collect::<HashMap<_, _>>();
-                assert_eq!(
-                    payments,
-                    [
-                        ("validator1".to_string(), 10u128.into()),
-                        ("validator2".to_string(), 20u128.into()),
-                        ("validator3".to_string(), 30u128.into())
-                    ]
-                    .into()
-                );
-            } else {
-                panic!("invalid message");
-            }
-        } else {
-            panic!("invalid message");
-        }
+        contract.push_rewards(&mut deps, 10).assert_empty();
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract.push_rewards(&mut deps, 30).assert_eq(&[
+            ("validator1", 10),
+            ("validator2", 20),
+            ("validator3", 30),
+        ]);
     }
 
     #[test]
@@ -512,40 +473,107 @@ mod tests {
         let mut deps = mock_dependencies();
         let contract = VirtualStakingContract::new();
 
-        contract
-            .instantiate(InstantiateCtx {
-                deps: deps.as_mut(),
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(
+            &mut deps.storage,
+            &["validator3", "validator2", "validator1"],
+        );
+
+        for _ in 0..3 {
+            contract.push_rewards(&mut deps, 0).assert_empty();
+        }
+    }
+
+    fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
+        REWARD_TARGETS
+            .save(
+                storage,
+                &targets.iter().map(<&str>::to_string).collect::<Vec<_>>(),
+            )
+            .unwrap();
+    }
+
+    trait VirtualStakingExt {
+        fn quick_inst(&self, deps: DepsMut);
+
+        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult;
+    }
+
+    impl VirtualStakingExt for VirtualStakingContract<'_> {
+        fn quick_inst(&self, deps: DepsMut) {
+            self.instantiate(InstantiateCtx {
+                deps,
                 env: mock_env(),
                 info: mock_info("me", &[]),
             })
             .unwrap();
-        REWARD_TARGETS
-            .save(
-                &mut deps.storage,
-                &vec![
-                    "validator3".to_string(),
-                    "validator2".to_string(),
-                    "validator1".to_string(),
-                ],
-            )
-            .unwrap();
+        }
 
-        for _ in 0..3 {
-            assert_eq!(push_rewards(&contract, &mut deps, 0).len(), 0);
+        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult {
+            let denom = self.config.load(&deps.storage).unwrap().denom;
+            deps.querier =
+                MockQuerier::new(&[(mock_env().contract.address.as_str(), &coins(amount, denom))]);
+            PushRewardsResult::new(
+                self.reply_rewards(deps.as_mut(), mock_env())
+                    .unwrap()
+                    .messages,
+            )
         }
     }
 
-    fn push_rewards(
-        contract: &VirtualStakingContract,
-        deps: &mut OwnedDeps,
-        amount: u128,
-    ) -> Vec<SubMsg> {
-        let denom = contract.config.load(&deps.storage).unwrap().denom;
-        deps.querier =
-            MockQuerier::new(&[(mock_env().contract.address.as_str(), &coins(amount, denom))]);
-        contract
-            .reply_rewards(deps.as_mut(), mock_env())
-            .unwrap()
-            .messages
+    enum PushRewardsResult {
+        Empty,
+        Batch(Vec<RewardInfo>),
+    }
+
+    impl PushRewardsResult {
+        fn new(data: Vec<SubMsg>) -> Self {
+            match &data[..] {
+                [] => Self::Empty,
+                [SubMsg {
+                    msg: CosmosMsg::Wasm(WasmMsg::Execute { msg: bin_msg, .. }),
+                    ..
+                }] => {
+                    if let converter_api::ExecMsg::DistributeRewards { mut payments } =
+                        from_binary(bin_msg).unwrap()
+                    {
+                        payments.sort();
+                        Self::Batch(payments)
+                    } else {
+                        panic!("failed to deserialize DistributeRewards msg")
+                    }
+                }
+                _ => panic!("invalid response"),
+            }
+        }
+
+        #[track_caller]
+        fn assert_empty(&self) {
+            if let Self::Empty = self {
+            } else {
+                panic!("not empty");
+            }
+        }
+
+        #[track_caller]
+        fn assert_eq(&self, expected: &[(&str, u128)]) {
+            if expected.is_empty() {
+                self.assert_empty();
+            } else {
+                if let Self::Batch(rewards) = self {
+                    let mut expected = expected
+                        .iter()
+                        .map(|(val, reward)| RewardInfo {
+                            validator: val.to_string(),
+                            reward: (*reward).into(),
+                        })
+                        .collect::<Vec<_>>();
+                    expected.sort();
+                    assert_eq!(rewards, &expected);
+                } else {
+                    panic!("empty result")
+                }
+            }
+        }
     }
 }
