@@ -484,6 +484,24 @@ mod tests {
         }
     }
 
+    #[test]
+    fn reply_rewards_last_push_is_zero() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(
+            &mut deps.storage,
+            &["validator3", "validator2", "validator1"],
+        );
+
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract.push_rewards(&mut deps, 10).assert_empty();
+        contract
+            .push_rewards(&mut deps, 0)
+            .assert_eq(&[("validator1", 20), ("validator2", 10)]);
+    }
+
     fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
         REWARD_TARGETS
             .save(
