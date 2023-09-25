@@ -2047,19 +2047,6 @@ fn slash_scenario_1() {
         .call("test")
         .unwrap();
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
-    // Max lien
-    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
-    // Total slashable
-    assert_eq!(
-        acc_details.total_slashable,
-        ValueRange::new_val(Uint128::new(33))
-    );
-    // Collateral
-    assert_eq!(acc_details.bonded, Uint128::new(190));
-    // Free collateral
-    assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
-
     // Liens
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(
@@ -2075,4 +2062,237 @@ fn slash_scenario_1() {
             },
         ]
     );
+
+    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    // Max lien
+    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
+    // Total slashable
+    assert_eq!(
+        acc_details.total_slashable,
+        ValueRange::new_val(Uint128::new(33))
+    );
+    // Collateral
+    assert_eq!(acc_details.bonded, Uint128::new(190));
+    // Free collateral
+    assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
+}
+
+/// Scenario 2:
+/// https://github.com/osmosis-labs/mesh-security/blob/main/docs/ibc/Slashing.md#scenario-2-slashed-delegator-has-no-free-collateral-on-the-vault
+#[test]
+fn slash_scenario_2() {
+    let owner = "owner";
+    let user = "user1";
+
+    let app = MtApp::new(|router, _api, storage| {
+        router
+            .bank
+            .init_balance(storage, &Addr::unchecked(user), coins(200, OSMO))
+            .unwrap();
+    });
+    let app = App::new(app);
+
+    // Contracts setup
+
+    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
+    let cross_staking_code =
+        mesh_external_staking::contract::multitest_utils::CodeId::store_code(&app);
+    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
+
+    let staking_init_info = StakingInitInfo {
+        admin: None,
+        code_id: local_staking_code.code_id(),
+        msg: to_binary(&Empty {}).unwrap(),
+        label: None,
+    };
+
+    let vault = vault_code
+        .instantiate(OSMO.to_owned(), staking_init_info)
+        .with_label("Vault")
+        .call(owner)
+        .unwrap();
+
+    let local_staking_addr = Addr::unchecked(vault.config().unwrap().local_staking);
+
+    let unbond_period = 100;
+    let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
+
+    let cross_staking = cross_staking_code
+        .instantiate(
+            OSMO.to_owned(),
+            STAR.to_owned(),
+            vault.contract_addr.to_string(),
+            unbond_period,
+            remote_contact,
+            Decimal::percent(SLASHING_PERCENTAGE),
+        )
+        .call(owner)
+        .unwrap();
+
+    // Set active validator
+    let update_valset_height = 12345; // From AddValidator::mock
+    let update_valset_time = 1687357499;
+
+    let validator1 = "validator1";
+    let validator2 = "validator2";
+
+    let activate = AddValidator::mock(validator1);
+    cross_staking
+        .test_methods_proxy()
+        .test_set_active_validator(activate)
+        .call("test")
+        .unwrap();
+    let activate = AddValidator::mock(validator2);
+    cross_staking
+        .test_methods_proxy()
+        .test_set_active_validator(activate)
+        .call("test")
+        .unwrap();
+
+    // Bond some tokens
+
+    vault
+        .bond()
+        .with_funds(&coins(200, OSMO))
+        .call(user)
+        .unwrap();
+
+    assert_eq!(
+        vault.account(user.to_owned()).unwrap(),
+        AccountResponse {
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::new(200)),
+        }
+    );
+
+    // Staking locally
+
+    vault
+        .stake_local(coin(200, OSMO), Binary::default())
+        .call(user)
+        .unwrap();
+
+    assert_eq!(
+        vault.account(user.to_owned()).unwrap(),
+        AccountResponse {
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(200),
+            free: ValueRange::new_val(Uint128::zero()),
+        }
+    );
+
+    // Staking remotely
+
+    vault
+        .stake_remote(
+            cross_staking.contract_addr.to_string(),
+            coin(150, OSMO),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator1.to_string(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
+    // TODO: Hardcoded `external-staking`'s commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
+    cross_staking
+        .test_methods_proxy()
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
+        .unwrap();
+
+    vault
+        .stake_remote(
+            cross_staking.contract_addr.to_string(),
+            coin(50, OSMO),
+            to_binary(&ReceiveVirtualStake {
+                validator: validator2.to_string(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
+    // TODO: Hardcoded `external-staking`'s commit_stake call (lack of IBC support yet).
+    // This should be through `IbcPacketAckMsg`
+    let last_external_staking_tx = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
+    cross_staking
+        .test_methods_proxy()
+        .test_commit_stake(last_external_staking_tx)
+        .call("test")
+        .unwrap();
+
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [
+            LienResponse {
+                lienholder: local_staking_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(200))
+            },
+            LienResponse {
+                lienholder: cross_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(200))
+            },
+        ]
+    );
+
+    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    // Max lien
+    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(200)));
+    // Total slashable
+    assert_eq!(
+        acc_details.total_slashable,
+        ValueRange::new_val(Uint128::new(40))
+    );
+    // Collateral
+    assert_eq!(acc_details.bonded, Uint128::new(200));
+    // Free collateral
+    assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
+
+    // Validator 1 is slashed
+
+    cross_staking
+        .test_methods_proxy()
+        .test_handle_slashing(
+            validator1.to_string(),
+            update_valset_height + 123,
+            update_valset_time + 12,
+            true,
+        )
+        .call("test")
+        .unwrap();
+
+    // Liens
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [
+            LienResponse {
+                lienholder: local_staking_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(185))
+            },
+            LienResponse {
+                lienholder: cross_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(185))
+            },
+        ]
+    );
+
+    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    // Max lien
+    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(185)));
+    // Total slashable
+    assert_eq!(
+        acc_details.total_slashable,
+        ValueRange::new_val(Uint128::new(37))
+    );
+    // Collateral
+    assert_eq!(acc_details.bonded, Uint128::new(185));
+    // Free collateral
+    assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
 }
