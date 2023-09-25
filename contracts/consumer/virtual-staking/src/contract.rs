@@ -289,7 +289,8 @@ impl<'a> ValidatorRewardsBatch<'a> {
     }
 
     fn init(&self, store: &mut dyn Storage) -> StdResult<()> {
-        self.0.save(store, &vec![])?;
+        self.rewards.save(store, &vec![])?;
+        self.total.save(store, &Uint128::zero())?;
 
         Ok(())
     }
@@ -529,8 +530,17 @@ mod tests {
 
         fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult {
             let denom = self.config.load(&deps.storage).unwrap().denom;
-            deps.querier =
-                MockQuerier::new(&[(mock_env().contract.address.as_str(), &coins(amount, denom))]);
+            let old_amount = deps
+                .as_ref()
+                .querier
+                .query_balance(mock_env().contract.address, &denom)
+                .unwrap()
+                .amount
+                .u128();
+            deps.querier = MockQuerier::new(&[(
+                mock_env().contract.address.as_str(),
+                &coins(old_amount + amount, denom),
+            )]);
             PushRewardsResult::new(
                 self.reply_rewards(deps.as_mut(), mock_env())
                     .unwrap()
