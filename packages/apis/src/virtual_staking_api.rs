@@ -36,13 +36,19 @@ pub enum SudoMsg {
     ///
     /// It should also withdraw all pending rewards here, and send them to the converter contract.
     Rebalance {},
-    /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update: addition
-    /// of a new validator to the active validator set, removal of a validator from the
-    /// active validator set, or permanent removal (i.e. tombstoning) of a validator from the active
-    /// validator set.
+    /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update:
+    ///  - Addition of a new validator to the active validator set.
+    ///  - Temporary removal of a validator from the active set. (i.e. `unbonded` state).
+    ///  - Update of validator data.
+    ///  - Temporary removal of a validator from the active set due to jailing. Implies slashing.
+    ///  - Addition of an existing validator to the active validator set.
+    ///  - Permanent removal (i.e. tombstoning) of a validator from the active set. Implies slashing
     ValsetUpdate {
         additions: Vec<Validator>,
-        removals: Vec<Validator>,
-        tombstones: Vec<Validator>,
+        removals: Vec<String>,
+        updated: Vec<Validator>,
+        jailed: Vec<String>,
+        unjailed: Vec<String>,
+        tombstoned: Vec<String>,
     },
 }

@@ -148,10 +148,9 @@ pub(crate) fn add_validators_msg(
 pub(crate) fn tombstone_validators_msg(
     env: &Env,
     channel: &IbcChannel,
-    validators: &[Validator],
+    validators: &[String],
 ) -> Result<IbcMsg, ContractError> {
-    let updates = validators.iter().map(|v| v.address.clone()).collect();
-    let packet = ConsumerPacket::RemoveValidators(updates);
+    let packet = ConsumerPacket::RemoveValidators(Vec::from(validators));
     let msg = IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id.clone(),
         data: to_binary(&packet)?,

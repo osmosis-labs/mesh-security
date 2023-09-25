@@ -237,12 +237,7 @@ fn valset_update_works() {
             max_change_rate: Default::default(),
         },
     ];
-    let rem_validators = vec![Validator {
-        address: "validator3".to_string(),
-        commission: Default::default(),
-        max_commission: Default::default(),
-        max_change_rate: Default::default(),
-    }];
+    let rem_validators = vec!["validator3".to_string()];
 
     // Check that only the virtual staking contract can call this handler
     let res = converter

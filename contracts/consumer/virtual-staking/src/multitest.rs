@@ -147,22 +147,15 @@ fn valset_update_sudo() {
             max_change_rate: Default::default(),
         },
     ];
-    let rems = vec![Validator {
-        address: "cosmosval2".to_string(),
-        commission: Decimal::percent(2),
-        max_commission: Decimal::percent(20),
-        max_change_rate: Default::default(),
-    }];
-    let tombs = vec![Validator {
-        address: "cosmosval3".to_string(),
-        commission: Decimal::percent(3),
-        max_commission: Decimal::percent(30),
-        max_change_rate: Default::default(),
-    }];
+    let rems = vec!["cosmosval2".to_string()];
+    let tombs = vec!["cosmosval3".to_string()];
     let msg = SudoMsg::ValsetUpdate {
         additions: adds,
         removals: rems,
-        tombstones: tombs,
+        updated: vec![],
+        jailed: vec![],
+        unjailed: vec![],
+        tombstoned: tombs,
     };
 
     let res = app
