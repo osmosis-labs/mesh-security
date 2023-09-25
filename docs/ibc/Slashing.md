@@ -206,8 +206,7 @@ no slashing propagation is needed.
 - `collateral: 200`
 - `native staking: 200` (local)
 - `lien holder 1 staking: 200` (external)
-  - `validator 1: 150`
-  - `validator 2: 50`
+  - `validator 1: 200`
 
 - `max lien: 200` (native and external)
 - `slashable amount: 200 * 0.10 + 200 * 0.10 = 20 + 20 = 40`
