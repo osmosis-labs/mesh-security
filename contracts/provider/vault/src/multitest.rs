@@ -2033,6 +2033,7 @@ fn slash_scenario_1() {
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::new(10)));
 
     // Validator 1 is slashed
+
     cross_staking
         .test_methods_proxy()
         .test_handle_slashing(
@@ -2056,4 +2057,20 @@ fn slash_scenario_1() {
     assert_eq!(acc_details.bonded, Uint128::new(190));
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
+
+    // Liens
+    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    assert_eq!(
+        claims.claims,
+        [
+            LienResponse {
+                lienholder: local_staking_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(190))
+            },
+            LienResponse {
+                lienholder: cross_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(140))
+            },
+        ]
+    );
 }
