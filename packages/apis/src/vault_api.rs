@@ -43,11 +43,7 @@ pub trait VaultApi {
     /// This must be called by the external staking contract to process a slashing event
     /// because of a misbehaviour on the Consumer chain
     #[msg(exec)]
-    fn cross_slash(
-        &self,
-        ctx: ExecCtx,
-        slashes: Vec<SlashInfo>,
-    ) -> Result<Response, Self::Error>;
+    fn cross_slash(&self, ctx: ExecCtx, slashes: Vec<SlashInfo>) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]
