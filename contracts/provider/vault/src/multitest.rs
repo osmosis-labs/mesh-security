@@ -1848,6 +1848,8 @@ fn all_users_fetching() {
     );
 }
 
+/// Scenario 1:
+/// https://github.com/osmosis-labs/mesh-security/blob/main/docs/ibc/Slashing.md#scenario-1-slashed-delegator-has-free-collateral-on-the-vault
 #[test]
 fn slash_scenario_1() {
     let owner = "owner";
