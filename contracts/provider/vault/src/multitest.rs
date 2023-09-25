@@ -3,7 +3,6 @@ mod local_staking;
 use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
 use cw_multi_test::App as MtApp;
 use mesh_apis::ibc::AddValidator;
-use mesh_apis::vault_api::SlashInfo;
 use mesh_external_staking::contract::multitest_utils::ExternalStakingContractProxy;
 use mesh_external_staking::msg::{AuthorizedEndpoint, ReceiveVirtualStake};
 use mesh_external_staking::test_methods_impl::test_utils::TestMethods;
@@ -1900,6 +1899,9 @@ fn slash_scenario_1() {
         .unwrap();
 
     // Set active validator
+    let update_valset_height = 12345; // From AddValidator::mock
+    let update_valset_time = 1687357499;
+
     let validator1 = "validator1";
     let validator2 = "validator2";
 
@@ -2031,15 +2033,15 @@ fn slash_scenario_1() {
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::new(10)));
 
     // Validator 1 is slashed
-    // TODO: Call this through the external-staking (test) API
-
-    vault
-        .vault_api_proxy()
-        .process_cross_slashing(vec![SlashInfo {
-            user: user.to_string(),
-            stake: Uint128::new(100),
-        }])
-        .call(cross_staking.contract_addr.as_str())
+    cross_staking
+        .test_methods_proxy()
+        .test_handle_slashing(
+            validator1.to_string(),
+            update_valset_height + 1234,
+            update_valset_time + 120,
+            true,
+        )
+        .call("test")
         .unwrap();
 
     let acc_details = vault.account_details(user.to_owned()).unwrap();
