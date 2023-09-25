@@ -729,16 +729,18 @@ impl VaultContract<'_> {
         for slash in slashes {
             let slash_user = Addr::unchecked(slash.user.clone());
             // User must have a lien with this lien holder
-            let lien = self
+            let mut lien = self
                 .liens
                 .load(ctx.deps.storage, (&slash_user, &lien_holder))?;
             let slash_amount = slash.stake * lien.slashable;
             let mut user_info = self.users.load(ctx.deps.storage, &slash_user)?;
             let new_collateral = user_info.collateral - slash_amount;
             let free_collateral = user_info.free_collateral().low(); // For simplicity
-                                                                     // Slash user
+
+            // Slash user
+            lien.amount.sub(slash_amount, Uint128::zero())?;
+            // Adjust collateral, slashable total and max lien (below)
             user_info.collateral = new_collateral;
-            // Adjust total slashable and max lien (below)
             user_info
                 .total_slashable
                 .sub(slash_amount * lien.slashable, Uint128::zero())?;
@@ -755,7 +757,7 @@ impl VaultContract<'_> {
                 self.liens.save(
                     ctx.deps.storage,
                     (&slash_user, &local_staking.contract.0),
-                    &lien,
+                    &native_lien,
                 )?;
                 // Adjust total slashable and max lien (below)
                 user_info.total_slashable.sub(
@@ -773,6 +775,9 @@ impl VaultContract<'_> {
             }
             // Recompute max lien
             self.recalculate_max_lien(ctx.deps.storage, &slash_user, &mut user_info)?;
+            // Save lien
+            self.liens
+                .save(ctx.deps.storage, (&slash_user, &lien_holder), &lien)?;
             // Save user info
             self.users.save(ctx.deps.storage, &slash_user, &user_info)?;
         }
