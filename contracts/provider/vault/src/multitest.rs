@@ -1865,6 +1865,7 @@ fn init_app(user: &str, amount: u128) -> App<MtApp> {
 fn setup<'app>(
     app: &'app App<MtApp>,
     owner: &str,
+    slash_percent: u64,
 ) -> (
     VaultContractProxy<'app, MtApp>,
     Addr,
@@ -1888,7 +1889,7 @@ fn setup<'app>(
 
     let local_staking_addr = Addr::unchecked(vault.config().unwrap().local_staking);
 
-    let cross_staking = setup_cross_stake(app, owner, &vault);
+    let cross_staking = setup_cross_stake(app, owner, &vault, slash_percent);
     (vault, local_staking_addr, cross_staking)
 }
 
@@ -1896,6 +1897,7 @@ fn setup_cross_stake<'app>(
     app: &'app App<MtApp>,
     owner: &str,
     vault: &VaultContractProxy<'app, MtApp>,
+    slash_percent: u64,
 ) -> ExternalStakingContractProxy<'app, MtApp> {
     // FIXME: Code shouldn't be duplicated
     let cross_staking_code =
@@ -1911,7 +1913,7 @@ fn setup_cross_stake<'app>(
             vault.contract_addr.to_string(),
             unbond_period,
             remote_contact,
-            Decimal::percent(SLASHING_PERCENTAGE),
+            Decimal::percent(slash_percent),
         )
         .call(owner)
         .unwrap()
@@ -1993,13 +1995,15 @@ fn stake_remotely(
 fn slash_scenario_1() {
     let owner = "owner";
     let user = "user1";
+    // Both local and remote slashing percentage
+    let slashing_percentage = 10;
     let collateral = 200;
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
 
     let app = init_app(user, collateral);
 
-    let (vault, local_staking_addr, cross_staking) = setup(&app, owner);
+    let (vault, local_staking_addr, cross_staking) = setup(&app, owner, slashing_percentage);
 
     let (update_valset_height, update_valset_time) =
         set_active_validators(&cross_staking, &validators);
@@ -2099,13 +2103,15 @@ fn slash_scenario_1() {
 fn slash_scenario_2() {
     let owner = "owner";
     let user = "user1";
+    // Both local and remote slashing percentage
+    let slashing_percentage = 10;
     let collateral = 200;
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
 
     let app = init_app(user, collateral);
 
-    let (vault, local_staking_addr, cross_staking) = setup(&app, owner);
+    let (vault, local_staking_addr, cross_staking) = setup(&app, owner, slashing_percentage);
 
     let (update_valset_height, update_valset_time) =
         set_active_validators(&cross_staking, &validators);
@@ -2196,13 +2202,15 @@ fn slash_scenario_2() {
 fn slash_scenario_3() {
     let owner = "owner";
     let user = "user1";
+    // Both local and remote slashing percentage
+    let slashing_percentage = 10;
     let collateral = 200;
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
 
     let app = init_app(user, collateral);
 
-    let (vault, local_staking_addr, cross_staking) = setup(&app, owner);
+    let (vault, local_staking_addr, cross_staking) = setup(&app, owner, slashing_percentage);
 
     let (update_valset_height, update_valset_time) =
         set_active_validators(&cross_staking, &validators);
@@ -2293,6 +2301,8 @@ fn slash_scenario_3() {
 fn slash_scenario_4() {
     let owner = "owner";
     let user = "user1";
+    // Both local and remote slashing percentage
+    let slashing_percentage = 10;
     let collateral = 200;
     let validators_1 = vec!["validator1", "validator2"];
     let validators_2 = vec!["validator3", "validator4"];
@@ -2300,8 +2310,8 @@ fn slash_scenario_4() {
 
     let app = init_app(user, collateral);
 
-    let (vault, local_staking_addr, cross_staking_1) = setup(&app, owner);
-    let cross_staking_2 = setup_cross_stake(&app, owner, &vault);
+    let (vault, local_staking_addr, cross_staking_1) = setup(&app, owner, slashing_percentage);
+    let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage);
 
     let (_, _) = set_active_validators(&cross_staking_1, &validators_1);
     let (update_valset_height, update_valset_time) =
