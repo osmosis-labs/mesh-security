@@ -735,40 +735,25 @@ impl VaultContract<'_> {
             let slash_amount = slash.stake * lien.slashable;
             let mut user_info = self.users.load(ctx.deps.storage, &slash_user)?;
             let new_collateral = user_info.collateral - slash_amount;
-            let free_collateral = user_info.free_collateral().low(); // For simplicity
 
             // Slash user
             lien.amount.sub(slash_amount, Uint128::zero())?;
             // Save lien
             self.liens
                 .save(ctx.deps.storage, (&slash_user, &lien_holder), &lien)?;
-            // Adjust collateral, slashable total and max lien (below)
-            user_info.collateral = new_collateral;
+            // Adjust total slashable and max lien
             user_info
                 .total_slashable
                 .sub(slash_amount * lien.slashable, Uint128::zero())?;
+            self.recalculate_max_lien(ctx.deps.storage, &slash_user, &mut user_info)?;
+            // Get free collateral before adjusting collateral, but after slashing
+            let free_collateral = user_info.free_collateral().low(); // For simplicity
+                                                                     // Adjust collateral
+            user_info.collateral = new_collateral;
             // TODO: Remove required amount from the user's stake (needs rebalance msg)
             if free_collateral < slash_amount {
-                // Native collateral unbonding
-                let local_staking = self.local_staking.load(ctx.deps.storage)?;
-                let mut native_lien = self
-                    .liens
-                    .load(ctx.deps.storage, (&slash_user, &local_staking.contract.0))?;
-                native_lien
-                    .amount
-                    .sub(slash_amount - free_collateral, Uint128::zero())?;
-                self.liens.save(
-                    ctx.deps.storage,
-                    (&slash_user, &local_staking.contract.0),
-                    &native_lien,
-                )?;
-                // Adjust total slashable and max lien (below)
-                user_info.total_slashable.sub(
-                    (slash_amount - free_collateral) * native_lien.slashable,
-                    Uint128::zero(),
-                )?;
-                // TODO: Remove required amount from the user's stake (needs rebalance msg)
                 // Check / adjust mesh security invariants according to the new collateral
+                // FIXME: Need to check if max lien or total slashable are being hit
                 self.propagate_slash(
                     ctx.deps.storage,
                     &slash_user,
