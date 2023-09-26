@@ -2498,7 +2498,7 @@ fn cross_slash_scenario_5() {
         [
             LienResponse {
                 lienholder: local_staking_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(20))
+                amount: ValueRange::new_val(Uint128::new(100))
             },
             LienResponse {
                 lienholder: cross_staking_1.contract_addr.to_string(),
