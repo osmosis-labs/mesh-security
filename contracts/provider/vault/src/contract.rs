@@ -815,7 +815,15 @@ impl VaultContract<'_> {
                     let (_, lien) = item?;
                     Ok::<_, ContractError>(sum + lien.slashable)
                 })?;
-            let sub_amount = required_collateral * slash_ratio_sum.inv().unwrap();
+            let round_up = if (required_collateral * slash_ratio_sum.inv().unwrap())
+                * slash_ratio_sum
+                != required_collateral
+            {
+                Uint128::one()
+            } else {
+                Uint128::zero()
+            };
+            let sub_amount = required_collateral * slash_ratio_sum.inv().unwrap() + round_up;
             let all_liens = self
                 .liens
                 .prefix(user)

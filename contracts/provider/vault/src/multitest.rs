@@ -2498,26 +2498,26 @@ fn cross_slash_scenario_5() {
         [
             LienResponse {
                 lienholder: local_staking_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(79)) // Due to rounding
+                amount: ValueRange::new_val(Uint128::new(78)) // Rounded down
             },
             LienResponse {
                 lienholder: cross_staking_1.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(69)) // Due to rounding
+                amount: ValueRange::new_val(Uint128::new(68)) // Rounded down
             },
             LienResponse {
                 lienholder: cross_staking_2.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(59)) // Due to rounding
+                amount: ValueRange::new_val(Uint128::new(58)) // Rounded down
             },
             LienResponse {
                 lienholder: cross_staking_3.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(79)) // Due to rounding
+                amount: ValueRange::new_val(Uint128::new(78)) // Rounded down
             },
         ]
     );
 
     let acc_details = vault.account_details(user.to_owned()).unwrap();
     // Max lien
-    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(79)));
+    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(78)));
     // Total slashable
     assert_eq!(
         acc_details.total_slashable,
