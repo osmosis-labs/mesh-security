@@ -468,18 +468,82 @@ pub fn sudo(
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        cell::{Ref, RefCell},
+        marker::PhantomData,
+        rc::Rc,
+    };
+
     use cosmwasm_std::{
         coins, from_binary,
-        testing::{mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage},
+        testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
     };
+    use mesh_bindings::BondStatusResponse;
+    use serde::de::DeserializeOwned;
 
     use super::*;
 
-    type OwnedDeps = cosmwasm_std::OwnedDeps<MockStorage, MockApi, MockQuerier>;
+    type OwnedDeps<C = VirtualStakeCustomQuery> =
+        cosmwasm_std::OwnedDeps<MockStorage, MockApi, MockQuerier<C>, C>;
+    type DepsMut<'a, C = VirtualStakeCustomQuery> = cosmwasm_std::DepsMut<'a, C>;
+
+    #[derive(Clone)]
+    struct MockBondStatus(Rc<RefCell<BondStatusResponse>>);
+
+    impl MockBondStatus {
+        fn new(res: BondStatusResponse) -> Self {
+            Self(Rc::new(RefCell::new(res)))
+        }
+
+        fn borrow(&self) -> Ref<'_, BondStatusResponse> {
+            self.0.borrow()
+        }
+
+        fn update(&self, cap: impl Into<Uint128>, delegated: impl Into<Uint128>) {
+            let mut mut_obj = self.0.borrow_mut();
+            mut_obj.cap.amount = cap.into();
+            mut_obj.delegated.amount = delegated.into();
+        }
+    }
+
+    fn mock_dependencies() -> (OwnedDeps, MockBondStatus) {
+        let bond_status = MockBondStatus::new(BondStatusResponse {
+            cap: coin(0, "DOES NOT MATTER"),
+            delegated: coin(0, "DOES NOT MATTER"),
+        });
+
+        let handler = {
+            let bs_copy = bond_status.clone();
+            move |_msg: &_| {
+                cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
+                    to_binary(&*bs_copy.borrow()).unwrap(),
+                ))
+            }
+        };
+
+        (
+            OwnedDeps {
+                storage: MockStorage::default(),
+                api: MockApi::default(),
+                querier: MockQuerier::new(&[]).with_custom_handler(handler),
+                custom_query_type: PhantomData,
+            },
+            bond_status,
+        )
+    }
+
+    #[test]
+    fn rebalance() {
+        let (mut deps, bond_status) = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+
+        contract.hit_epoch(deps.as_mut());
+    }
 
     #[test]
     fn reply_rewards() {
-        let mut deps = mock_dependencies();
+        let (mut deps, _) = mock_dependencies();
         let contract = VirtualStakingContract::new();
 
         contract.quick_inst(deps.as_mut());
@@ -494,7 +558,7 @@ mod tests {
 
     #[test]
     fn reply_rewards_twice() {
-        let mut deps = mock_dependencies();
+        let (mut deps, _) = mock_dependencies();
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
 
@@ -512,7 +576,7 @@ mod tests {
 
     #[test]
     fn reply_rewards_all_zero() {
-        let mut deps = mock_dependencies();
+        let (mut deps, _) = mock_dependencies();
         let contract = VirtualStakingContract::new();
 
         contract.quick_inst(deps.as_mut());
@@ -525,7 +589,7 @@ mod tests {
 
     #[test]
     fn reply_rewards_mid_push_is_zero() {
-        let mut deps = mock_dependencies();
+        let (mut deps, _) = mock_dependencies();
         let contract = VirtualStakingContract::new();
 
         contract.quick_inst(deps.as_mut());
@@ -540,7 +604,7 @@ mod tests {
 
     #[test]
     fn reply_rewards_last_push_is_zero() {
-        let mut deps = mock_dependencies();
+        let (mut deps, _) = mock_dependencies();
         let contract = VirtualStakingContract::new();
 
         contract.quick_inst(deps.as_mut());
@@ -563,22 +627,30 @@ mod tests {
     }
 
     trait VirtualStakingExt {
-        fn quick_inst(&self, deps: DepsMut);
-
-        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult;
+        fn quick_inst<C: CustomQuery>(&self, deps: DepsMut<C>);
+        fn push_rewards<C: CustomQuery + DeserializeOwned>(
+            &self,
+            deps: &mut OwnedDeps<C>,
+            amount: u128,
+        ) -> PushRewardsResult;
+        fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult;
     }
 
     impl VirtualStakingExt for VirtualStakingContract<'_> {
-        fn quick_inst(&self, deps: DepsMut) {
+        fn quick_inst<C: CustomQuery>(&self, deps: DepsMut<C>) {
             self.instantiate(InstantiateCtx {
-                deps,
+                deps: deps.into_empty(),
                 env: mock_env(),
                 info: mock_info("me", &[]),
             })
             .unwrap();
         }
 
-        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult {
+        fn push_rewards<C: CustomQuery + DeserializeOwned>(
+            &self,
+            deps: &mut OwnedDeps<C>,
+            amount: u128,
+        ) -> PushRewardsResult {
             let denom = self.config.load(&deps.storage).unwrap().denom;
             let old_amount = deps
                 .as_ref()
@@ -591,8 +663,9 @@ mod tests {
                 mock_env().contract.address.as_str(),
                 &coins(old_amount + amount, &denom),
             )]);
+
             let result = PushRewardsResult::new(
-                self.reply_rewards(deps.as_mut(), mock_env())
+                self.reply_rewards(deps.as_mut().into_empty(), mock_env())
                     .unwrap()
                     .messages,
             );
@@ -603,6 +676,10 @@ mod tests {
             }
 
             result
+        }
+
+        fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult {
+            HitEpochResult::new(self.handle_epoch(deps, mock_env()).unwrap())
         }
     }
 
@@ -657,6 +734,88 @@ mod tests {
             } else {
                 panic!("empty result")
             }
+        }
+    }
+
+    struct HitEpochResult(Vec<VirtualStakeMsg>);
+
+    impl HitEpochResult {
+        fn new(data: Response<VirtualStakeCustomMsg>) -> Self {
+            let mut msgs = data
+                .messages
+                .into_iter()
+                .map(|SubMsg { msg, .. }| {
+                    if let CosmosMsg::Custom(VirtualStakeCustomMsg::VirtualStake(msg)) = msg {
+                        msg
+                    } else {
+                        panic!("invalid message")
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            Self(msgs)
+        }
+
+        #[track_caller]
+        fn assert_noop(&self) {
+            if !self.0.is_empty() {
+                panic!(
+                    "hit_epoch result was expected to be a noop, but has these: {:?}",
+                    self.0
+                );
+            }
+        }
+
+        fn bonded(&self) -> Vec<(&str, (u128, &str))> {
+            self.0
+                .iter()
+                .filter_map(|msg| {
+                    if let VirtualStakeMsg::Bond { amount, validator } = msg {
+                        Some((
+                            validator.as_str(),
+                            (amount.amount.u128(), amount.denom.as_str()),
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        }
+
+        fn unbonded(&self) -> Vec<(&str, (u128, &str))> {
+            self.0
+                .iter()
+                .filter_map(|msg| {
+                    if let VirtualStakeMsg::Unbond { amount, validator } = msg {
+                        Some((
+                            validator.as_str(),
+                            (amount.amount.u128(), amount.denom.as_str()),
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        }
+
+        #[track_caller]
+        fn assert_bond(&self, expected: &[(&str, (u128, &str))]) {
+            let mut expected = expected.to_vec();
+            let mut actual = self.bonded();
+            expected.sort();
+            actual.sort();
+
+            assert_eq!(expected, actual);
+        }
+
+        #[track_caller]
+        fn assert_unbond(&self, expected: &[(&str, (u128, &str))]) {
+            let mut expected = expected.to_vec();
+            let mut actual = self.bonded();
+            expected.sort();
+            actual.sort();
+
+            assert_eq!(expected, actual);
         }
     }
 }
