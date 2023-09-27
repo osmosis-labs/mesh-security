@@ -170,11 +170,25 @@ fn stake_remotely(
 }
 
 #[track_caller]
+fn get_last_vault_pending_tx_id(contract: &VaultContractProxy<MtApp>) -> Option<u64> {
+    let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
+    txs.first().map(Tx::id)
+}
+
+#[track_caller]
 fn get_last_external_staking_pending_tx_id(
     contract: &ExternalStakingContractProxy<MtApp>,
 ) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(Tx::id)
+}
+
+#[track_caller]
+fn skip_time(app: &App<MtApp>, skip_time: u64) {
+    let mut block_info = app.app().block_info();
+    let ts = block_info.time.plus_seconds(skip_time);
+    block_info.time = ts;
+    app.app_mut().set_block(block_info);
 }
 
 #[test]
@@ -538,20 +552,6 @@ fn stake_local() {
         )
         .call(owner)
         .unwrap_err();
-}
-
-#[track_caller]
-fn get_last_pending_tx_id(vault: &VaultContractProxy<MtApp>) -> Option<u64> {
-    let txs = vault.all_pending_txs_desc(None, None).unwrap().txs;
-    txs.first().map(Tx::id)
-}
-
-#[track_caller]
-fn skip_time(app: &App<MtApp>, skip_time: u64) {
-    let mut block_info = app.app().block_info();
-    let ts = block_info.time.plus_seconds(skip_time);
-    block_info.time = ts;
-    app.app_mut().set_block(block_info);
 }
 
 #[test]
@@ -1013,7 +1013,7 @@ fn stake_cross_txs() {
     // One pending tx
     assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 1);
     // Store for later
-    let first_tx = get_last_pending_tx_id(&vault).unwrap();
+    let first_tx = get_last_vault_pending_tx_id(&vault).unwrap();
 
     // Same user can stake while pending tx
     vault
@@ -1028,7 +1028,7 @@ fn stake_cross_txs() {
         .call(user)
         .unwrap();
     // Store for later
-    let second_tx = get_last_pending_tx_id(&vault).unwrap();
+    let second_tx = get_last_vault_pending_tx_id(&vault).unwrap();
 
     // Other user can as well
     vault
@@ -1047,7 +1047,7 @@ fn stake_cross_txs() {
     assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 3);
 
     // Last tx commit_tx call
-    let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    let last_tx = get_last_vault_pending_tx_id(&vault).unwrap();
     vault
         .vault_api_proxy()
         .commit_tx(last_tx)
@@ -1229,7 +1229,7 @@ fn stake_cross_rollback_tx() {
     assert_eq!(vault.all_pending_txs_desc(None, None).unwrap().txs.len(), 1);
 
     // Rollback tx
-    let last_tx = get_last_pending_tx_id(&vault).unwrap();
+    let last_tx = get_last_vault_pending_tx_id(&vault).unwrap();
     vault
         .vault_api_proxy()
         .rollback_tx(last_tx)
