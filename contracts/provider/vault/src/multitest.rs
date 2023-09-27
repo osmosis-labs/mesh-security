@@ -15,6 +15,7 @@ use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
 use crate::msg::{AccountResponse, AllAccountsResponseItem, LienResponse, StakingInitInfo};
+use crate::multitest::local_staking::multitest_utils::LocalStakingProxy;
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
@@ -42,9 +43,10 @@ fn setup<'app>(
     app: &'app App<MtApp>,
     owner: &str,
     slash_percent: u64,
+    unbond_period: u64,
 ) -> (
     VaultContractProxy<'app, MtApp>,
-    Addr,
+    LocalStakingProxy<'app, MtApp>,
     ExternalStakingContractProxy<'app, MtApp>,
 ) {
     let local_staking_code = local_staking::multitest_utils::CodeId::store_code(app);
@@ -64,9 +66,11 @@ fn setup<'app>(
         .unwrap();
 
     let local_staking_addr = Addr::unchecked(vault.config().unwrap().local_staking);
+    let local_staking =
+        local_staking::multitest_utils::LocalStakingProxy::new(local_staking_addr, app);
 
-    let cross_staking = setup_cross_stake(app, owner, &vault, slash_percent);
-    (vault, local_staking_addr, cross_staking)
+    let cross_staking = setup_cross_stake(app, owner, &vault, slash_percent, unbond_period);
+    (vault, local_staking, cross_staking)
 }
 
 fn setup_cross_stake<'app>(
@@ -74,11 +78,11 @@ fn setup_cross_stake<'app>(
     owner: &str,
     vault: &VaultContractProxy<'app, MtApp>,
     slash_percent: u64,
+    unbond_period: u64,
 ) -> ExternalStakingContractProxy<'app, MtApp> {
     // FIXME: Code shouldn't be duplicated
     let cross_staking_code =
         mesh_external_staking::contract::multitest_utils::CodeId::store_code(app);
-    let unbond_period = 100;
     // FIXME: Connection endpoint should be unique
     let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
 
@@ -175,25 +179,10 @@ fn get_last_external_staking_pending_tx_id(
 
 #[test]
 fn instantiation() {
-    let app = App::default();
+    let owner = "owner";
 
-    let owner = "onwer";
-
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
-    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
-
-    let staking_init_info = StakingInitInfo {
-        admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
-        label: None,
-    };
-
-    let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
-        .with_label("Vault")
-        .call(owner)
-        .unwrap();
+    let app = init_app(&[], &[]);
+    let (vault, _, _) = setup(&app, owner, 0, 100);
 
     let config = vault.config().unwrap();
     assert_eq!(config.denom, OSMO);
@@ -209,23 +198,7 @@ fn bonding() {
 
     let app = init_app(&[user], &[300]);
 
-    // Contracts setup
-
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
-    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
-
-    let staking_init_info = StakingInitInfo {
-        admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
-        label: None,
-    };
-
-    let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
-        .with_label("Vault")
-        .call(owner)
-        .unwrap();
+    let (vault, _local_staking, _cross_staking1) = setup(&app, owner, 0, 100);
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -359,26 +332,7 @@ fn stake_local() {
 
     let app = init_app(&[user], &[300]);
 
-    // Contracts setup
-
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
-    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
-
-    let staking_init_info = StakingInitInfo {
-        admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
-        label: None,
-    };
-
-    let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
-        .with_label("Vault")
-        .call(owner)
-        .unwrap();
-
-    let local_staking = Addr::unchecked(vault.config().unwrap().local_staking);
-    let local_staking = local_staking::multitest_utils::LocalStakingProxy::new(local_staking, &app);
+    let (vault, local_staking, _cross_staking1) = setup(&app, owner, SLASHING_PERCENTAGE, 100);
 
     // Bond some tokens
 
@@ -619,40 +573,9 @@ fn stake_cross() {
 
     let app = init_app(&[user], &[300]);
 
-    // Contracts setup
-
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
-    let cross_staking_code =
-        mesh_external_staking::contract::multitest_utils::CodeId::store_code(&app);
-    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
-
-    let staking_init_info = StakingInitInfo {
-        admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
-        label: None,
-    };
-
-    let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
-        .with_label("Vault")
-        .call(owner)
-        .unwrap();
-
     let unbond_period = 100;
-    let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
-
-    let cross_staking = cross_staking_code
-        .instantiate(
-            OSMO.to_owned(),
-            STAR.to_owned(),
-            vault.contract_addr.to_string(),
-            unbond_period,
-            remote_contact,
-            Decimal::percent(SLASHING_PERCENTAGE),
-        )
-        .call(owner)
-        .unwrap();
+    let (vault, _local_staking, cross_staking) =
+        setup(&app, owner, SLASHING_PERCENTAGE, unbond_period);
 
     // Set active validator
     let validator = "validator";
@@ -1032,40 +955,9 @@ fn stake_cross_txs() {
 
     let app = init_app(&[user, user2], &[300, 500]);
 
-    // Contracts setup
-
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
-    let cross_staking_code =
-        mesh_external_staking::contract::multitest_utils::CodeId::store_code(&app);
-    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
-
     let unbond_period = 100;
-    let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
-
-    let staking_init_info = StakingInitInfo {
-        admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
-        label: None,
-    };
-
-    let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
-        .with_label("Vault")
-        .call(owner)
-        .unwrap();
-
-    let cross_staking = cross_staking_code
-        .instantiate(
-            OSMO.to_owned(),
-            STAR.to_owned(),
-            vault.contract_addr.to_string(),
-            unbond_period,
-            remote_contact,
-            Decimal::percent(SLASHING_PERCENTAGE),
-        )
-        .call(owner)
-        .unwrap();
+    let (vault, _local_staking, cross_staking) =
+        setup(&app, owner, SLASHING_PERCENTAGE, unbond_period);
 
     // Set active validator
     let validator = "validator";
@@ -1319,40 +1211,9 @@ fn stake_cross_rollback_tx() {
 
     let app = init_app(&[user], &[300]);
 
-    // Contracts setup
-
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
-    let cross_staking_code =
-        mesh_external_staking::contract::multitest_utils::CodeId::store_code(&app);
-    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
-
-    let staking_init_info = StakingInitInfo {
-        admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
-        label: None,
-    };
-
-    let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
-        .with_label("Vault")
-        .call(owner)
-        .unwrap();
-
     let unbond_period = 100;
-    let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
-
-    let cross_staking = cross_staking_code
-        .instantiate(
-            OSMO.to_owned(),
-            STAR.to_owned(),
-            vault.contract_addr.to_string(),
-            unbond_period,
-            remote_contact,
-            Decimal::percent(SLASHING_PERCENTAGE),
-        )
-        .call(owner)
-        .unwrap();
+    let (vault, _local_staking, cross_staking) =
+        setup(&app, owner, SLASHING_PERCENTAGE, unbond_period);
 
     // Set active validator
     let validator = "validator";
@@ -1449,56 +1310,10 @@ fn multiple_stakes() {
 
     let app = init_app(&[user], &[1000]);
 
-    // Contracts setup
-
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
-    let cross_staking_code =
-        mesh_external_staking::contract::multitest_utils::CodeId::store_code(&app);
-    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
-
-    let staking_init_info = StakingInitInfo {
-        admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
-        label: None,
-    };
-
-    let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
-        .with_label("Vault")
-        .call(owner)
-        .unwrap();
-
-    let unbond_period = 100;
     let slashing_percentage: u64 = 60;
-    let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
+    let (vault, local_staking, cross_staking1) = setup(&app, owner, slashing_percentage, 100);
 
-    let cross_staking1 = cross_staking_code
-        .instantiate(
-            OSMO.to_owned(),
-            STAR.to_owned(),
-            vault.contract_addr.to_string(),
-            unbond_period,
-            remote_contact.clone(),
-            Decimal::percent(slashing_percentage),
-        )
-        .call(owner)
-        .unwrap();
-
-    let cross_staking2 = cross_staking_code
-        .instantiate(
-            OSMO.to_owned(),
-            STAR.to_owned(),
-            vault.contract_addr.to_string(),
-            unbond_period,
-            remote_contact,
-            Decimal::percent(slashing_percentage),
-        )
-        .call(owner)
-        .unwrap();
-
-    let local_staking = Addr::unchecked(vault.config().unwrap().local_staking);
-    let local_staking = local_staking::multitest_utils::LocalStakingProxy::new(local_staking, &app);
+    let cross_staking2 = setup_cross_stake(&app, owner, &vault, slashing_percentage, 100);
 
     // Set active validator
     let validator = "validator";
@@ -1737,23 +1552,7 @@ fn all_users_fetching() {
 
     let app = init_app(&users, &collaterals);
 
-    // Contracts setup
-
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(&app);
-    let vault_code = contract::multitest_utils::CodeId::store_code(&app);
-
-    let staking_init_info = StakingInitInfo {
-        admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
-        label: None,
-    };
-
-    let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
-        .with_label("Vault")
-        .call(owner)
-        .unwrap();
+    let (vault, _, _) = setup(&app, owner, 0, 100);
 
     // No users should show up no matter of collateral flag
 
@@ -1955,7 +1754,7 @@ fn cross_slash_scenario_1() {
 
     let app = init_app(&[user], &[collateral]);
 
-    let (vault, local_staking_addr, cross_staking) = setup(&app, owner, slashing_percentage);
+    let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
 
     let (_update_valset_height, _update_valset_time) =
         set_active_validators(&cross_staking, &validators);
@@ -1984,7 +1783,7 @@ fn cross_slash_scenario_1() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(190))
             },
             LienResponse {
@@ -2020,7 +1819,7 @@ fn cross_slash_scenario_1() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(190))
             },
             LienResponse {
@@ -2058,7 +1857,7 @@ fn cross_slash_scenario_2() {
 
     let app = init_app(&[user], &[collateral]);
 
-    let (vault, local_staking_addr, cross_staking) = setup(&app, owner, slashing_percentage);
+    let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
 
     let (_update_valset_height, _update_valset_time) =
         set_active_validators(&cross_staking, &validators);
@@ -2078,7 +1877,7 @@ fn cross_slash_scenario_2() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(200))
             },
             LienResponse {
@@ -2114,7 +1913,7 @@ fn cross_slash_scenario_2() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(180))
             },
             LienResponse {
@@ -2152,7 +1951,7 @@ fn cross_slash_scenario_3() {
 
     let app = init_app(&[user], &[collateral]);
 
-    let (vault, local_staking_addr, cross_staking) = setup(&app, owner, slashing_percentage);
+    let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
 
     let (_update_valset_height, _update_valset_time) =
         set_active_validators(&cross_staking, &validators);
@@ -2172,7 +1971,7 @@ fn cross_slash_scenario_3() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(190))
             },
             LienResponse {
@@ -2208,7 +2007,7 @@ fn cross_slash_scenario_3() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(185))
             },
             LienResponse {
@@ -2247,8 +2046,8 @@ fn cross_slash_scenario_4() {
 
     let app = init_app(&[user], &[collateral]);
 
-    let (vault, local_staking_addr, cross_staking_1) = setup(&app, owner, slashing_percentage);
-    let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage);
+    let (vault, local_staking, cross_staking_1) = setup(&app, owner, slashing_percentage, 100);
+    let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage, 100);
 
     let (_, _) = set_active_validators(&cross_staking_1, &validators_1);
     let (_update_valset_height, _update_valset_time) =
@@ -2270,7 +2069,7 @@ fn cross_slash_scenario_4() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(190))
             },
             LienResponse {
@@ -2310,7 +2109,7 @@ fn cross_slash_scenario_4() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(186))
             },
             LienResponse {
@@ -2354,9 +2153,9 @@ fn cross_slash_scenario_5() {
 
     let app = init_app(&[user], &[collateral]);
 
-    let (vault, local_staking_addr, cross_staking_1) = setup(&app, owner, slashing_percentage);
-    let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage);
-    let cross_staking_3 = setup_cross_stake(&app, owner, &vault, slashing_percentage);
+    let (vault, local_staking, cross_staking_1) = setup(&app, owner, slashing_percentage, 100);
+    let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage, 100);
+    let cross_staking_3 = setup_cross_stake(&app, owner, &vault, slashing_percentage, 100);
 
     let (_, _) = set_active_validators(&cross_staking_1, &[validator1]);
     let (_, _) = set_active_validators(&cross_staking_2, &[validator2]);
@@ -2380,7 +2179,7 @@ fn cross_slash_scenario_5() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(100))
             },
             LienResponse {
@@ -2424,7 +2223,7 @@ fn cross_slash_scenario_5() {
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(78)) // Rounded down
             },
             LienResponse {
@@ -2471,8 +2270,8 @@ fn cross_slash_no_native_staking() {
 
     let app = init_app(&[user], &[collateral]);
 
-    let (vault, _local_staking_addr, cross_staking_1) = setup(&app, owner, slashing_percentage);
-    let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage);
+    let (vault, _local_staking, cross_staking_1) = setup(&app, owner, slashing_percentage, 100);
+    let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage, 100);
 
     let (_, _) = set_active_validators(&cross_staking_1, &validators_1);
     let (_update_valset_height, _update_valset_time) =
