@@ -170,34 +170,26 @@ This is the simplest scenario, as the required funds are available to be slashed
 
 - `slashing ratio: 10%` (local and external)
 
- - `collateral: 200`
- - `native staking: 190` (local)
- - `lien holder 1 staking: 150` (external)
-   - `validator 1: 100`
-   - `validator 2: 50`
+- `collateral: 200`
+- `native staking: 190` (local)
+- `lien holder 1 staking: 150` (external)
+  - `validator 1: 100`
+  - `validator 2: 50`
 
- - `max lien: 190` (native)
+ - `max lien: 190` (local)
  - `slashable amount: 190 * 0.10 + 150 * 0.10 = 19 + 15 = 34`
  - `free collateral: 200 - max(34, 190) = 200 - 190 = 10`
 
 `validator 1` is slashed.
 
- - `slashing amount: 100 * 0.10 = 10`
- - `new collateral: 200 - 10 = 190`
- - `new free collateral: 190 - max(34, 190) = 190 - 190 = 0`
+- `slashing amount: 100 * 0.10 = 10`
+- `new collateral: 200 - 10 = 190`
+- `new max lien: 190` (after slashing)
+- `new slashable amount: 190 * 0.10 + 140 * 0.10 = 19 + 14 = 33` (after slashing)
+- `new free collateral: 190 - max(33, 190) = 190 - 190 = 0` (invariants preserved)
 
-As the invariants are preserved, no native collateral unbonding is needed.
+As the invariants are preserved, no slashing propagation is needed.
 
- - `native staking: 190` (equals new collateral)
- - `lien holder 1 staking: 140` (slashing applied)
-   - `validator 1: 90` (slashing applied here)
-   - `validator 2: 50`
-
- - `max lien: 190` (recalculated)
- - `slashable amount: 190 * 0.10 + 140 * 0.10 = 19 + 14 = 33` (recalculated)
-
-As the new max lien and slashable amounts are less than or equal to the collateral,
-no slashing propagation is needed.
 
 ### Scenario 2. Slashed delegator has no free collateral on the vault
 
@@ -216,21 +208,20 @@ no slashing propagation is needed.
 
 - `slashing amount: 200 * 0.10 = 20`
 - `new collateral: 200 - 20 = 180`
-- `new free collateral: 180 - max(40, 200) = 180 - 200 = -20`
+- `new max lien: 200` (unchanged)
+- `new slashable amount: 200 * 0.10 + 180 * 0.10 = 20 + 18 = 38` (after slashing)
+- `new free collateral: 180 - max(38, 200) = 180 - 200 = -20`
 
-The free collateral is not enough, native collateral unbonding is needed.
+Free collateral is not enough, slashing propagation is needed.
+Since max lien is the reason of the broken invariant, liens adjustment will be done.
 
 - `native staking: 180` (20 are unbonded / burned)
 - `lien holder 1 staking: 180` (slashing applied)
-  - `validator 1: 130` (slashing applied here)
-  - `validator 2: 50`
+  - `validator 1: 180` (slashing applied here)
 
 - `new max lien: 180` (recalculated)
 - `new slashable amount: 180 * 0.10 + 180 * 0.10 = 18 + 18 = 36` (recalculated)
 - `free collateral: 180 - max(36, 180) = 180 - 180 = 0` (invariants restored)
-
-As the new max lien and slashable amounts are less than or equal to the new collateral,
-no slashing propagation is needed.
 
 
 ### Scenario 3. Slashed delegator has some free collateral on the vault
@@ -249,9 +240,12 @@ no slashing propagation is needed.
 
 - `slashing amount: 150 * 0.10 = 15`
 - `new collateral: 200 - 15 = 185`
-- `new free collateral: 185 - max(34, 190) = 185 - 190 = -5`
+- `new max lien: 190` (unchanged)
+- `new slashable amount: 190 * 0.10 + 135 * 0.10 = 19 + 13.5 = 32.5` (after slashing)
+- `new free collateral: 185 - max(32.5, 190) = 185 - 190 = -5`
 
-The free collateral is not enough, native collateral unbonding is needed.
+Free collateral is not enough, slashing propagation is needed.
+Since max lien is the reason of the broken invariant, liens adjustment will be done.
 
 - `native staking: 185` (5 are unbonded / burned)
 - `lien holder 1 staking: 135` (slashing applied)
@@ -259,10 +253,7 @@ The free collateral is not enough, native collateral unbonding is needed.
 
 - `new max lien: 185` (recalculated)
 - `new slashable amount: 185 * 0.10 + 135 * 0.10 = 18.5 + 13.5 = 32` (recalculated)
-- `free collateral: 185 - max(33.5, 185) = 185 - 185 = 0` (invariants restored)
-
-As the new max lien and slashable amounts are less than or equal to the new collateral,
-no slashing propagation is needed.
+- `free collateral: 185 - max(32, 185) = 185 - 185 = 0` (invariants restored)
 
 
 ### Scenario 4. Same as Scenario 3, but with more delegations
@@ -285,27 +276,20 @@ no slashing propagation is needed.
 
 - `slashing amount: 140 * 0.10 = 14`
 - `new collateral: 200 - 14 = 186`
-- `new free collateral: 186 - max(55.8, 190) = 186 - 190 = -4`
+- `new max lien: 190` (unchanged)
+- `new slashable amount: 190 * 0.10 + 166 * 0.10 + 188 * 0.10 = 19 + 16.6 + 18.8 = 54.4` (after slashing)
+- `new free collateral: 186 - max(54.4, 190) = 186 - 190 = -4`
 
-The free collateral is not enough, native collateral unbonding is needed.
+Free collateral is not enough, slashing propagation is needed.
+Since max lien is the reason of the broken invariant, liens adjustment will be done.
 
 - `native staking: 186` (4 are unbonded / burned)
 - `lien holder 1 staking: 166` (slashing applied)
   - `validator 1: 126` (slashing applied here)
   - `validator 2: 40`
-- `lien holder 2 staking: 188`
-  - `validator 3: 100`
-  - `validator 4: 88`
-
-- `new max lien: 188` (recalculated)
-- `new slashable amount: 186 * 0.10 + 166 * 0.10 + 188 * 0.10 = 18.6 + 16.6 + 18.8 = 54` (recalculated)
-- `free collateral: 186 - max(54, 188) = 186 - 188 = -2` (invariants broken)
-
-As the new max lien is greater than the new collateral, **slashing propagation is needed**.
-
-- `lien holder 2 staking: 186` (slashing propagation. 2 are unbonded / burned)
-  - `validator 3: 99` (slashing propagation (proportional) applied here)
-  - `validator 4: 87` (slashing propagation (proportional) applied here)
+- `lien holder 2 staking: 186` (2 are unbonded / burned)
+  - `validator 3: 99` (proportional)
+  - `validator 4: 87` (proportional)
 
 - `new max lien: 186` (recalculated)
 - `new slashable amount: 186 * 0.10 + 166 * 0.10 + 186 * 0.10 = 18.6 + 16.6 + 18.6 = 53.8` (recalculated)
@@ -314,52 +298,41 @@ As the new max lien is greater than the new collateral, **slashing propagation i
 
 ### Scenario 5. Total slashable greater than max lien
 
-- `slashing ratio: 50%` (local and external)
+- `native slashing ratio: 10%` (local)
+- `cross slashing ratio: 50%` (external)
 - `collateral: 200`
 - `native staking: 100` (local)
 - `lien holder 1 staking: 180` (external)
   - `validator 1: 180`
-- `lien holder 2 staking: 50` (external)
+- `lien holder 2 staking: 80` (external)
   - `validator 2: 50`
-- `lien holder 3 staking: 50` (external)
+- `lien holder 3 staking: 100` (external)
   - `validator 3: 50`
 
 - `max lien: 180` (external 1)
-- `slashable amount: 100 * 0.50 + 180 * 0.50 + 50 * 0.50 + 50 * 0.50 = 50 + 90 + 25 + 25 = 190`
+- `slashable amount: 100 * 0.10 + 180 * 0.50 + 80 * 0.50 + 100 * 0.50 = 10 + 90 + 40 + 50 = 190`
 - `free collateral: 200 - max(190, 180) = 200 - 190 = 10`
 
 `validator 1` is slashed.
 
 - `slashing amount: 180 * 0.50 = 90`
 - `new collateral: 200 - 90 = 110`
-- `new free collateral: 110 - max(190, 180) = 110 - 190 = -80`
+- `new max lien: 100` (after slashing)
+- `new slashable amount: 100 * 0.10 + 90 * 0.50 + 80 * 0.50 + 100 * 0.50 = 10 + 45 + 40 + 50 = 145` (after slashing)
+- `new free collateral: 110 - max(145, 100) = 110 - 145 = -35` (invariants broken)
 
-The free collateral is not enough, native collateral unbonding is needed.
+Invariants are broken, slashing propagation is needed.
+Given that total slashable is greater than max lien, the slashing propagation will be proportional.
 
-- `native staking: 20` (80 are unbonded / burned)
-- `lien holder 1 staking: 90` (slashing applied)
-  - `validator 1: 90` (slashing applied here)
-- `lien holder 2 staking: 50`
-  - `validator 2: 50`
-- `lien holder 3 staking: 50`
-  - `validator 3: 50`
-
-- `new max lien: 90` (recalculated)
-- `new slashable amount: 20 * 0.50 + 90 * 0.50 + 50 * 0.50 + 50 * 0.50 = 10 + 45 + 25 + 25 = 105` (recalculated)
-- `free collateral: 110 - max(105, 90) = 110 - 105 = 5` (invariants restored)
-
-As the new max lien and slashable amounts are less than or equal to the new collateral,
-no slashing propagation is needed.
+**TODO**
 
 ### Slashing Process Summary
 
-We can see that there are **three** processes potentially at play during slashing:
+We can see that there are two processes potentially at play during slashing:
 
 1) Slashing itself, which is done by the `vault` contract over the users associated with the slashed validator,
 on the corresponding lien holder.
-2) Native collateral unbonding, which is done by the `vault` contract over the native staking contract, in case
-there's not enough free collateral to cover the slashing amount or part of it.
-3) Slashing propagation, which is done by the `vault` contract over the other lien holders associated with the delegator,
+2) Slashing propagation, which is done by the `vault` contract over the other lien holders associated with the delegator,
 in case the slashed collateral is now less than the new max lien or the new slashable amount.
 
 ### Native vs. Cross Slashing Process Details
