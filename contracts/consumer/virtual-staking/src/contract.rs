@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 
 use cosmwasm_std::{
     coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
-    DistributionMsg, Env, Event, Reply, Response, StdError, StdResult, Storage, SubMsg,
-    SubMsgResponse, Uint128, Validator, WasmMsg,
+    DistributionMsg, Env, Event, Reply, Response, StdError, StdResult, Storage, SubMsg, Uint128,
+    Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -66,6 +66,8 @@ impl VirtualStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         // initialize this to no one, so no issue when reading for the first time
         self.bonded.save(ctx.deps.storage, &vec![])?;
+        VALIDATOR_REWARDS_BATCH.init(ctx.deps.storage)?;
+
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         Ok(Response::new())
     }
@@ -168,7 +170,7 @@ impl VirtualStakingContract<'_> {
     #[msg(reply)]
     fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match (reply.id, reply.result.into_result()) {
-            (REPLY_REWARDS_ID, Ok(result)) => self.reply_rewards(ctx.deps, ctx.env, result),
+            (REPLY_REWARDS_ID, Ok(_)) => self.reply_rewards(ctx.deps, ctx.env),
             (REPLY_REWARDS_ID, Err(e)) => {
                 // We need to pop the REWARD_TARGETS so it doesn't get out of sync
                 let (target, _) = pop_target(ctx.deps)?;
@@ -183,12 +185,7 @@ impl VirtualStakingContract<'_> {
     }
 
     /// This is called on each successful withdrawal
-    fn reply_rewards(
-        &self,
-        mut deps: DepsMut,
-        env: Env,
-        _reply: SubMsgResponse,
-    ) -> Result<Response, ContractError> {
+    fn reply_rewards(&self, mut deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         // Find the validator to assign the rewards to
         let (target, finished) = pop_target(deps.branch())?;
 
@@ -289,6 +286,13 @@ impl<'a> ValidatorRewardsBatch<'a> {
             rewards: Item::new("validator_rewards_batch"),
             total: Item::new("validator_rewards_batch_total"),
         }
+    }
+
+    fn init(&self, store: &mut dyn Storage) -> StdResult<()> {
+        self.rewards.save(store, &vec![])?;
+        self.total.save(store, &Uint128::zero())?;
+
+        Ok(())
     }
 
     fn push(
@@ -431,5 +435,189 @@ pub fn sudo(
             &removals,
             &tombstones,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::{
+        coins, from_binary,
+        testing::{mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage},
+    };
+
+    use super::*;
+
+    type OwnedDeps = cosmwasm_std::OwnedDeps<MockStorage, MockApi, MockQuerier>;
+
+    #[test]
+    fn reply_rewards() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(
+            &mut deps.storage,
+            &["validator3", "validator2", "validator1"],
+        );
+
+        contract.push_rewards(&mut deps, 10).assert_empty();
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract.push_rewards(&mut deps, 30).assert_eq(&[
+            ("validator1", 10),
+            ("validator2", 20),
+            ("validator3", 30),
+        ]);
+    }
+
+    #[test]
+    fn reply_rewards_all_zero() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(
+            &mut deps.storage,
+            &["validator3", "validator2", "validator1"],
+        );
+
+        for _ in 0..3 {
+            contract.push_rewards(&mut deps, 0).assert_empty();
+        }
+    }
+
+    #[test]
+    fn reply_rewards_mid_push_is_zero() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(
+            &mut deps.storage,
+            &["validator3", "validator2", "validator1"],
+        );
+
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract.push_rewards(&mut deps, 0).assert_empty();
+        contract
+            .push_rewards(&mut deps, 10)
+            .assert_eq(&[("validator1", 20), ("validator3", 10)]);
+    }
+
+    #[test]
+    fn reply_rewards_last_push_is_zero() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(
+            &mut deps.storage,
+            &["validator3", "validator2", "validator1"],
+        );
+
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract.push_rewards(&mut deps, 10).assert_empty();
+        contract
+            .push_rewards(&mut deps, 0)
+            .assert_eq(&[("validator1", 20), ("validator2", 10)]);
+    }
+
+    fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
+        REWARD_TARGETS
+            .save(
+                storage,
+                &targets.iter().map(<&str>::to_string).collect::<Vec<_>>(),
+            )
+            .unwrap();
+    }
+
+    trait VirtualStakingExt {
+        fn quick_inst(&self, deps: DepsMut);
+
+        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult;
+    }
+
+    impl VirtualStakingExt for VirtualStakingContract<'_> {
+        fn quick_inst(&self, deps: DepsMut) {
+            self.instantiate(InstantiateCtx {
+                deps,
+                env: mock_env(),
+                info: mock_info("me", &[]),
+            })
+            .unwrap();
+        }
+
+        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult {
+            let denom = self.config.load(&deps.storage).unwrap().denom;
+            let old_amount = deps
+                .as_ref()
+                .querier
+                .query_balance(mock_env().contract.address, &denom)
+                .unwrap()
+                .amount
+                .u128();
+            deps.querier = MockQuerier::new(&[(
+                mock_env().contract.address.as_str(),
+                &coins(old_amount + amount, denom),
+            )]);
+            PushRewardsResult::new(
+                self.reply_rewards(deps.as_mut(), mock_env())
+                    .unwrap()
+                    .messages,
+            )
+        }
+    }
+
+    enum PushRewardsResult {
+        Empty,
+        Batch(Vec<RewardInfo>),
+    }
+
+    impl PushRewardsResult {
+        fn new(data: Vec<SubMsg>) -> Self {
+            match &data[..] {
+                [] => Self::Empty,
+                [SubMsg {
+                    msg: CosmosMsg::Wasm(WasmMsg::Execute { msg: bin_msg, .. }),
+                    ..
+                }] => {
+                    if let converter_api::ExecMsg::DistributeRewards { mut payments } =
+                        from_binary(bin_msg).unwrap()
+                    {
+                        payments.sort();
+                        Self::Batch(payments)
+                    } else {
+                        panic!("failed to deserialize DistributeRewards msg")
+                    }
+                }
+                _ => panic!("invalid response"),
+            }
+        }
+
+        #[track_caller]
+        fn assert_empty(&self) {
+            if let Self::Empty = self {
+            } else {
+                panic!("not empty");
+            }
+        }
+
+        #[track_caller]
+        fn assert_eq(&self, expected: &[(&str, u128)]) {
+            if expected.is_empty() {
+                self.assert_empty();
+            } else if let Self::Batch(rewards) = self {
+                let mut expected = expected
+                    .iter()
+                    .map(|(val, reward)| RewardInfo {
+                        validator: val.to_string(),
+                        reward: (*reward).into(),
+                    })
+                    .collect::<Vec<_>>();
+                expected.sort();
+                assert_eq!(rewards, &expected);
+            } else {
+                panic!("empty result")
+            }
+        }
     }
 }
