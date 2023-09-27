@@ -305,9 +305,9 @@ Since max lien is the reason of the broken invariant, liens adjustment will be d
 - `lien holder 1 staking: 180` (external)
   - `validator 1: 180`
 - `lien holder 2 staking: 80` (external)
-  - `validator 2: 50`
+  - `validator 2: 80`
 - `lien holder 3 staking: 100` (external)
-  - `validator 3: 50`
+  - `validator 3: 100`
 
 - `max lien: 180` (external 1)
 - `slashable amount: 100 * 0.10 + 180 * 0.50 + 80 * 0.50 + 100 * 0.50 = 10 + 90 + 40 + 50 = 190`
