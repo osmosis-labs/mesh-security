@@ -322,7 +322,21 @@ Since max lien is the reason of the broken invariant, liens adjustment will be d
 - `new free collateral: 110 - max(145, 100) = 110 - 145 = -35` (invariants broken)
 
 Invariants are broken, slashing propagation is needed.
-Given that total slashable is greater than max lien, the slashing propagation will be proportional.
+Given that total slashable is greater than max lien, slashing propagation over the liens will be proportional
+to the aggregated slash ratios of all the lien holders.
+
+- `sum of slash ratios: 0.1 + 0.5 + 0.5 + 0.5 = 1.6`
+- `native staking: 100 - 35 / 1.6 =  100 - 21.875 = 78.125 ` (proportionally adjusted)
+- `lien holder 1 staking: 90 - 35 / 1.6 = 90 - 21.875 = 68.125 ` (slashed and proportionally adjusted)
+  - `validator 1: 68.125` (slashed and adjusted here)
+- `lien holder 2 staking: 80 - 35 / 1.6 = 80 - 21.875 - 58.125` (proportionally adjusted)
+  - `validator 2: 58.125` (proportionally adjusted here)
+- `lien holder 3 staking: 100 - 35 / 1.6 = 100 - 21.875 = 78.125` (proportionally adjusted)
+  - `validator 3: 78.125` 
+
+- `new max lien: 78.125` (recalculated)
+- `new slashable amount: 78.125 * 0.1 + 68.125 * 0.5 + 58.125 * 0.5 + 78.125 * 0.5 = 7.8125 + 34.0625 + 29.0625 + 39.0625 = 110.0` (recalculated)
+- `new free collateral: 110 - max(110, 78.125) = 110 - 110 = 0` (invariants restored)
 
 **TODO**
 
@@ -334,6 +348,10 @@ We can see that there are two processes potentially at play during slashing:
 on the corresponding lien holder.
 2) Slashing propagation, which is done by the `vault` contract over the other lien holders associated with the delegator,
 in case the slashed collateral is now less than the new max lien or the new slashable amount.
+
+Depending on which of the two is the reason for the broken invariant, slashing propagation will be done differently:
+Either by adjusting the liens to be below the collateral, or by proportionally adjusting the liens, so that the sum of
+the resulting slashable amounts is below the collateral.
 
 ### Native vs. Cross Slashing Process Details
 
