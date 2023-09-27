@@ -751,7 +751,6 @@ impl VaultContract<'_> {
                                                                      // TODO: Remove required amount from the user's stake (needs rebalance msg)
             if free_collateral < slash_amount {
                 // Check / adjust mesh security invariants according to the new collateral
-                // FIXME: Need to check if max lien or total slashable are being hit
                 self.propagate_slash(
                     ctx.deps.storage,
                     &slash_user,
@@ -837,6 +836,7 @@ impl VaultContract<'_> {
                 // Keep the invariant over the lien
                 lien.amount.sub(sub_amount, Uint128::zero())?;
                 self.liens.save(storage, (user, &lien_holder), &lien)?;
+                // TODO: Remove required amount from the user's stake (needs rebalance msg)
             }
         }
         Ok(())
