@@ -212,11 +212,7 @@ fn bonding() {
     assert_eq!(claims.claims, []);
 
     // Bond some tokens
-    vault
-        .bond()
-        .with_funds(&coins(100, OSMO))
-        .call(user)
-        .unwrap();
+    bond(&vault, user, 100);
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -240,11 +236,7 @@ fn bonding() {
         coin(100, OSMO)
     );
 
-    vault
-        .bond()
-        .with_funds(&coins(150, OSMO))
-        .call(user)
-        .unwrap();
+    bond(&vault, user, 150);
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -336,11 +328,7 @@ fn stake_local() {
 
     // Bond some tokens
 
-    vault
-        .bond()
-        .with_funds(&coins(300, OSMO))
-        .call(user)
-        .unwrap();
+    bond(&vault, user, 300);
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -588,12 +576,7 @@ fn stake_cross() {
         .unwrap();
 
     // Bond some tokens
-
-    vault
-        .bond()
-        .with_funds(&coins(300, OSMO))
-        .call(user)
-        .unwrap();
+    bond(&vault, user, 300);
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -970,12 +953,7 @@ fn stake_cross_txs() {
         .unwrap();
 
     // Bond some tokens
-
-    vault
-        .bond()
-        .with_funds(&coins(300, OSMO))
-        .call(user)
-        .unwrap();
+    bond(&vault, user, 300);
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -988,11 +966,7 @@ fn stake_cross_txs() {
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(claims.claims, []);
 
-    vault
-        .bond()
-        .with_funds(&coins(500, OSMO))
-        .call(user2)
-        .unwrap();
+    bond(&vault, user2, 500);
     assert_eq!(
         vault.account(user2.to_owned()).unwrap(),
         AccountResponse {
@@ -1226,12 +1200,7 @@ fn stake_cross_rollback_tx() {
         .unwrap();
 
     // Bond some tokens
-
-    vault
-        .bond()
-        .with_funds(&coins(300, OSMO))
-        .call(user)
-        .unwrap();
+    bond(&vault, user, 300);
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -1332,12 +1301,7 @@ fn multiple_stakes() {
         .unwrap();
 
     // Bond some tokens
-
-    vault
-        .bond()
-        .with_funds(&coins(1000, OSMO))
-        .call(user)
-        .unwrap();
+    bond(&vault, user, 1000);
 
     // Stake properly, highest collateral usage is local staking (the 300 OSMO lien)
     //
@@ -1563,12 +1527,7 @@ fn all_users_fetching() {
     assert_eq!(accounts.accounts, []);
 
     // When user bond some collateral, he should be visible
-
-    vault
-        .bond()
-        .with_funds(&coins(100, OSMO))
-        .call(users[0])
-        .unwrap();
+    bond(&vault, users[0], 100);
 
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
@@ -1597,12 +1556,7 @@ fn all_users_fetching() {
     );
 
     // Second user bonds - we want to see him
-
-    vault
-        .bond()
-        .with_funds(&coins(200, OSMO))
-        .call(users[1])
-        .unwrap();
+    bond(&vault, users[1], 200);
 
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
