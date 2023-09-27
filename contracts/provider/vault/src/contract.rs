@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Order, Reply, Response, StdResult,
-    Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply, Response,
+    StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -748,9 +748,7 @@ impl VaultContract<'_> {
             self.recalculate_max_lien(ctx.deps.storage, &slash_user, &mut user_info)?;
             // Get free collateral before adjusting collateral, but after slashing
             let free_collateral = user_info.free_collateral().low(); // For simplicity
-                                                                     // Adjust collateral
-            user_info.collateral = new_collateral;
-            // TODO: Remove required amount from the user's stake (needs rebalance msg)
+                                                                     // TODO: Remove required amount from the user's stake (needs rebalance msg)
             if free_collateral < slash_amount {
                 // Check / adjust mesh security invariants according to the new collateral
                 // FIXME: Need to check if max lien or total slashable are being hit
@@ -759,8 +757,11 @@ impl VaultContract<'_> {
                     &slash_user,
                     &mut user_info,
                     new_collateral,
+                    slash_amount - free_collateral,
                 )?;
             }
+            // Adjust collateral
+            user_info.collateral = new_collateral;
             // Recompute max lien
             self.recalculate_max_lien(ctx.deps.storage, &slash_user, &mut user_info)?;
             // Save user info
@@ -775,31 +776,60 @@ impl VaultContract<'_> {
         user: &Addr,
         user_info: &mut UserInfo,
         new_collateral: Uint128,
+        required_collateral: Uint128,
     ) -> Result<(), ContractError> {
-        let broken_liens = self
-            .liens
-            .prefix(user)
-            .range(storage, None, None, Order::Ascending)
-            .filter(|item| {
-                item.as_ref()
-                    .map(|(_, lien)| lien.amount.high() > new_collateral) // Skip in range liens
-                    .unwrap_or(false) // Skip other errors
-            })
-            .collect::<StdResult<Vec<_>>>()?;
-        for (lien_holder, mut lien) in broken_liens {
-            let new_low_amount = min(lien.amount.low(), new_collateral);
-            let new_high_amount = min(lien.amount.high(), new_collateral);
-            // Adjust the user's total slashable amount
-            user_info.total_slashable = ValueRange::new(
-                user_info.total_slashable.low()
-                    - (lien.amount.low() - new_low_amount) * lien.slashable,
-                user_info.total_slashable.high()
-                    - (lien.amount.high() - new_high_amount) * lien.slashable,
-            );
-            // Keep the invariant over the lien
-            lien.amount = ValueRange::new(new_low_amount, new_high_amount);
-            self.liens.save(storage, (user, &lien_holder), &lien)?;
-            // TODO: Remove required amount from the user's stake (needs rebalance msg)
+        if user_info.max_lien.high() >= user_info.total_slashable.high() {
+            // Liens adjustment
+            let broken_liens = self
+                .liens
+                .prefix(user)
+                .range(storage, None, None, Order::Ascending)
+                .filter(|item| {
+                    item.as_ref()
+                        .map(|(_, lien)| lien.amount.high() > new_collateral) // Skip in range liens
+                        .unwrap_or(false) // Skip other errors
+                })
+                .collect::<StdResult<Vec<_>>>()?;
+            for (lien_holder, mut lien) in broken_liens {
+                let new_low_amount = min(lien.amount.low(), new_collateral);
+                let new_high_amount = min(lien.amount.high(), new_collateral);
+                // Adjust the user's total slashable amount
+                user_info.total_slashable = ValueRange::new(
+                    user_info.total_slashable.low()
+                        - (lien.amount.low() - new_low_amount) * lien.slashable,
+                    user_info.total_slashable.high()
+                        - (lien.amount.high() - new_high_amount) * lien.slashable,
+                );
+                // Keep the invariant over the lien
+                lien.amount = ValueRange::new(new_low_amount, new_high_amount);
+                self.liens.save(storage, (user, &lien_holder), &lien)?;
+                // TODO: Remove required amount from the user's stake (needs rebalance msg)
+            }
+        } else {
+            // Total slashable adjustment
+            let slash_ratio_sum = self
+                .liens
+                .prefix(user)
+                .range(storage, None, None, Order::Ascending)
+                .try_fold(Decimal::zero(), |sum, item| {
+                    let (_, lien) = item?;
+                    Ok::<_, ContractError>(sum + lien.slashable)
+                })?;
+            let sub_amount = required_collateral * slash_ratio_sum.inv().unwrap();
+            let all_liens = self
+                .liens
+                .prefix(user)
+                .range(storage, None, None, Order::Ascending)
+                .collect::<StdResult<Vec<_>>>()?;
+            for (lien_holder, mut lien) in all_liens {
+                // Adjust the user's total slashable amount
+                user_info
+                    .total_slashable
+                    .sub(sub_amount * lien.slashable, Uint128::zero())?;
+                // Keep the invariant over the lien
+                lien.amount.sub(sub_amount, Uint128::zero())?;
+                self.liens.save(storage, (user, &lien_holder), &lien)?;
+            }
         }
         Ok(())
     }

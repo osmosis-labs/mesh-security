@@ -2498,33 +2498,33 @@ fn cross_slash_scenario_5() {
         [
             LienResponse {
                 lienholder: local_staking_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(100))
+                amount: ValueRange::new_val(Uint128::new(79)) // Due to rounding
             },
             LienResponse {
                 lienholder: cross_staking_1.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(90))
+                amount: ValueRange::new_val(Uint128::new(69)) // Due to rounding
             },
             LienResponse {
                 lienholder: cross_staking_2.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(80))
+                amount: ValueRange::new_val(Uint128::new(59)) // Due to rounding
             },
             LienResponse {
                 lienholder: cross_staking_3.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(100))
+                amount: ValueRange::new_val(Uint128::new(79)) // Due to rounding
             },
         ]
     );
 
     let acc_details = vault.account_details(user.to_owned()).unwrap();
     // Max lien
-    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(100)));
+    assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(79)));
     // Total slashable
     assert_eq!(
         acc_details.total_slashable,
-        ValueRange::new_val(Uint128::new(137))
+        ValueRange::new_val(Uint128::new(110))
     );
     // Collateral
     assert_eq!(acc_details.bonded, Uint128::new(110));
     // Free collateral
-    assert_eq!(acc_details.free, ValueRange::new_val(Uint128::new(27))); // minus twenty seven
+    assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
 }
