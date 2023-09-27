@@ -176,9 +176,9 @@ This is the simplest scenario, as the required funds are available to be slashed
   - `validator 1: 100`
   - `validator 2: 50`
 
- - `max lien: 190` (local)
- - `slashable amount: 190 * 0.10 + 150 * 0.10 = 19 + 15 = 34`
- - `free collateral: 200 - max(34, 190) = 200 - 190 = 10`
+- `max lien: 190` (local)
+- `slashable amount: 190 * 0.10 + 150 * 0.10 = 19 + 15 = 34`
+- `free collateral: 200 - max(34, 190) = 200 - 190 = 10`
 
 `validator 1` is slashed.
 
@@ -332,7 +332,7 @@ to the aggregated slash ratios of all the lien holders.
 - `lien holder 2 staking: 80 - 35 / 1.6 = 80 - 21.875 - 58.125` (proportionally adjusted)
   - `validator 2: 58.125` (proportionally adjusted here)
 - `lien holder 3 staking: 100 - 35 / 1.6 = 100 - 21.875 = 78.125` (proportionally adjusted)
-  - `validator 3: 78.125` 
+  - `validator 3: 78.125`
 
 - `new max lien: 78.125` (recalculated)
 - `new slashable amount: 78.125 * 0.1 + 68.125 * 0.5 + 58.125 * 0.5 + 78.125 * 0.5 = 7.8125 + 34.0625 + 29.0625 + 39.0625 = 110.0` (recalculated)
