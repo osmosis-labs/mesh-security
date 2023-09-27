@@ -211,7 +211,7 @@ impl VirtualStakingContract<'_> {
         };
 
         if finished {
-            VALIDATOR_REWARDS_BATCH.wipe(deps.storage);
+            VALIDATOR_REWARDS_BATCH.wipe(deps.storage)?;
             let msg = converter_api::ExecMsg::DistributeRewards {
                 payments: all_rewards,
             };
@@ -317,8 +317,8 @@ impl<'a> ValidatorRewardsBatch<'a> {
         self.rewards.load(store)
     }
 
-    fn wipe(&self, store: &mut dyn Storage) {
-        self.rewards.remove(store);
+    fn wipe(&self, store: &mut dyn Storage) -> StdResult<()> {
+        self.init(store)
     }
 
     /// The total of all rewards currently in the batch.
@@ -455,18 +455,31 @@ mod tests {
         let contract = VirtualStakingContract::new();
 
         contract.quick_inst(deps.as_mut());
-        set_reward_targets(
-            &mut deps.storage,
-            &["validator3", "validator2", "validator1"],
-        );
+        set_reward_targets(&mut deps.storage, &["val3", "val2", "val1"]);
 
         contract.push_rewards(&mut deps, 10).assert_empty();
         contract.push_rewards(&mut deps, 20).assert_empty();
-        contract.push_rewards(&mut deps, 30).assert_eq(&[
-            ("validator1", 10),
-            ("validator2", 20),
-            ("validator3", 30),
-        ]);
+        contract
+            .push_rewards(&mut deps, 30)
+            .assert_eq(&[("val1", 10), ("val2", 20), ("val3", 30)]);
+    }
+
+    #[test]
+    fn reply_rewards_twice() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+
+        set_reward_targets(&mut deps.storage, &["val2", "val1"]);
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract
+            .push_rewards(&mut deps, 30)
+            .assert_eq(&[("val1", 20), ("val2", 30)]);
+
+        set_reward_targets(&mut deps.storage, &["val"]);
+        contract
+            .push_rewards(&mut deps, 30)
+            .assert_eq(&[("val", 30)]);
     }
 
     #[test]
@@ -475,10 +488,7 @@ mod tests {
         let contract = VirtualStakingContract::new();
 
         contract.quick_inst(deps.as_mut());
-        set_reward_targets(
-            &mut deps.storage,
-            &["validator3", "validator2", "validator1"],
-        );
+        set_reward_targets(&mut deps.storage, &["val3", "val2", "val1"]);
 
         for _ in 0..3 {
             contract.push_rewards(&mut deps, 0).assert_empty();
@@ -491,16 +501,13 @@ mod tests {
         let contract = VirtualStakingContract::new();
 
         contract.quick_inst(deps.as_mut());
-        set_reward_targets(
-            &mut deps.storage,
-            &["validator3", "validator2", "validator1"],
-        );
+        set_reward_targets(&mut deps.storage, &["val3", "val2", "val1"]);
 
         contract.push_rewards(&mut deps, 20).assert_empty();
         contract.push_rewards(&mut deps, 0).assert_empty();
         contract
             .push_rewards(&mut deps, 10)
-            .assert_eq(&[("validator1", 20), ("validator3", 10)]);
+            .assert_eq(&[("val1", 20), ("val3", 10)]);
     }
 
     #[test]
@@ -509,16 +516,13 @@ mod tests {
         let contract = VirtualStakingContract::new();
 
         contract.quick_inst(deps.as_mut());
-        set_reward_targets(
-            &mut deps.storage,
-            &["validator3", "validator2", "validator1"],
-        );
+        set_reward_targets(&mut deps.storage, &["val3", "val2", "val1"]);
 
         contract.push_rewards(&mut deps, 20).assert_empty();
         contract.push_rewards(&mut deps, 10).assert_empty();
         contract
             .push_rewards(&mut deps, 0)
-            .assert_eq(&[("validator1", 20), ("validator2", 10)]);
+            .assert_eq(&[("val1", 20), ("val2", 10)]);
     }
 
     fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
@@ -557,13 +561,20 @@ mod tests {
                 .u128();
             deps.querier = MockQuerier::new(&[(
                 mock_env().contract.address.as_str(),
-                &coins(old_amount + amount, denom),
+                &coins(old_amount + amount, &denom),
             )]);
-            PushRewardsResult::new(
+            let result = PushRewardsResult::new(
                 self.reply_rewards(deps.as_mut(), mock_env())
                     .unwrap()
                     .messages,
-            )
+            );
+
+            if let PushRewardsResult::Batch(_) = result {
+                deps.querier =
+                    MockQuerier::new(&[(mock_env().contract.address.as_str(), &coins(0, denom))]);
+            }
+
+            result
         }
     }
 
