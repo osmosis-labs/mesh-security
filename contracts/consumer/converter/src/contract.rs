@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, IbcMsg,
-    Reply, Response, SubMsg, SubMsgResponse, Validator, WasmMsg,
+    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event,
+    MessageInfo, Reply, Response, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -14,9 +14,7 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
-use crate::ibc::{
-    add_validators_msg, packet_timeout_rewards, tombstone_validators_msg, IBC_CHANNEL,
-};
+use crate::ibc::{add_validators_msg, make_ibc_packet, tombstone_validators_msg, IBC_CHANNEL};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -266,6 +264,13 @@ impl ConverterContract<'_> {
         };
         Ok(msg.into())
     }
+
+    fn ensure_authorized(&self, deps: &DepsMut, info: &MessageInfo) -> Result<(), ContractError> {
+        let virtual_stake = self.virtual_stake.load(deps.storage)?;
+        ensure_eq!(info.sender, virtual_stake, ContractError::Unauthorized {});
+
+        Ok(())
+    }
 }
 
 #[contract]
@@ -281,6 +286,8 @@ impl ConverterApi for ConverterContract<'_> {
         mut ctx: ExecCtx,
         validator: String,
     ) -> Result<Response, Self::Error> {
+        self.ensure_authorized(&ctx.deps, &ctx.info)?;
+
         let config = self.config.load(ctx.deps.storage)?;
         let denom = config.local_denom;
         must_pay(&ctx.info, &denom)?;
@@ -290,15 +297,7 @@ impl ConverterApi for ConverterContract<'_> {
             .add_attribute("validator", &validator)
             .add_attribute("amount", rewards.amount.to_string());
 
-        // Create a packet for the provider, informing of distribution
-        let packet = ConsumerPacket::Distribute { validator, rewards };
-        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
-        let msg = IbcMsg::SendPacket {
-            channel_id: channel.endpoint.channel_id,
-            data: to_binary(&packet)?,
-            timeout: packet_timeout_rewards(&ctx.env),
-        };
-
+        let msg = make_ibc_packet(&mut ctx, ConsumerPacket::Distribute { validator, rewards })?;
         Ok(Response::new().add_message(msg).add_event(event))
     }
 
@@ -313,19 +312,34 @@ impl ConverterApi for ConverterContract<'_> {
         mut ctx: ExecCtx,
         payments: Vec<RewardInfo>,
     ) -> Result<Response, Self::Error> {
-        // TODO: Optimize this, when we actually get such calls
-        let mut resp = Response::new();
-        for RewardInfo { validator, reward } in payments {
-            let mut sub_ctx = ctx.branch();
-            sub_ctx.info.funds[0].amount = reward;
-            let r = self.distribute_reward(sub_ctx, validator)?;
-            // put all values on the parent one
-            resp = resp
-                .add_submessages(r.messages)
-                .add_attributes(r.attributes)
-                .add_events(r.events);
+        self.ensure_authorized(&ctx.deps, &ctx.info)?;
+
+        let config = self.config.load(ctx.deps.storage)?;
+        let denom = config.local_denom;
+
+        let summed_rewards: Uint128 = payments.iter().map(|reward_info| reward_info.reward).sum();
+        let sent = must_pay(&ctx.info, &denom)?;
+
+        if summed_rewards != sent {
+            return Err(ContractError::DistributeRewardsInvalidAmount {
+                sum: summed_rewards,
+                sent,
+            });
         }
-        Ok(resp)
+
+        Ok(Response::new()
+            .add_events(payments.iter().map(|reward_info| {
+                Event::new("distribute_reward")
+                    .add_attribute("validator", &reward_info.validator)
+                    .add_attribute("amount", reward_info.reward)
+            }))
+            .add_message(make_ibc_packet(
+                &mut ctx,
+                ConsumerPacket::DistributeBatch {
+                    rewards: payments,
+                    denom,
+                },
+            )?))
     }
 
     /// Valset updates.
@@ -339,12 +353,7 @@ impl ConverterApi for ConverterContract<'_> {
         additions: Vec<Validator>,
         tombstones: Vec<Validator>,
     ) -> Result<Response, Self::Error> {
-        let virtual_stake = self.virtual_stake.load(ctx.deps.storage)?;
-        ensure_eq!(
-            ctx.info.sender,
-            virtual_stake,
-            ContractError::Unauthorized {}
-        );
+        self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         // Send over IBC to the Consumer
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;

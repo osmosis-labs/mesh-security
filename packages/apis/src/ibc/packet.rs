@@ -3,6 +3,8 @@ use std::error::Error;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{to_binary, Binary, Coin, StdResult};
 
+use crate::converter_api::RewardInfo;
+
 /// These are messages sent from provider -> consumer
 /// ibc_packet_receive in converter must handle them all.
 /// Each one has a different ack to be used in the reply.
@@ -69,6 +71,13 @@ pub enum ConsumerPacket {
         validator: String,
         /// The amount of rewards held on the consumer side to be released later
         rewards: Coin,
+    },
+    /// This is part of the rewards protocol
+    DistributeBatch {
+        /// Per-validator reward amounts
+        rewards: Vec<RewardInfo>,
+        /// Rewards denom
+        denom: String,
     },
 }
 

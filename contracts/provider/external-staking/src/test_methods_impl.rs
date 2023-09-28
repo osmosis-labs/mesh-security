@@ -3,6 +3,7 @@ use crate::error::ContractError;
 use crate::test_methods::TestMethods;
 
 use cosmwasm_std::{Coin, Response};
+use mesh_apis::converter_api::RewardInfo;
 use mesh_apis::ibc::AddValidator;
 use sylvia::contract;
 use sylvia::types::ExecCtx;
@@ -114,12 +115,32 @@ impl TestMethods for ExternalStakingContract<'_> {
     ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
-            let event = self.distribute_rewards(ctx.deps, validator, rewards)?;
+            let event = self.distribute_rewards(ctx.deps, &validator, rewards)?;
             Ok(Response::new().add_event(event))
         }
         #[cfg(not(any(test, feature = "mt")))]
         {
             let _ = (ctx, validator, rewards);
+            Err(ContractError::Unauthorized)
+        }
+    }
+
+    /// Batch distribute rewards.
+    #[msg(exec)]
+    fn test_distribute_rewards_batch(
+        &self,
+        ctx: ExecCtx,
+        denom: String,
+        rewards: Vec<RewardInfo>,
+    ) -> Result<Response, Self::Error> {
+        #[cfg(any(test, feature = "mt"))]
+        {
+            let events = self.distribute_rewards_batch(ctx.deps, &rewards, &denom)?;
+            Ok(Response::new().add_events(events))
+        }
+        #[cfg(not(any(test, feature = "mt")))]
+        {
+            let _ = (ctx, denom, rewards);
             Err(ContractError::Unauthorized)
         }
     }

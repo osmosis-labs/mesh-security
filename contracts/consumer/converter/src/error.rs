@@ -1,4 +1,4 @@
-use cosmwasm_std::StdError;
+use cosmwasm_std::{StdError, Uint128};
 use cw_utils::{ParseReplyError, PaymentError};
 use mesh_apis::ibc::VersionError;
 use thiserror::Error;
@@ -37,4 +37,7 @@ pub enum ContractError {
 
     #[error("Invalid denom: {0}")]
     InvalidDenom(String),
+
+    #[error("Sum of rewards ({sum}) doesn't match funds sent ({sent})")]
+    DistributeRewardsInvalidAmount { sum: Uint128, sent: Uint128 },
 }

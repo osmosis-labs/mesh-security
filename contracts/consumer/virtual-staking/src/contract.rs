@@ -3,13 +3,13 @@ use std::collections::BTreeMap;
 
 use cosmwasm_std::{
     coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
-    DistributionMsg, Env, Event, Reply, Response, StdResult, SubMsg, SubMsgResponse, Uint128,
-    Validator, WasmMsg,
+    DistributionMsg, Env, Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator,
+    WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::nonpayable;
-use mesh_apis::converter_api;
+use mesh_apis::converter_api::{self, RewardInfo};
 use mesh_bindings::{
     TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
 };
@@ -66,6 +66,8 @@ impl VirtualStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         // initialize this to no one, so no issue when reading for the first time
         self.bonded.save(ctx.deps.storage, &vec![])?;
+        VALIDATOR_REWARDS_BATCH.init(ctx.deps.storage)?;
+
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         Ok(Response::new())
     }
@@ -168,10 +170,10 @@ impl VirtualStakingContract<'_> {
     #[msg(reply)]
     fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match (reply.id, reply.result.into_result()) {
-            (REPLY_REWARDS_ID, Ok(result)) => self.reply_rewards(ctx.deps, ctx.env, result),
+            (REPLY_REWARDS_ID, Ok(_)) => self.reply_rewards(ctx.deps, ctx.env),
             (REPLY_REWARDS_ID, Err(e)) => {
                 // We need to pop the REWARD_TARGETS so it doesn't get out of sync
-                let target = pop_target(ctx.deps)?;
+                let (target, _) = pop_target(ctx.deps)?;
                 // Ignore errors, so the rest doesn't fail, but report them.
                 let evt = Event::new("rewards_error")
                     .add_attribute("error", e)
@@ -183,41 +185,81 @@ impl VirtualStakingContract<'_> {
     }
 
     /// This is called on each successful withdrawal
-    fn reply_rewards(
-        &self,
-        mut deps: DepsMut,
-        env: Env,
-        _reply: SubMsgResponse,
-    ) -> Result<Response, ContractError> {
-        // Find the validator to assign the rewards to
-        let target = pop_target(deps.branch())?;
+    fn reply_rewards(&self, mut deps: DepsMut, env: Env) -> Result<Response, ContractError> {
+        const BATCH: ValidatorRewardsBatch = VALIDATOR_REWARDS_BATCH;
 
-        // Find all the tokens received here (consider it rewards to that validator)
+        // Find the validator to assign the new reward to
+        let (target, finished) = pop_target(deps.branch())?;
+
+        // Find all the tokens received until now
         let cfg = self.config.load(deps.storage)?;
-        let reward = deps
+        let total = deps
             .querier
-            .query_balance(env.contract.address, cfg.denom)?;
-        if reward.amount.is_zero() {
+            .query_balance(env.contract.address, &cfg.denom)?
+            .amount;
+
+        if total.is_zero() {
+            // This helps avoid unnecessary store read/writes and messages sent
+            // when there's definitely nothing to do
             return Ok(Response::new());
         }
 
-        // Send them to the converter, assigned to proper validator
-        let msg = converter_api::ExecMsg::DistributeReward { validator: target };
-        let msg = WasmMsg::Execute {
-            contract_addr: cfg.converter.into_string(),
-            msg: to_binary(&msg)?,
-            funds: vec![reward],
+        let new_reward_amount = total - BATCH.total(deps.storage)?;
+
+        let all_rewards = |storage| {
+            if !new_reward_amount.is_zero() {
+                let reward_info = RewardInfo {
+                    validator: target,
+                    reward: new_reward_amount,
+                };
+
+                if total == new_reward_amount {
+                    // we don't always have to read from the store to know what the
+                    // rewards queue looks like
+                    Ok(vec![reward_info])
+                } else {
+                    let mut rewards = BATCH.rewards(storage)?;
+                    rewards.push(reward_info);
+                    Ok(rewards)
+                }
+            } else {
+                BATCH.rewards(storage)
+            }
         };
-        let resp = Response::new().add_message(msg);
-        Ok(resp)
+
+        if finished {
+            let all_rewards = all_rewards(deps.storage)?;
+            BATCH.wipe(deps.storage)?;
+
+            let msg = converter_api::ExecMsg::DistributeRewards {
+                payments: all_rewards,
+            };
+            let msg = WasmMsg::Execute {
+                contract_addr: cfg.converter.into_string(),
+                msg: to_binary(&msg)?,
+                funds: vec![coin(total.into(), cfg.denom)],
+            };
+            Ok(Response::new().add_message(msg))
+        } else if !new_reward_amount.is_zero() {
+            // since we're not sending out the rewards batch yet, we need to persist
+            // the update for future calls
+            let all_rewards = all_rewards(deps.storage)?;
+            BATCH.set_rewards(deps.storage, &all_rewards)?;
+            BATCH.set_total(deps.storage, &total)?;
+            Ok(Response::new())
+        } else {
+            Ok(Response::new())
+        }
     }
 }
 
-fn pop_target(deps: DepsMut) -> StdResult<String> {
+/// Returns a tuple containing the reward target and a boolean value
+/// specifying if we've exhausted the list.
+fn pop_target(deps: DepsMut) -> StdResult<(String, bool)> {
     let mut targets = REWARD_TARGETS.load(deps.storage)?;
     let target = targets.pop().unwrap();
     REWARD_TARGETS.save(deps.storage, &targets)?;
-    Ok(target)
+    Ok((target, targets.is_empty()))
 }
 
 fn calculate_rebalance(
@@ -256,7 +298,51 @@ fn calculate_rebalance(
 }
 
 const REWARD_TARGETS: Item<Vec<String>> = Item::new("reward_targets");
+const VALIDATOR_REWARDS_BATCH: ValidatorRewardsBatch = ValidatorRewardsBatch::new();
 const REPLY_REWARDS_ID: u64 = 1;
+
+struct ValidatorRewardsBatch<'a> {
+    rewards: Item<'a, Vec<RewardInfo>>,
+    total: Item<'a, Uint128>,
+}
+
+impl<'a> ValidatorRewardsBatch<'a> {
+    const fn new() -> Self {
+        Self {
+            rewards: Item::new("validator_rewards_batch"),
+            total: Item::new("validator_rewards_batch_total"),
+        }
+    }
+
+    fn init(&self, store: &mut dyn Storage) -> StdResult<()> {
+        self.rewards.save(store, &vec![])?;
+        self.total.save(store, &Uint128::zero())?;
+
+        Ok(())
+    }
+
+    fn rewards(&self, store: &mut dyn Storage) -> StdResult<Vec<RewardInfo>> {
+        self.rewards.load(store)
+    }
+
+    /// The total of all rewards currently in the batch.
+    fn total(&self, store: &mut dyn Storage) -> StdResult<Uint128> {
+        self.total.load(store)
+    }
+
+    fn set_rewards(&self, store: &mut dyn Storage, rewards: &Vec<RewardInfo>) -> StdResult<()> {
+        self.rewards.save(store, rewards)
+    }
+
+    /// The total of all rewards currently in the batch.
+    fn set_total(&self, store: &mut dyn Storage, total: &Uint128) -> StdResult<()> {
+        self.total.save(store, total)
+    }
+
+    fn wipe(&self, store: &mut dyn Storage) -> StdResult<()> {
+        self.init(store)
+    }
+}
 
 /// Each of these messages will need to get a callback to distribute received rewards to the proper validator
 /// To manage that, we store a queue of validators in an Item, one item for each SubMsg, and read them in reply.
@@ -366,5 +452,200 @@ pub fn sudo(
             &removals,
             &tombstones,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::{
+        coins, from_binary,
+        testing::{mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage},
+    };
+
+    use super::*;
+
+    type OwnedDeps = cosmwasm_std::OwnedDeps<MockStorage, MockApi, MockQuerier>;
+
+    #[test]
+    fn reply_rewards() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(&mut deps.storage, &["val3", "val2", "val1"]);
+
+        contract.push_rewards(&mut deps, 10).assert_empty();
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract
+            .push_rewards(&mut deps, 30)
+            .assert_eq(&[("val1", 10), ("val2", 20), ("val3", 30)]);
+    }
+
+    #[test]
+    fn reply_rewards_twice() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+
+        set_reward_targets(&mut deps.storage, &["val2", "val1"]);
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract
+            .push_rewards(&mut deps, 30)
+            .assert_eq(&[("val1", 20), ("val2", 30)]);
+
+        set_reward_targets(&mut deps.storage, &["val"]);
+        contract
+            .push_rewards(&mut deps, 30)
+            .assert_eq(&[("val", 30)]);
+    }
+
+    #[test]
+    fn reply_rewards_all_zero() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(&mut deps.storage, &["val3", "val2", "val1"]);
+
+        for _ in 0..3 {
+            contract.push_rewards(&mut deps, 0).assert_empty();
+        }
+    }
+
+    #[test]
+    fn reply_rewards_mid_push_is_zero() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(&mut deps.storage, &["val3", "val2", "val1"]);
+
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract.push_rewards(&mut deps, 0).assert_empty();
+        contract
+            .push_rewards(&mut deps, 10)
+            .assert_eq(&[("val1", 20), ("val3", 10)]);
+    }
+
+    #[test]
+    fn reply_rewards_last_push_is_zero() {
+        let mut deps = mock_dependencies();
+        let contract = VirtualStakingContract::new();
+
+        contract.quick_inst(deps.as_mut());
+        set_reward_targets(&mut deps.storage, &["val3", "val2", "val1"]);
+
+        contract.push_rewards(&mut deps, 20).assert_empty();
+        contract.push_rewards(&mut deps, 10).assert_empty();
+        contract
+            .push_rewards(&mut deps, 0)
+            .assert_eq(&[("val1", 20), ("val2", 10)]);
+    }
+
+    fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
+        REWARD_TARGETS
+            .save(
+                storage,
+                &targets.iter().map(<&str>::to_string).collect::<Vec<_>>(),
+            )
+            .unwrap();
+    }
+
+    trait VirtualStakingExt {
+        fn quick_inst(&self, deps: DepsMut);
+
+        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult;
+    }
+
+    impl VirtualStakingExt for VirtualStakingContract<'_> {
+        fn quick_inst(&self, deps: DepsMut) {
+            self.instantiate(InstantiateCtx {
+                deps,
+                env: mock_env(),
+                info: mock_info("me", &[]),
+            })
+            .unwrap();
+        }
+
+        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult {
+            let denom = self.config.load(&deps.storage).unwrap().denom;
+            let old_amount = deps
+                .as_ref()
+                .querier
+                .query_balance(mock_env().contract.address, &denom)
+                .unwrap()
+                .amount
+                .u128();
+            deps.querier = MockQuerier::new(&[(
+                mock_env().contract.address.as_str(),
+                &coins(old_amount + amount, &denom),
+            )]);
+            let result = PushRewardsResult::new(
+                self.reply_rewards(deps.as_mut(), mock_env())
+                    .unwrap()
+                    .messages,
+            );
+
+            if let PushRewardsResult::Batch(_) = result {
+                deps.querier =
+                    MockQuerier::new(&[(mock_env().contract.address.as_str(), &coins(0, denom))]);
+            }
+
+            result
+        }
+    }
+
+    enum PushRewardsResult {
+        Empty,
+        Batch(Vec<RewardInfo>),
+    }
+
+    impl PushRewardsResult {
+        fn new(data: Vec<SubMsg>) -> Self {
+            match &data[..] {
+                [] => Self::Empty,
+                [SubMsg {
+                    msg: CosmosMsg::Wasm(WasmMsg::Execute { msg: bin_msg, .. }),
+                    ..
+                }] => {
+                    if let converter_api::ExecMsg::DistributeRewards { mut payments } =
+                        from_binary(bin_msg).unwrap()
+                    {
+                        payments.sort();
+                        Self::Batch(payments)
+                    } else {
+                        panic!("failed to deserialize DistributeRewards msg")
+                    }
+                }
+                _ => panic!("invalid response"),
+            }
+        }
+
+        #[track_caller]
+        fn assert_empty(&self) {
+            if let Self::Empty = self {
+            } else {
+                panic!("not empty");
+            }
+        }
+
+        #[track_caller]
+        fn assert_eq(&self, expected: &[(&str, u128)]) {
+            if expected.is_empty() {
+                self.assert_empty();
+            } else if let Self::Batch(rewards) = self {
+                let mut expected = expected
+                    .iter()
+                    .map(|(val, reward)| RewardInfo {
+                        validator: val.to_string(),
+                        reward: (*reward).into(),
+                    })
+                    .collect::<Vec<_>>();
+                expected.sort();
+                assert_eq!(rewards, &expected);
+            } else {
+                panic!("empty result")
+            }
+        }
     }
 }
