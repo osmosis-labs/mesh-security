@@ -391,12 +391,7 @@ impl ConverterApi for ConverterContract<'_> {
         time: u64,
         tombstone: bool,
     ) -> Result<Response, Self::Error> {
-        let virtual_stake = self.virtual_stake.load(ctx.deps.storage)?;
-        ensure_eq!(
-            ctx.info.sender,
-            virtual_stake,
-            ContractError::Unauthorized {}
-        );
+        self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         // Send over IBC to the Consumer
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
