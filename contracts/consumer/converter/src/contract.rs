@@ -351,14 +351,14 @@ impl ConverterApi for ConverterContract<'_> {
         &self,
         ctx: ExecCtx,
         additions: Vec<Validator>,
-        tombstones: Vec<Validator>,
+        tombstoned: Vec<String>,
     ) -> Result<Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         // Send over IBC to the Consumer
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
         let add_msg = add_validators_msg(&ctx.env, &channel, &additions)?;
-        let tomb_msg = tombstone_validators_msg(&ctx.env, &channel, &tombstones)?;
+        let tomb_msg = tombstone_validators_msg(&ctx.env, &channel, &tombstoned)?;
 
         let event = Event::new("valset_update").add_attribute(
             "additions",
@@ -368,14 +368,7 @@ impl ConverterApi for ConverterContract<'_> {
                 .collect::<Vec<String>>()
                 .join(","),
         );
-        let event = event.add_attribute(
-            "tombstones",
-            tombstones
-                .iter()
-                .map(|v| v.address.clone())
-                .collect::<Vec<String>>()
-                .join(","),
-        );
+        let event = event.add_attribute("tombstoned", tombstoned.join(","));
         let resp = Response::new()
             .add_event(event)
             .add_message(add_msg)
