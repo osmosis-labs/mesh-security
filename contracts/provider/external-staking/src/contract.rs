@@ -702,36 +702,24 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Slashes a validator.
-    /// Validator has to be active at height `height`.
     ///
     /// In test code, this is called from `test_handle_slashing`.
-    /// In non-test code, this is called from `ibc_packet_receive`
+    /// In non-test code, this is being called from `ibc_packet_receive` (in the `ConsumerPacket::RemoveValidators`
+    /// handler)
     pub(crate) fn handle_slashing(
         &self,
-        deps: DepsMut,
-        validator: String,
-        height: u64,
-        _time: u64,
-        tombstone: bool,
+        storage: &mut dyn Storage,
+        validator: &str,
     ) -> Result<WasmMsg, ContractError> {
-        // If already tombstoned or not found, ignore
-        if self
-            .val_set
-            .active_validator_at_height(deps.storage, &validator, height)?
-            .is_none()
-        {
-            return Err(ContractError::AlreadyTombstoned(validator, height));
-        }
-
         // Route associated users to vault for slashing of their collateral
-        let config = self.config.load(deps.storage)?;
+        let config = self.config.load(storage)?;
         let users = self
             .stakes
             .stake
             .idx
             .rev
-            .sub_prefix(validator.clone())
-            .range(deps.storage, None, None, Order::Ascending)
+            .sub_prefix(validator.to_string())
+            .range(storage, None, None, Order::Ascending)
             .map(|item| {
                 let ((user, _), stake) = item?;
                 Ok::<_, ContractError>(SlashInfo {
@@ -741,10 +729,6 @@ impl ExternalStakingContract<'_> {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        if tombstone {
-            // Tombstone validator
-            self.val_set.remove_validator(deps.storage, &validator)?;
-        }
         let msg = config.vault.process_cross_slashing(users)?;
         Ok(msg)
     }

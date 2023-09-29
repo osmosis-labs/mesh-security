@@ -146,7 +146,17 @@ pub fn ibc_packet_receive(
         }
         ConsumerPacket::RemoveValidators(to_remove) => {
             for valoper in to_remove {
+                // Check that the validator is active (at height) and slash it if that is the case
+                // TODO: Needs Consumer chain's height
+                let active = contract
+                    .val_set
+                    .is_active_validator(deps.storage, &valoper)?;
                 contract.val_set.remove_validator(deps.storage, &valoper)?;
+                if active {
+                    // slash the validator
+                    // TODO: Error handling / capturing
+                    contract.handle_slashing(deps.storage, &valoper)?;
+                }
             }
             let ack = ack_success(&RemoveValidatorsAck {})?;
             IbcReceiveResponse::new().set_ack(ack)
