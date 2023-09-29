@@ -2005,7 +2005,7 @@ fn cross_slash_scenario_1() {
 
     let (vault, local_staking_addr, cross_staking) = setup(&app, owner, slashing_percentage);
 
-    let (update_valset_height, update_valset_time) =
+    let (_update_valset_height, _update_valset_time) =
         set_active_validators(&cross_staking, &validators);
 
     // Bond some collateral
@@ -2058,12 +2058,7 @@ fn cross_slash_scenario_1() {
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(
-            validator1.to_string(),
-            update_valset_height + 1234,
-            update_valset_time + 120,
-            true,
-        )
+        .test_handle_slashing(validator1.to_string())
         .call("test")
         .unwrap();
 
@@ -2113,7 +2108,7 @@ fn cross_slash_scenario_2() {
 
     let (vault, local_staking_addr, cross_staking) = setup(&app, owner, slashing_percentage);
 
-    let (update_valset_height, update_valset_time) =
+    let (_update_valset_height, _update_valset_time) =
         set_active_validators(&cross_staking, &validators);
 
     // Bond some collateral
@@ -2157,12 +2152,7 @@ fn cross_slash_scenario_2() {
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(
-            validator1.to_string(),
-            update_valset_height + 123,
-            update_valset_time + 12,
-            true,
-        )
+        .test_handle_slashing(validator1.to_string())
         .call("test")
         .unwrap();
 
@@ -2212,7 +2202,7 @@ fn cross_slash_scenario_3() {
 
     let (vault, local_staking_addr, cross_staking) = setup(&app, owner, slashing_percentage);
 
-    let (update_valset_height, update_valset_time) =
+    let (_update_valset_height, _update_valset_time) =
         set_active_validators(&cross_staking, &validators);
 
     // Bond some collateral
@@ -2256,12 +2246,7 @@ fn cross_slash_scenario_3() {
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(
-            validator1.to_string(),
-            update_valset_height + 12,
-            update_valset_time + 1,
-            true,
-        )
+        .test_handle_slashing(validator1.to_string())
         .call("test")
         .unwrap();
 
@@ -2314,7 +2299,7 @@ fn cross_slash_scenario_4() {
     let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage);
 
     let (_, _) = set_active_validators(&cross_staking_1, &validators_1);
-    let (update_valset_height, update_valset_time) =
+    let (_update_valset_height, _update_valset_time) =
         set_active_validators(&cross_staking_2, &validators_2);
 
     // Bond some collateral
@@ -2363,12 +2348,7 @@ fn cross_slash_scenario_4() {
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
-        .test_handle_slashing(
-            validator1.to_string(),
-            update_valset_height + 12,
-            update_valset_time + 1,
-            true,
-        )
+        .test_handle_slashing(validator1.to_string())
         .call("test")
         .unwrap();
 
@@ -2428,7 +2408,7 @@ fn cross_slash_scenario_5() {
 
     let (_, _) = set_active_validators(&cross_staking_1, &[validator1]);
     let (_, _) = set_active_validators(&cross_staking_2, &[validator2]);
-    let (update_valset_height, update_valset_time) =
+    let (_update_valset_height, _update_valset_time) =
         set_active_validators(&cross_staking_3, &[validator3]);
 
     // Bond some collateral
@@ -2482,12 +2462,7 @@ fn cross_slash_scenario_5() {
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
-        .test_handle_slashing(
-            validator1.to_string(),
-            update_valset_height + 1,
-            update_valset_time,
-            true,
-        )
+        .test_handle_slashing(validator1.to_string())
         .call("test")
         .unwrap();
 
@@ -2548,7 +2523,7 @@ fn cross_slash_no_native_staking() {
     let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage);
 
     let (_, _) = set_active_validators(&cross_staking_1, &validators_1);
-    let (update_valset_height, update_valset_time) =
+    let (_update_valset_height, _update_valset_time) =
         set_active_validators(&cross_staking_2, &validators_2);
 
     // Bond some collateral
@@ -2589,12 +2564,7 @@ fn cross_slash_no_native_staking() {
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
-        .test_handle_slashing(
-            validator1.to_string(),
-            update_valset_height,
-            update_valset_time,
-            true,
-        )
+        .test_handle_slashing(validator1.to_string())
         .call("test")
         .unwrap();
 
