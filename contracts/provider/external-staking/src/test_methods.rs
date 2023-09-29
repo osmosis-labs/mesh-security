@@ -69,13 +69,12 @@ pub trait TestMethods {
     ) -> Result<Response, Self::Error>;
 
     /// Slashes a validator.
+    /// This will not perform any check on the validator's state in the validator set, which should
+    /// be done before calling this function.
     #[msg(exec)]
     fn test_handle_slashing(
         &self,
         ctx: ExecCtx,
         validator: String,
-        height: u64,
-        time: u64,
-        tombstone: bool,
     ) -> Result<Response, Self::Error>;
 }

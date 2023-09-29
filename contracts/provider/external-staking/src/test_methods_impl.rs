@@ -189,18 +189,15 @@ impl TestMethods for ExternalStakingContract<'_> {
         &self,
         ctx: ExecCtx,
         validator: String,
-        height: u64,
-        time: u64,
-        tombstone: bool,
     ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
-            let msg = self.handle_slashing(ctx.deps, validator, height, time, tombstone)?;
+            let msg = self.handle_slashing(ctx.deps.storage, &validator)?;
             Ok(Response::new().add_message(msg))
         }
         #[cfg(not(any(test, feature = "mt")))]
         {
-            let _ = (ctx, validator, height, time, tombstone);
+            let _ = (ctx, validator);
             Err(ContractError::Unauthorized {})
         }
     }
