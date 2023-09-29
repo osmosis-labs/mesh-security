@@ -157,6 +157,7 @@ impl VirtualStakingContract<'_> {
         let _ = (removals, updated, jailed, unjailed);
 
         // Send additions and tombstones to the Converter. Removals are non-permanent and ignored
+        // TODO: Send jailed even when they are non-permanent, for slashing
         let cfg = self.config.load(deps.storage)?;
         let msg = converter_api::ExecMsg::ValsetUpdate {
             additions: additions.to_vec(),
