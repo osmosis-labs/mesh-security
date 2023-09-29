@@ -145,6 +145,7 @@ pub fn ibc_packet_receive(
             IbcReceiveResponse::new().set_ack(ack)
         }
         ConsumerPacket::RemoveValidators(to_remove) => {
+            let mut msgs = vec![];
             for valoper in to_remove {
                 // Check that the validator is active (at height) and slash it if that is the case
                 // TODO: Needs Consumer chain's height
@@ -155,11 +156,12 @@ pub fn ibc_packet_receive(
                 if active {
                     // slash the validator
                     // TODO: Error handling / capturing
-                    contract.handle_slashing(deps.storage, &valoper)?;
+                    let msg = contract.handle_slashing(deps.storage, &valoper)?;
+                    msgs.push(msg);
                 }
             }
             let ack = ack_success(&RemoveValidatorsAck {})?;
-            IbcReceiveResponse::new().set_ack(ack)
+            IbcReceiveResponse::new().set_ack(ack).add_messages(msgs)
         }
         ConsumerPacket::Distribute { validator, rewards } => {
             let contract = ExternalStakingContract::new();
