@@ -160,28 +160,6 @@ pub(crate) fn tombstone_validators_msg(
     Ok(msg)
 }
 
-pub(crate) fn slash_msg(
-    env: &Env,
-    channel: &IbcChannel,
-    validator: &str,
-    height: u64,
-    time: u64,
-    tombstone: bool,
-) -> Result<IbcMsg, ContractError> {
-    let packet = ConsumerPacket::Slash {
-        validator: validator.to_string(),
-        height,
-        time,
-        tombstone,
-    };
-    let msg = IbcMsg::SendPacket {
-        channel_id: channel.endpoint.channel_id.clone(),
-        data: to_binary(&packet)?,
-        timeout: packet_timeout_validator(env),
-    };
-    Ok(msg)
-}
-
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// On closed channel, we take all tokens from reflect contract to this contract.
 /// We also delete the channel entry from accounts.

@@ -79,17 +79,6 @@ pub enum ConsumerPacket {
         /// Rewards denom
         denom: String,
     },
-    /// This is misbehaviour handling, i.e. slashing / tombstoning.
-    Slash {
-        /// The validator who misbehaved
-        validator: String,
-        /// The height at which the offense occurred
-        height: u64,
-        /// The time at which the offense occurred, in nanoseconds
-        time: u64,
-        /// Tombstone the validator in passing (avoids a separate `ValsetUpdate` call)
-        tombstone: bool,
-    },
 }
 
 #[cw_serde]
@@ -134,10 +123,6 @@ pub struct RemoveValidatorsAck {}
 /// Ack sent for ConsumerPacket::Distribute
 #[cw_serde]
 pub struct DistributeAck {}
-
-/// Ack sent for ConsumerPacket::Misbehaviour
-#[cw_serde]
-pub struct MisbehaviourAck {}
 
 /// This is a generic ICS acknowledgement format.
 /// Protobuf defined here: https://github.com/cosmos/cosmos-sdk/blob/v0.42.0/proto/ibc/core/channel/v1/channel.proto#L141-L147

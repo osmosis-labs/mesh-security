@@ -171,35 +171,6 @@ impl VirtualStakingContract<'_> {
         Ok(resp)
     }
 
-    /**
-     * This is called when a validator is slashed, and optionally tombstoned for double signing.
-     * It will be routed to the Provider for processing
-     */
-    fn handle_slashing(
-        &self,
-        deps: DepsMut<VirtualStakeCustomQuery>,
-        validator: String,
-        height: u64,
-        time: u64,
-        tombstone: bool,
-    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        // Send misbehaviour data to the Converter
-        let cfg = self.config.load(deps.storage)?;
-        let msg = converter_api::ExecMsg::Slash {
-            validator,
-            height,
-            time,
-            tombstone,
-        };
-        let msg = WasmMsg::Execute {
-            contract_addr: cfg.converter.to_string(),
-            msg: to_binary(&msg)?,
-            funds: vec![],
-        };
-        let resp = Response::new().add_message(msg);
-        Ok(resp)
-    }
-
     #[msg(reply)]
     fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match (reply.id, reply.result.into_result()) {
@@ -491,14 +462,6 @@ pub fn sudo(
             &unjailed,
             &tombstoned,
         ),
-        SudoMsg::Slash {
-            validator,
-            height,
-            time,
-            tombstone,
-        } => {
-            VirtualStakingContract::new().handle_slashing(deps, validator, height, time, tombstone)
-        }
     }
 }
 
