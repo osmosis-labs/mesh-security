@@ -557,6 +557,72 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
+    fn validator_jail_unjail() {
+        let (mut deps, bond_status) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        bond_status.update(10u128, 0u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom))])
+            .assert_rewards(&[]);
+
+        contract.jail(deps.as_mut(), "val1");
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
+
+        contract.unjail(deps.as_mut(), "val1");
+        contract.hit_epoch(deps.as_mut());
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+    }
+
+    #[test]
+    #[ignore]
+    fn validator_remove() {
+        let (mut deps, bond_status) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        bond_status.update(10u128, 0u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom))])
+            .assert_rewards(&[]);
+
+        contract.remove_val(deps.as_mut(), "val1");
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
+    }
+
+    #[test]
+    #[ignore]
+    fn validator_tombstone() {
+        let (mut deps, bond_status) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        bond_status.update(10u128, 0u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom))])
+            .assert_rewards(&[]);
+
+        contract.tombstone(deps.as_mut(), "val1");
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
+    }
+
+    #[test]
     fn reply_rewards() {
         let (mut deps, _) = mock_dependencies();
         let contract = VirtualStakingContract::new();
@@ -696,6 +762,10 @@ mod tests {
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult;
         fn quick_bond(&self, deps: DepsMut, validator: &str, amount: u128);
         fn quick_unbond(&self, deps: DepsMut, validator: &str, amount: u128);
+        fn jail(&self, deps: DepsMut, val: &str);
+        fn unjail(&self, deps: DepsMut, val: &str);
+        fn tombstone(&self, deps: DepsMut, val: &str);
+        fn remove_val(&self, deps: DepsMut, val: &str);
     }
 
     impl VirtualStakingExt for VirtualStakingContract<'_> {
@@ -772,6 +842,26 @@ mod tests {
                 coin(amount, denom),
             )
             .unwrap();
+        }
+
+        fn jail(&self, deps: DepsMut, val: &str) {
+            self.handle_valset_update(deps, &[], &[], &[], &[val.to_string()], &[], &[])
+                .unwrap();
+        }
+
+        fn unjail(&self, deps: DepsMut, val: &str) {
+            self.handle_valset_update(deps, &[], &[], &[], &[], &[val.to_string()], &[])
+                .unwrap();
+        }
+
+        fn tombstone(&self, deps: DepsMut, val: &str) {
+            self.handle_valset_update(deps, &[], &[], &[], &[], &[], &[val.to_string()])
+                .unwrap();
+        }
+
+        fn remove_val(&self, deps: DepsMut, val: &str) {
+            self.handle_valset_update(deps, &[], &[val.to_string()], &[], &[], &[], &[])
+                .unwrap();
         }
     }
 
