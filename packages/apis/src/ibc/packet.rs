@@ -63,8 +63,8 @@ pub enum ConsumerPacket {
     AddValidators(Vec<AddValidator>),
     /// This is sent when a validator is tombstoned. Not just leaving the active state,
     /// but when it is no longer a valid target to delegate to.
-    /// It contains a list of `valoper_address` to be removed
-    RemoveValidators(Vec<String>),
+    /// It contains a list of `valoper_address` to be removed, along with the removal's height.
+    RemoveValidators(Vec<RemoveValidator>),
     /// This is part of the rewards protocol
     Distribute {
         /// The validator whose stakers should receive these rewards
@@ -110,6 +110,22 @@ impl AddValidator {
             start_time: 1687357499,
         }
     }
+}
+
+#[cw_serde]
+pub struct RemoveValidator {
+    /// This is the validator operator (valoper) address used for delegations and rewards
+    pub valoper: String,
+
+    /// This is the height the validator is being tombstoned.
+    /// It is used to detect slashing conditions, that is, avoid slashing an already tombstoned
+    /// validator.
+    pub end_height: u64,
+
+    /// This is the timestamp of the block the validator was tombstoned.
+    /// It may be used for unbonding_period issues, maybe just for informational purposes.
+    /// Stored as unix seconds.
+    pub end_time: u64,
 }
 
 /// Ack sent for ConsumerPacket::AddValidators

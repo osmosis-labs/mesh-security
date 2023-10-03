@@ -110,6 +110,18 @@ impl<'a> CrdtState<'a> {
         Ok(active)
     }
 
+    pub fn is_active_validator_at_height(
+        &self,
+        storage: &dyn Storage,
+        valoper: &str,
+        height: u64,
+    ) -> StdResult<bool> {
+        let active = self
+            .active_validator_at_height(storage, valoper, height)?
+            .is_some();
+        Ok(active)
+    }
+
     /// This returns the valoper address of all active validators
     pub fn list_active_validators(
         &self,
