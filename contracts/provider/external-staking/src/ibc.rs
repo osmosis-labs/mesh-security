@@ -9,7 +9,8 @@ use cosmwasm_std::{
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, AddValidatorsAck,
-    ConsumerPacket, DistributeAck, ProtocolVersion, ProviderPacket, RemoveValidatorsAck,
+    ConsumerPacket, DistributeAck, ProtocolVersion, ProviderPacket, RemoveValidator,
+    RemoveValidatorsAck,
 };
 
 use crate::contract::ExternalStakingContract;
@@ -145,11 +146,29 @@ pub fn ibc_packet_receive(
             IbcReceiveResponse::new().set_ack(ack)
         }
         ConsumerPacket::RemoveValidators(to_remove) => {
-            for valoper in to_remove {
+            let mut msgs = vec![];
+            for RemoveValidator {
+                valoper,
+                end_height,
+                end_time: _end_time,
+            } in to_remove
+            {
+                // Check that the validator is active at height and slash it if that is the case
+                let active = contract.val_set.is_active_validator_at_height(
+                    deps.storage,
+                    &valoper,
+                    end_height,
+                )?;
                 contract.val_set.remove_validator(deps.storage, &valoper)?;
+                if active {
+                    // slash the validator
+                    // TODO: Error handling / capturing
+                    let msg = contract.handle_slashing(deps.storage, &valoper)?;
+                    msgs.push(msg);
+                }
             }
             let ack = ack_success(&RemoveValidatorsAck {})?;
-            IbcReceiveResponse::new().set_ack(ack)
+            IbcReceiveResponse::new().set_ack(ack).add_messages(msgs)
         }
         ConsumerPacket::Distribute { validator, rewards } => {
             let contract = ExternalStakingContract::new();

@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_binary, Addr, Coin, Response, StdError, WasmMsg};
+use cosmwasm_std::{to_binary, Addr, Coin, Response, StdError, Uint128, WasmMsg};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -39,6 +39,17 @@ pub trait VaultApi {
     /// Transaction ID is used to identify the original (vault contract originated) transaction.
     #[msg(exec)]
     fn rollback_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
+
+    /// This must be called by the external staking contract to process a slashing event
+    /// because of a misbehaviour on the Consumer chain
+    #[msg(exec)]
+    fn cross_slash(&self, ctx: ExecCtx, slashes: Vec<SlashInfo>) -> Result<Response, Self::Error>;
+}
+
+#[cw_serde]
+pub struct SlashInfo {
+    pub user: String,
+    pub stake: Uint128,
 }
 
 #[cw_serde]
@@ -78,6 +89,16 @@ impl VaultApiHelper {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,
             funds,
+        };
+        Ok(wasm)
+    }
+
+    pub fn process_cross_slashing(&self, slashes: Vec<SlashInfo>) -> Result<WasmMsg, StdError> {
+        let msg = VaultApiExecMsg::CrossSlash { slashes };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
         };
         Ok(wasm)
     }

@@ -67,4 +67,14 @@ pub trait TestMethods {
         ctx: ExecCtx,
         tx_id: u64,
     ) -> Result<Response, Self::Error>;
+
+    /// Slashes a validator.
+    /// This will not perform any check on the validator's state in the validator set, which should
+    /// be done before calling this function.
+    #[msg(exec)]
+    fn test_handle_slashing(
+        &self,
+        ctx: ExecCtx,
+        validator: String,
+    ) -> Result<Response, Self::Error>;
 }

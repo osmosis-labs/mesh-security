@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    coin, ensure, ensure_eq, to_binary, Addr, Coin, Decimal, DepsMut, Env, Event, IbcMsg, Order,
+    coin, ensure, ensure_eq, to_binary, Coin, Decimal, DepsMut, Env, Event, IbcMsg, Order,
     Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -12,7 +12,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use mesh_apis::cross_staking_api::{self};
 use mesh_apis::ibc::ProviderPacket;
-use mesh_apis::vault_api::VaultApiHelper;
+use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
 use mesh_sync::Tx;
 
 use crate::crdt::CrdtState;
@@ -23,6 +23,7 @@ use crate::msg::{
     IbcChannelResponse, ListRemoteValidatorsResponse, PendingRewards, StakeInfo, StakesResponse,
     TxResponse, ValidatorPendingRewards,
 };
+use crate::stakes::Stakes;
 use crate::state::{Config, Distribution, Stake};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -41,7 +42,7 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
 pub struct ExternalStakingContract<'a> {
     pub config: Item<'a, Config>,
     /// Stakes indexed by `(owner, validator)` pair
-    pub stakes: Map<'a, (&'a Addr, &'a str), Stake>,
+    pub stakes: Stakes<'a>,
     /// Per-validator distribution information
     pub distribution: Map<'a, &'a str, Distribution>,
     /// Pending txs information
@@ -51,16 +52,22 @@ pub struct ExternalStakingContract<'a> {
     pub val_set: CrdtState<'a>,
 }
 
+impl Default for ExternalStakingContract<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
 #[messages(cross_staking_api as CrossStakingApi)]
 #[messages(crate::test_methods as TestMethods)]
 impl ExternalStakingContract<'_> {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             config: Item::new("config"),
-            stakes: Map::new("stakes"),
+            stakes: Stakes::new("stakes", "vals"),
             distribution: Map::new("distribution"),
             pending_txs: Map::new("pending_txs"),
             tx_count: Item::new("tx_count"),
@@ -147,7 +154,10 @@ impl ExternalStakingContract<'_> {
         };
 
         // Load stake
-        let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+        let mut stake = self
+            .stakes
+            .stake
+            .load(deps.storage, (&tx_user, &tx_validator))?;
 
         // Load distribution
         let mut distribution = self
@@ -166,6 +176,7 @@ impl ExternalStakingContract<'_> {
 
         // Save stake
         self.stakes
+            .stake
             .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
 
         // Save distribution
@@ -208,13 +219,17 @@ impl ExternalStakingContract<'_> {
         };
 
         // Load stake
-        let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+        let mut stake = self
+            .stakes
+            .stake
+            .load(deps.storage, (&tx_user, &tx_validator))?;
 
         // Rollback add amount
         stake.stake.rollback_add(tx_amount);
 
         // Save stake
         self.stakes
+            .stake
             .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
 
         // Remove tx
@@ -248,6 +263,7 @@ impl ExternalStakingContract<'_> {
 
         let mut stake = self
             .stakes
+            .stake
             .may_load(deps.storage, (&info.sender, &validator))?
             .unwrap_or_default();
 
@@ -259,6 +275,7 @@ impl ExternalStakingContract<'_> {
         stake.stake.prepare_sub(amount.amount, Uint128::zero())?;
 
         self.stakes
+            .stake
             .save(deps.storage, (&info.sender, &validator), &stake)?;
 
         // Create new tx
@@ -336,7 +353,10 @@ impl ExternalStakingContract<'_> {
         let config = self.config.load(deps.storage)?;
 
         // Load stake
-        let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+        let mut stake = self
+            .stakes
+            .stake
+            .load(deps.storage, (&tx_user, &tx_validator))?;
 
         // Load distribution
         let mut distribution = self
@@ -364,6 +384,7 @@ impl ExternalStakingContract<'_> {
 
         // Save stake
         self.stakes
+            .stake
             .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
 
         // Save distribution
@@ -397,13 +418,17 @@ impl ExternalStakingContract<'_> {
         };
 
         // Load stake
-        let mut stake = self.stakes.load(deps.storage, (&tx_user, &tx_validator))?;
+        let mut stake = self
+            .stakes
+            .stake
+            .load(deps.storage, (&tx_user, &tx_validator))?;
 
         // Rollback sub amount
         stake.stake.rollback_sub(tx_amount);
 
         // Save stake
         self.stakes
+            .stake
             .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
 
         // Remove tx
@@ -423,6 +448,7 @@ impl ExternalStakingContract<'_> {
 
         let stakes: Vec<_> = self
             .stakes
+            .stake
             .prefix(&ctx.info.sender)
             .range(ctx.deps.storage, None, None, Order::Ascending)
             .collect::<Result<_, _>>()?;
@@ -433,8 +459,11 @@ impl ExternalStakingContract<'_> {
                 let released = stake.release_pending(&ctx.env.block);
 
                 if !released.is_zero() {
-                    self.stakes
-                        .save(ctx.deps.storage, (&ctx.info.sender, &validator), &stake)?
+                    self.stakes.stake.save(
+                        ctx.deps.storage,
+                        (&ctx.info.sender, &validator),
+                        &stake,
+                    )?
                 }
 
                 Ok(released)
@@ -551,6 +580,7 @@ impl ExternalStakingContract<'_> {
 
         let stake = self
             .stakes
+            .stake
             .may_load(ctx.deps.storage, (&ctx.info.sender, &validator))?
             .unwrap_or_default();
 
@@ -658,13 +688,49 @@ impl ExternalStakingContract<'_> {
         };
 
         // Update withdrawn_funds to hold this transfer
-        let mut stake = self.stakes.load(deps.storage, (&staker, &validator))?;
+        let mut stake = self
+            .stakes
+            .stake
+            .load(deps.storage, (&staker, &validator))?;
         stake.withdrawn_funds += amount;
 
         self.stakes
+            .stake
             .save(deps.storage, (&staker, &validator), &stake)?;
 
         Ok(())
+    }
+
+    /// Slashes a validator.
+    ///
+    /// In test code, this is called from `test_handle_slashing`.
+    /// In non-test code, this is being called from `ibc_packet_receive` (in the `ConsumerPacket::RemoveValidators`
+    /// handler)
+    pub(crate) fn handle_slashing(
+        &self,
+        storage: &mut dyn Storage,
+        validator: &str,
+    ) -> Result<WasmMsg, ContractError> {
+        // Route associated users to vault for slashing of their collateral
+        let config = self.config.load(storage)?;
+        let users = self
+            .stakes
+            .stake
+            .idx
+            .rev
+            .sub_prefix(validator.to_string())
+            .range(storage, None, None, Order::Ascending)
+            .map(|item| {
+                let ((user, _), stake) = item?;
+                Ok::<_, ContractError>(SlashInfo {
+                    user,
+                    stake: stake.stake.high(),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let msg = config.vault.process_cross_slashing(users)?;
+        Ok(msg)
     }
 
     /// Queries for contract configuration
@@ -719,6 +785,7 @@ impl ExternalStakingContract<'_> {
         let user = ctx.deps.api.addr_validate(&user)?;
         let stake = self
             .stakes
+            .stake
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
 
@@ -743,6 +810,7 @@ impl ExternalStakingContract<'_> {
 
         let stakes = self
             .stakes
+            .stake
             .prefix(&user)
             .range(ctx.deps.storage, bound, None, Order::Ascending)
             .map(|item| {
@@ -810,6 +878,7 @@ impl ExternalStakingContract<'_> {
 
         let stake = self
             .stakes
+            .stake
             .may_load(ctx.deps.storage, (&user, &validator))?
             .unwrap_or_default();
 
@@ -845,6 +914,7 @@ impl ExternalStakingContract<'_> {
 
         let rewards: Vec<_> = self
             .stakes
+            .stake
             .prefix(&user)
             .range(ctx.deps.storage, bound, None, Order::Ascending)
             .take(limit)
@@ -931,6 +1001,7 @@ pub mod cross_staking {
             }
             let mut stake = self
                 .stakes
+                .stake
                 .may_load(ctx.deps.storage, (&owner, &msg.validator))?
                 .unwrap_or_default();
 
@@ -939,6 +1010,7 @@ pub mod cross_staking {
             // performed the proper check.
             stake.stake.prepare_add(amount.amount, None)?;
             self.stakes
+                .stake
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake)?;
 
             // Save tx
