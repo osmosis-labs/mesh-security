@@ -5,6 +5,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
 use cw_utils::{nonpayable, PaymentError};
+use std::cmp::min;
 
 use mesh_apis::converter_api::RewardInfo;
 use sylvia::contract;
@@ -13,7 +14,7 @@ use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use mesh_apis::cross_staking_api::{self};
 use mesh_apis::ibc::ProviderPacket;
 use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
-use mesh_sync::Tx;
+use mesh_sync::{Tx, ValueRange};
 
 use crate::crdt::CrdtState;
 use crate::error::ContractError;
@@ -165,8 +166,8 @@ impl ExternalStakingContract<'_> {
             .may_load(deps.storage, &tx_validator)?
             .unwrap_or_default();
 
-        // Commit stake
-        stake.stake.commit_add(tx_amount);
+        // Commit stake (saturating up if slashed)
+        stake.stake.commit_add_saturating(tx_amount);
 
         // Distribution alignment
         stake
@@ -224,8 +225,8 @@ impl ExternalStakingContract<'_> {
             .stake
             .load(deps.storage, (&tx_user, &tx_validator))?;
 
-        // Rollback add amount
-        stake.stake.rollback_add(tx_amount);
+        // Rollback add amount (saturating up if slashed)
+        stake.stake.rollback_add_saturating(tx_amount);
 
         // Save stake
         self.stakes
@@ -364,23 +365,21 @@ impl ExternalStakingContract<'_> {
             .may_load(deps.storage, &tx_validator)?
             .unwrap_or_default();
 
-        // Commit sub amount
-        stake.stake.commit_sub(tx_amount);
+        // Commit sub amount, saturating if slashed
+        let amount = min(tx_amount, stake.stake.high());
+        stake.stake.commit_sub(amount);
 
         // FIXME? Release period being computed after successful IBC tx
         // (Note: this is good for now, but can be revisited in v1 design)
         let release_at = env.block.time.plus_seconds(config.unbonding_period);
-        let unbond = PendingUnbond {
-            amount: tx_amount,
-            release_at,
-        };
+        let unbond = PendingUnbond { amount, release_at };
         stake.pending_unbonds.push(unbond);
 
         // Distribution alignment
         stake
             .points_alignment
-            .stake_decreased(tx_amount, distribution.points_per_stake);
-        distribution.total_stake -= tx_amount;
+            .stake_decreased(amount, distribution.points_per_stake);
+        distribution.total_stake -= amount;
 
         // Save stake
         self.stakes
@@ -424,7 +423,7 @@ impl ExternalStakingContract<'_> {
             .load(deps.storage, (&tx_user, &tx_validator))?;
 
         // Rollback sub amount
-        stake.stake.rollback_sub(tx_amount);
+        stake.stake.rollback_sub_saturating(tx_amount);
 
         // Save stake
         self.stakes
@@ -711,8 +710,8 @@ impl ExternalStakingContract<'_> {
         storage: &mut dyn Storage,
         validator: &str,
     ) -> Result<WasmMsg, ContractError> {
-        // Route associated users to vault for slashing of their collateral
         let config = self.config.load(storage)?;
+        // Get the list of users staking via this validator
         let users = self
             .stakes
             .stake
@@ -722,14 +721,38 @@ impl ExternalStakingContract<'_> {
             .range(storage, None, None, Order::Ascending)
             .map(|item| {
                 let ((user, _), stake) = item?;
-                Ok::<_, ContractError>(SlashInfo {
-                    user: user.to_string(),
-                    stake: stake.stake.high(),
-                })
+                Ok::<_, ContractError>((user, stake))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let msg = config.vault.process_cross_slashing(users)?;
+        // Slash their stake in passing
+        for (user, stake) in &users {
+            let stake_low = stake.stake.low();
+            let stake_high = stake.stake.high();
+            let mut slashed_stake = stake.clone();
+            // Requires proper saturating methods in commit/rollback_stake/unstake
+            slashed_stake.stake = ValueRange::new(
+                stake_low - stake_low * config.max_slashing,
+                stake_high - stake_high * config.max_slashing,
+            );
+            self.stakes
+                .stake
+                .save(storage, (&user, validator), &slashed_stake)?;
+            // TODO: Points alignment
+
+            // Slash the unbondings
+        }
+
+        // Route associated users to vault for slashing of their collateral
+        let msg = config.vault.process_cross_slashing(
+            users
+                .iter()
+                .map(|(user, stake)| SlashInfo {
+                    user: user.to_string(),
+                    stake: stake.stake.high(), // FIXME: Send the range
+                })
+                .collect::<Vec<_>>(),
+        )?;
         Ok(msg)
     }
 
