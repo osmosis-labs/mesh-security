@@ -4,7 +4,7 @@ use cw_storage_plus::{Index, IndexList, IndexedMap, KeyDeserialize, MultiIndex};
 
 pub struct StakeIndexes<'a> {
     // Last type param defines the pk deserialization type
-    pub rev: MultiIndex<'a, (String, Addr), Stake, (String, Addr)>,
+    pub rev: MultiIndex<'a, (String, Addr), Stake, (Addr, String)>,
 }
 
 impl<'a> IndexList<Stake> for StakeIndexes<'a> {
@@ -50,7 +50,7 @@ impl<'a> Stakes<'a> {
             .sub_prefix(validator.to_string())
             .range(storage, None, None, Order::Ascending)
             .map(|item| {
-                let ((_, user), stake) = item?;
+                let ((user, _), stake) = item?;
                 Ok((user, stake))
             })
             .collect::<StdResult<Vec<(Addr, Stake)>>>()

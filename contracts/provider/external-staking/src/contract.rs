@@ -723,7 +723,7 @@ impl ExternalStakingContract<'_> {
             .map(|item| {
                 let ((user, _), stake) = item?;
                 Ok::<_, ContractError>(SlashInfo {
-                    user,
+                    user: user.to_string(),
                     stake: stake.stake.high(),
                 })
             })
