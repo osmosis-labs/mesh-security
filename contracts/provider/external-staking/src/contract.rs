@@ -707,6 +707,7 @@ impl ExternalStakingContract<'_> {
     /// handler)
     pub(crate) fn handle_slashing(
         &self,
+        env: &Env,
         storage: &mut dyn Storage,
         validator: &str,
     ) -> Result<WasmMsg, ContractError> {
@@ -735,12 +736,14 @@ impl ExternalStakingContract<'_> {
                 stake_low - stake_low * config.max_slashing,
                 stake_high - stake_high * config.max_slashing,
             );
-            self.stakes
-                .stake
-                .save(storage, (&user, validator), &slashed_stake)?;
             // TODO: Points alignment
 
             // Slash the unbondings
+            slashed_stake.slash_pending(&env.block, config.max_slashing);
+
+            self.stakes
+                .stake
+                .save(storage, (user, validator), &slashed_stake)?;
         }
 
         // Route associated users to vault for slashing of their collateral

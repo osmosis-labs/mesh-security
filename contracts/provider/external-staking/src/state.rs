@@ -85,6 +85,22 @@ impl Stake {
             .map(|pending| pending.amount)
             .sum()
     }
+
+    /// Slashes all the entries in `pending_unbonds`.
+    pub fn slash_pending(&mut self, info: &BlockInfo, slash_ratio: Decimal) {
+        self.pending_unbonds = self
+            .pending_unbonds
+            .iter()
+            .map(|pending| PendingUnbond {
+                amount: if pending.release_at > info.time {
+                    pending.amount - pending.amount * slash_ratio
+                } else {
+                    pending.amount
+                },
+                release_at: pending.release_at,
+            })
+            .collect();
+    }
 }
 
 /// Per validator distribution information
