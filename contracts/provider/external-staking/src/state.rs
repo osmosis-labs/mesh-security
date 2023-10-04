@@ -89,22 +89,17 @@ impl Stake {
     /// Slashes all the entries in `pending_unbonds`, returning total slashed amount.
     pub fn slash_pending(&mut self, info: &BlockInfo, slash_ratio: Decimal) -> Uint128 {
         let mut slashed = Uint128::zero();
-        self.pending_unbonds = self
+        let _ = self
             .pending_unbonds
-            .iter()
-            .map(|pending| PendingUnbond {
-                amount: if pending.release_at >= info.time {
-                    // Compute total slashable
-                    let slash = pending.amount * slash_ratio;
-                    slashed += slash;
-                    // Slash it
-                    pending.amount - slash
-                } else {
-                    pending.amount
-                },
-                release_at: pending.release_at,
-            })
-            .collect();
+            .iter_mut()
+            .filter(|pending| pending.release_at >= info.time)
+            .map(|pending| {
+                let slash = pending.amount * slash_ratio;
+                // Add to total slashed
+                slashed += slash;
+                // Slash it
+                pending.amount -= slash
+            });
         slashed
     }
 }
