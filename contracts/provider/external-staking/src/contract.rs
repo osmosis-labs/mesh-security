@@ -731,10 +731,12 @@ impl ExternalStakingContract<'_> {
         for (user, ref mut stake) in users {
             let stake_low = stake.stake.low();
             let stake_high = stake.stake.high();
+            // Use the high value for consistency (for vault's accounting)
+            let stake_slash = stake_high * config.max_slashing;
             // Requires proper saturating methods in commit/rollback_stake/unstake
             stake.stake = ValueRange::new(
-                stake_low - stake_low * config.max_slashing,
-                stake_high - stake_high * config.max_slashing,
+                stake_low.saturating_sub(stake_slash),
+                stake_high - stake_slash,
             );
             // TODO: Points alignment
 
