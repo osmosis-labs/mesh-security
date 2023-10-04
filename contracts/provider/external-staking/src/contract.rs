@@ -741,13 +741,13 @@ impl ExternalStakingContract<'_> {
             // TODO: Points alignment
 
             // Slash the unbondings
-            let pending_slashable = stake.slash_pending(&env.block, config.max_slashing);
+            let pending_slashed = stake.slash_pending(&env.block, config.max_slashing);
 
             self.stakes.stake.save(storage, (&user, validator), stake)?;
 
             slash_infos.push(SlashInfo {
                 user: user.to_string(),
-                stake: stake_high + pending_slashable,
+                slash: stake_slash + pending_slashed,
             });
         }
 
