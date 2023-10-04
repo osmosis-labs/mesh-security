@@ -727,35 +727,30 @@ impl ExternalStakingContract<'_> {
             .collect::<Result<Vec<_>, _>>()?;
 
         // Slash their stake in passing
-        for (user, stake) in &users {
+        let mut slash_infos = vec![];
+        for (user, ref mut stake) in users {
             let stake_low = stake.stake.low();
             let stake_high = stake.stake.high();
-            let mut slashed_stake = stake.clone();
             // Requires proper saturating methods in commit/rollback_stake/unstake
-            slashed_stake.stake = ValueRange::new(
+            stake.stake = ValueRange::new(
                 stake_low - stake_low * config.max_slashing,
                 stake_high - stake_high * config.max_slashing,
             );
             // TODO: Points alignment
 
             // Slash the unbondings
-            slashed_stake.slash_pending(&env.block, config.max_slashing);
+            let pending_slashable = stake.slash_pending(&env.block, config.max_slashing);
 
-            self.stakes
-                .stake
-                .save(storage, (user, validator), &slashed_stake)?;
+            self.stakes.stake.save(storage, (&user, validator), stake)?;
+
+            slash_infos.push(SlashInfo {
+                user: user.to_string(),
+                stake: stake_high + pending_slashable,
+            });
         }
 
         // Route associated users to vault for slashing of their collateral
-        let msg = config.vault.process_cross_slashing(
-            users
-                .iter()
-                .map(|(user, stake)| SlashInfo {
-                    user: user.to_string(),
-                    stake: stake.stake.high(), // FIXME: Send the range
-                })
-                .collect::<Vec<_>>(),
-        )?;
+        let msg = config.vault.process_cross_slashing(slash_infos)?;
         Ok(msg)
     }
 
