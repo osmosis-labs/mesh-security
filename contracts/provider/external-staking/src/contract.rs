@@ -731,7 +731,9 @@ impl ExternalStakingContract<'_> {
         for (user, ref mut stake) in users {
             let stake_low = stake.stake.low();
             let stake_high = stake.stake.high();
-            // Use the high value for consistency (for vault's accounting)
+            // Calculating slashing with always the `high` value of the range goes against the user
+            // in some scenario (pending stakes while slashing); but the scenario is relatively
+            // unlikely.
             let stake_slash = stake_high * config.max_slashing;
             // Requires proper saturating methods in commit/rollback_stake/unstake
             stake.stake = ValueRange::new(
