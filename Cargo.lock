@@ -701,6 +701,8 @@ dependencies = [
  "derivative",
  "mesh-apis",
  "mesh-external-staking",
+ "mesh-native-staking",
+ "mesh-native-staking-proxy",
  "mesh-sync",
  "schemars",
  "serde",

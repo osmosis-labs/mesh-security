@@ -1,11 +1,11 @@
-mod local_staking;
-
-use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
+use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Uint128};
 use cw_multi_test::App as MtApp;
 use mesh_apis::ibc::AddValidator;
 use mesh_external_staking::contract::multitest_utils::ExternalStakingContractProxy;
 use mesh_external_staking::msg::{AuthorizedEndpoint, ReceiveVirtualStake};
 use mesh_external_staking::test_methods_impl::test_utils::TestMethods;
+use mesh_native_staking::contract::multitest_utils::NativeStakingContractProxy;
+use mesh_native_staking_proxy::contract::multitest_utils::NativeStakingProxyContractProxy;
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{Tx, ValueRange};
 use sylvia::multitest::App;
@@ -15,7 +15,7 @@ use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
 use crate::msg::{AccountResponse, AllAccountsResponseItem, LienResponse, StakingInitInfo};
-use crate::multitest::local_staking::multitest_utils::LocalStakingProxy;
+//use crate::multitest::local_staking::multitest_utils::LocalStakingProxy;
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
@@ -46,16 +46,24 @@ fn setup<'app>(
     unbond_period: u64,
 ) -> (
     VaultContractProxy<'app, MtApp>,
-    LocalStakingProxy<'app, MtApp>,
+    NativeStakingContractProxy<'app, MtApp>,
     ExternalStakingContractProxy<'app, MtApp>,
 ) {
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(app);
+    let native_staking_code =
+        mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
+    let native_staking_proxy_code =
+        mesh_native_staking_proxy::contract::multitest_utils::CodeId::store_code(app);
     let vault_code = contract::multitest_utils::CodeId::store_code(app);
 
+    let native_staking_inst_msg = mesh_native_staking::contract::InstantiateMsg {
+        denom: OSMO.to_string(),
+        max_slashing: Decimal::percent(10),
+        proxy_code_id: native_staking_proxy_code.code_id(),
+    };
     let staking_init_info = StakingInitInfo {
         admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
+        code_id: native_staking_code.code_id(),
+        msg: to_binary(&native_staking_inst_msg).unwrap(),
         label: None,
     };
 
@@ -65,12 +73,11 @@ fn setup<'app>(
         .call(owner)
         .unwrap();
 
-    let local_staking_addr = Addr::unchecked(vault.config().unwrap().local_staking);
-    let local_staking =
-        local_staking::multitest_utils::LocalStakingProxy::new(local_staking_addr, app);
+    let native_staking_addr = Addr::unchecked(vault.config().unwrap().local_staking);
+    let native_staking = NativeStakingContractProxy::new(native_staking_addr, app);
 
     let cross_staking = setup_cross_stake(app, owner, &vault, slash_percent, unbond_period);
-    (vault, local_staking, cross_staking)
+    (vault, native_staking, cross_staking)
 }
 
 fn setup_cross_stake<'app>(
@@ -166,6 +173,18 @@ fn stake_remotely(
             .call("test")
             .unwrap();
     }
+}
+
+fn proxy_for_user<'a>(
+    local_staking: &NativeStakingContractProxy<MtApp>,
+    user: &str,
+    app: &'a App<MtApp>,
+) -> NativeStakingProxyContractProxy<'a, MtApp> {
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.to_string())
+        .unwrap()
+        .proxy;
+    NativeStakingProxyContractProxy::new(Addr::unchecked(proxy_addr), app)
 }
 
 #[track_caller]
@@ -454,12 +473,9 @@ fn stake_local() {
 
     // Unstaking
 
-    local_staking
-        .unstake(
-            vault.contract_addr.to_string(),
-            user.to_owned(),
-            coin(50, OSMO),
-        )
+    let proxy = proxy_for_user(&local_staking, user, &app);
+    proxy
+        .unstake(user.to_owned(), coin(50, OSMO))
         .call(owner)
         .unwrap();
 
@@ -494,12 +510,8 @@ fn stake_local() {
         coin(200, OSMO)
     );
 
-    local_staking
-        .unstake(
-            vault.contract_addr.to_string(),
-            user.to_owned(),
-            coin(100, OSMO),
-        )
+    proxy
+        .unstake(user.to_owned(), coin(100, OSMO))
         .call(owner)
         .unwrap();
     assert_eq!(
@@ -536,14 +548,10 @@ fn stake_local() {
     // Cannot unstake over the lien
     // Error not verified as it is swallowed by intermediate contract
     // int this scenario
-    local_staking
-        .unstake(
-            vault.contract_addr.to_string(),
-            user.to_owned(),
-            coin(200, OSMO),
-        )
+    proxy
+        .unstake(user.to_owned(), coin(200, OSMO))
         .call(owner)
-        .unwrap_err();
+        .unwrap();
 }
 
 #[test]
