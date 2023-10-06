@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use cosmwasm_std::{
-    coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
+    coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, Decimal, DepsMut,
     DistributionMsg, Env, Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator,
     WasmMsg,
 };
@@ -38,6 +38,12 @@ pub struct VirtualStakingContract<'a> {
     // `bonded` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
     pub bonded: Item<'a, Vec<(String, Uint128)>>,
+    /// This is what validators have been fully unbonded due to tombstoning
+    // The list will be cleared after processing in handle_epoch.
+    pub tombstoned: Item<'a, Vec<String>>,
+    /// This is what validators have been slashed due to jailing.
+    // The list will be cleared after processing in handle_epoch.
+    pub jailed: Item<'a, Vec<String>>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -51,6 +57,8 @@ impl VirtualStakingContract<'_> {
             config: Item::new("config"),
             bond_requests: Map::new("bond_requests"),
             bonded: Item::new("bonded"),
+            tombstoned: Item::new("tombstoned"),
+            jailed: Item::new("jailed"),
         }
     }
 
@@ -64,8 +72,10 @@ impl VirtualStakingContract<'_> {
             converter: ctx.info.sender,
         };
         self.config.save(ctx.deps.storage, &config)?;
-        // initialize this to no one, so no issue when reading for the first time
+        // initialize these to no one, so no issue when reading for the first time
         self.bonded.save(ctx.deps.storage, &vec![])?;
+        self.tombstoned.save(ctx.deps.storage, &vec![])?;
+        self.jailed.save(ctx.deps.storage, &vec![])?;
         VALIDATOR_REWARDS_BATCH.init(ctx.deps.storage)?;
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -109,8 +119,28 @@ impl VirtualStakingContract<'_> {
         // call and set bonded to empty
         // TODO: verify this behavior with SDK module (otherwise we send unbond message)
         if max_cap.is_zero() {
-            self.bonded.save(deps.storage, &Vec::new())?;
+            self.bonded.save(deps.storage, &vec![])?;
             return Ok(resp);
+        }
+
+        // Make current bonded mutable
+        let mut current = bonded;
+        // Process tombstoning (unbonded) and jailing (slashed) over bond_requests and current
+        let tombstoned = self.tombstoned.load(deps.storage)?;
+        let jailed = self.jailed.load(deps.storage)?;
+        if !tombstoned.is_empty() || !jailed.is_empty() {
+            let slash_ratio = if !jailed.is_empty() {
+                // Only query if needed
+                // TODO: Slash ratio query
+                // Decimal::percent(TokenQuerier::new(&deps.querier).slash_ratio()?);
+                Decimal::percent(10)
+            } else {
+                Decimal::zero()
+            };
+            self.adjust_slashings(deps.storage, &mut current, tombstoned, jailed, slash_ratio)?;
+            // Clear up both lists
+            self.tombstoned.save(deps.storage, &vec![])?;
+            self.jailed.save(deps.storage, &vec![])?;
         }
 
         // calculate what the delegations should be when we are done
@@ -125,8 +155,7 @@ impl VirtualStakingContract<'_> {
             }
         }
 
-        // Load current bonded and save the future values
-        let current = self.bonded.load(deps.storage)?;
+        // Save the future values
         self.bonded.save(deps.storage, &requests)?;
 
         // Compare these two to make bond/unbond calls as needed
@@ -135,6 +164,41 @@ impl VirtualStakingContract<'_> {
         let resp = resp.add_messages(rebalance);
 
         Ok(resp)
+    }
+
+    fn adjust_slashings(
+        &self,
+        storage: &mut dyn Storage,
+        current: &mut [(String, Uint128)],
+        tombstones: Vec<String>,
+        jailing: Vec<String>,
+        slash_ratio: Decimal,
+    ) -> StdResult<()> {
+        let tombstones: BTreeSet<_> = tombstones.into_iter().collect();
+        let jailing: BTreeSet<_> = jailing.into_iter().collect();
+
+        // this is linear over current, but better than turn it in to a map
+        for (validator, prev) in current {
+            let tombstoned = tombstones.contains(validator);
+            let jailed = jailing.contains(validator);
+            if tombstoned {
+                // Set current to zero
+                *prev = Uint128::zero();
+                // Remove request as well, to avoid unbonding msg (auto unbonded when tombstoned)
+                self.bond_requests.remove(storage, validator);
+            } else if jailed {
+                // Apply slash ratio to current
+                *prev -= *prev * slash_ratio;
+                // Apply to request as well, to avoid unbonding msg
+                let mut request = self
+                    .bond_requests
+                    .may_load(storage, validator)?
+                    .unwrap_or_default();
+                request -= request * slash_ratio;
+                self.bond_requests.save(storage, validator, &request)?;
+            }
+        }
+        Ok(())
     }
 
     /**
@@ -152,9 +216,21 @@ impl VirtualStakingContract<'_> {
         unjailed: &[String],
         tombstoned: &[String],
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        // TODO: Store/process removals, jailed and additions locally, so that they are filtered out from
+        // TODO: Store/process removals locally, so that they are filtered out from
         // the `bonded` list
-        let _ = (removals, updated, jailed, unjailed);
+        let _ = (removals, updated, unjailed);
+
+        // Account for tombstoned validators. Will be processed in handle_epoch
+        self.tombstoned.update(deps.storage, |mut old| {
+            old.extend_from_slice(tombstoned);
+            Ok::<_, ContractError>(old)
+        })?;
+
+        // Account for jailed validators. Will be processed in handle_epoch
+        self.jailed.update(deps.storage, |mut old| {
+            old.extend_from_slice(jailed);
+            Ok::<_, ContractError>(old)
+        })?;
 
         // Send additions and tombstones to the Converter. Removals are non-permanent and ignored
         // TODO: Send jailed even when they are non-permanent, for slashing
