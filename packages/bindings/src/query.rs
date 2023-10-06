@@ -17,6 +17,10 @@ pub enum VirtualStakeQuery {
     /// it will return zero values rather than an error.
     #[returns(BondStatusResponse)]
     BondStatus { contract: String },
+
+    /// Returns the blockchain's slashing ratios.
+    #[returns(SlashRatioResponse)]
+    SlashRatio {},
 }
 
 /// Bookkeeping info in the virtual staking sdk module
@@ -28,6 +32,14 @@ pub struct BondStatusResponse {
     /// Number of tokens than already have been minted by this address.
     /// Trying to mint more than (cap - currently_minted) will fail.
     pub delegated: Coin,
+}
+
+#[cw_serde]
+pub struct SlashRatioResponse {
+    /// Slash ratio due to downtime. Used for temporary jailing.
+    pub slash_fraction_downtime: String,
+    /// Slash ratio due to double signing. Applied when a validator is permanently jailed (tombstoned).
+    pub slash_fraction_double_sign: String,
 }
 
 impl CustomQuery for VirtualStakeCustomQuery {}
@@ -49,7 +61,12 @@ impl<'a> TokenQuerier<'a> {
     }
 
     pub fn bond_status(&self, contract: String) -> StdResult<BondStatusResponse> {
-        let full_denom_query = VirtualStakeQuery::BondStatus { contract };
-        self.querier.query(&full_denom_query.into())
+        let bond_status_query = VirtualStakeQuery::BondStatus { contract };
+        self.querier.query(&bond_status_query.into())
+    }
+
+    pub fn slash_ratio(&self) -> StdResult<SlashRatioResponse> {
+        let slash_ratio_query = VirtualStakeQuery::SlashRatio {};
+        self.querier.query(&slash_ratio_query.into())
     }
 }
