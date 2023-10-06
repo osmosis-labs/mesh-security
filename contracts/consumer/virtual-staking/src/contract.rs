@@ -216,8 +216,6 @@ impl VirtualStakingContract<'_> {
         unjailed: &[String],
         tombstoned: &[String],
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        // TODO: Store/process removals locally, so that they are filtered out from
-        // the `bonded` list
         let _ = (removals, updated, unjailed);
 
         // Account for tombstoned validators. Will be processed in handle_epoch
