@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::str::FromStr;
 
 use cosmwasm_std::{
     coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, Decimal, DepsMut,
@@ -131,9 +132,8 @@ impl VirtualStakingContract<'_> {
         if !tombstoned.is_empty() || !jailed.is_empty() {
             let slash_ratio = if !jailed.is_empty() {
                 // Only query if needed
-                // TODO: Slash ratio query
-                // Decimal::percent(TokenQuerier::new(&deps.querier).slash_ratio()?);
-                Decimal::percent(10)
+                let ratios = TokenQuerier::new(&deps.querier).slash_ratio()?;
+                Decimal::from_str(&ratios.slash_fraction_downtime)?
             } else {
                 Decimal::zero()
             };
