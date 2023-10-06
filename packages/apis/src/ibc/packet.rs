@@ -65,6 +65,10 @@ pub enum ConsumerPacket {
     /// but when it is no longer a valid target to delegate to.
     /// It contains a list of `valoper_address` to be removed, along with the removal's height.
     RemoveValidators(Vec<RemoveValidator>),
+    /// This is sent when a validator is jailed.
+    /// It contains a list of `valoper_address` to be slashed for temporary jailing, along with the
+    /// jail event's block height.
+    JailValidators(Vec<RemoveValidator>),
     /// This is part of the rewards protocol
     Distribute {
         /// The validator whose stakers should receive these rewards
@@ -117,15 +121,15 @@ pub struct RemoveValidator {
     /// This is the validator operator (valoper) address used for delegations and rewards
     pub valoper: String,
 
-    /// This is the height the validator is being tombstoned.
-    /// It is used to detect slashing conditions, that is, avoid slashing an already tombstoned
+    /// This is the height the validator is being removed.
+    /// It is used to detect slashing conditions, that is, avoid slashing an already jailed or tombstoned
     /// validator.
-    pub end_height: u64,
+    pub height: u64,
 
-    /// This is the timestamp of the block the validator was tombstoned.
+    /// This is the timestamp of the block the validator was removed.
     /// It may be used for unbonding_period issues, maybe just for informational purposes.
     /// Stored as unix seconds.
-    pub end_time: u64,
+    pub time: u64,
 }
 
 /// Ack sent for ConsumerPacket::AddValidators
@@ -135,6 +139,10 @@ pub struct AddValidatorsAck {}
 /// Ack sent for ConsumerPacket::RemoveValidators
 #[cw_serde]
 pub struct RemoveValidatorsAck {}
+
+/// Ack sent for ConsumerPacket::JailValidators
+#[cw_serde]
+pub struct JailValidatorsAck {}
 
 /// Ack sent for ConsumerPacket::Distribute
 #[cw_serde]
