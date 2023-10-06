@@ -740,7 +740,17 @@ impl ExternalStakingContract<'_> {
                 stake_low.saturating_sub(stake_slash),
                 stake_high - stake_slash,
             );
-            // TODO: Points alignment
+
+            // Distribution alignment
+            let mut distribution = self
+                .distribution
+                .may_load(storage, validator)?
+                .unwrap_or_default();
+            stake
+                .points_alignment
+                .stake_decreased(stake_slash, distribution.points_per_stake);
+            distribution.total_stake -= stake_slash;
+            self.distribution.save(storage, validator, &distribution)?;
 
             // Slash the unbondings
             let pending_slashed = stake.slash_pending(&env.block, config.max_slashing);
