@@ -14,7 +14,9 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
-use crate::ibc::{add_validators_msg, make_ibc_packet, tombstone_validators_msg, IBC_CHANNEL};
+use crate::ibc::{
+    add_validators_msg, jail_validators_msg, make_ibc_packet, tombstone_validators_msg, IBC_CHANNEL,
+};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -352,6 +354,7 @@ impl ConverterApi for ConverterContract<'_> {
         ctx: ExecCtx,
         additions: Vec<Validator>,
         tombstoned: Vec<String>,
+        jailed: Vec<String>,
     ) -> Result<Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
@@ -359,6 +362,7 @@ impl ConverterApi for ConverterContract<'_> {
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
         let add_msg = add_validators_msg(&ctx.env, &channel, &additions)?;
         let tomb_msg = tombstone_validators_msg(&ctx.env, &channel, &tombstoned)?;
+        let jail_msg = jail_validators_msg(&ctx.env, &channel, &jailed)?;
 
         let event = Event::new("valset_update").add_attribute(
             "additions",
@@ -368,11 +372,13 @@ impl ConverterApi for ConverterContract<'_> {
                 .collect::<Vec<String>>()
                 .join(","),
         );
+        let event = event.add_attribute("jailed", jailed.join(","));
         let event = event.add_attribute("tombstoned", tombstoned.join(","));
         let resp = Response::new()
             .add_event(event)
             .add_message(add_msg)
-            .add_message(tomb_msg);
+            .add_message(tomb_msg)
+            .add_message(jail_msg);
 
         Ok(resp)
     }
