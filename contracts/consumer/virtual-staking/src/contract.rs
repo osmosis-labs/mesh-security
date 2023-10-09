@@ -488,12 +488,13 @@ mod tests {
     type DepsMut<'a, C = VirtualStakeCustomQuery> = cosmwasm_std::DepsMut<'a, C>;
 
     #[test]
-    fn empty_bond() {
-        let (mut deps, _bond_status) = mock_dependencies();
+    fn no_bond_with_zero_cap() {
+        let (mut deps, bond_status) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
 
+        bond_status.update_cap(0u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -509,7 +510,7 @@ mod tests {
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update(10u128, 0u128);
+        bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -518,14 +519,33 @@ mod tests {
     }
 
     #[test]
-    fn bond_balance() {
+    fn simple_bond2() {
         let (mut deps, bond_status) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update(5u128, 0u128);
+        bond_status.update_cap(10u128);
+        contract.quick_bond(deps.as_mut(), "val1", 6);
+        contract.quick_bond(deps.as_mut(), "val2", 4);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (6u128, &denom)), ("val2", (4u128, &denom))])
+            .assert_rewards(&[]);
+    }
+
+    /// If there isn't enough cap, bonds get proportionally rebalanced so that their sum
+    /// doesn't exceed the cap.
+    #[test]
+    fn bond_rebalance() {
+        let (mut deps, bond_status) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        bond_status.update_cap(5u128);
         contract.quick_bond(deps.as_mut(), "val1", 10);
         contract.quick_bond(deps.as_mut(), "val2", 40);
         contract
@@ -542,7 +562,7 @@ mod tests {
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update(10u128, 0u128);
+        bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -565,7 +585,7 @@ mod tests {
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update(10u128, 0u128);
+        bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -589,7 +609,7 @@ mod tests {
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update(10u128, 0u128);
+        bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -610,7 +630,7 @@ mod tests {
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update(10u128, 0u128);
+        bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -736,10 +756,9 @@ mod tests {
             self.0.borrow()
         }
 
-        fn update(&self, cap: impl Into<Uint128>, delegated: impl Into<Uint128>) {
+        fn update_cap(&self, cap: impl Into<Uint128>) {
             let mut mut_obj = self.0.borrow_mut();
             mut_obj.cap.amount = cap.into();
-            mut_obj.delegated.amount = delegated.into();
         }
     }
 
