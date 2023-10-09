@@ -49,7 +49,7 @@ pub trait VaultApi {
 #[cw_serde]
 pub struct SlashInfo {
     pub user: String,
-    pub stake: Uint128,
+    pub slash: Uint128,
 }
 
 #[cw_serde]

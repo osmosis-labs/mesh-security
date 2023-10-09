@@ -117,7 +117,7 @@ pub fn ibc_channel_close(
 // this accepts validator sync packets and updates the crdt state
 pub fn ibc_packet_receive(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
     // There is only one channel, so we don't need to switch.
@@ -163,7 +163,7 @@ pub fn ibc_packet_receive(
                 if active {
                     // slash the validator
                     // TODO: Error handling / capturing
-                    let msg = contract.handle_slashing(deps.storage, &valoper)?;
+                    let msg = contract.handle_slashing(&env, deps.storage, &valoper)?;
                     msgs.push(msg);
                 }
             }
