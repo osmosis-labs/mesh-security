@@ -189,7 +189,7 @@ pub fn ibc_packet_receive(
                 if active {
                     // slash the validator
                     // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-                    let msg = contract.handle_slashing(deps.storage, &valoper)?;
+                    let msg = contract.handle_slashing(&env, deps.storage, &valoper)?;
                     msgs.push(msg);
                 }
             }
