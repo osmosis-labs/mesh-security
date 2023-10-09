@@ -90,7 +90,7 @@ impl Stake {
     pub fn slash_pending(&mut self, info: &BlockInfo, slash_ratio: Decimal) -> Uint128 {
         self.pending_unbonds
             .iter_mut()
-            .filter(|pending| pending.release_at >= info.time)
+            .filter(|pending| pending.release_at > info.time)
             .map(|pending| {
                 let slash = pending.amount * slash_ratio;
                 // Slash it
