@@ -42,6 +42,7 @@ pub trait ConverterApi {
         ctx: ExecCtx,
         additions: Vec<Validator>,
         tombstoned: Vec<String>,
+        jailed: Vec<String>,
     ) -> Result<Response, Self::Error>;
 }
 

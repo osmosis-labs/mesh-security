@@ -156,16 +156,13 @@ impl VirtualStakingContract<'_> {
         // the `bonded` list
         let _ = (removals, updated, jailed, unjailed);
 
-        // Send additions and tombstones to the Converter. Removals are non-permanent and ignored
-        // TODO: Send jailed even when they are non-permanent, for slashing
-        // FIXME: Account for tombstoned validators `bond_requests`. Add a `slashings` field to the config,
-        // and avoid unbondings of slashed amounts.
-        // FIXME: Account for jailed validators `bond_requests`. avoid unbondings of slashed
-        // amounts. Requires computing the slashing amount, i.e. obtaining the chain's slash_ratio.
+        // Send additions and tombstones to the Converter. Removals are non-permanent and ignored.
+        // Send jailed even when they are non-permanent, for slashing.
         let cfg = self.config.load(deps.storage)?;
         let msg = converter_api::ExecMsg::ValsetUpdate {
             additions: additions.to_vec(),
             tombstoned: tombstoned.to_vec(),
+            jailed: jailed.to_vec(),
         };
         let msg = WasmMsg::Execute {
             contract_addr: cfg.converter.to_string(),

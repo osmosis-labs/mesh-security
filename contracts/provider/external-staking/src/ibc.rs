@@ -9,8 +9,8 @@ use cosmwasm_std::{
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, AddValidatorsAck,
-    ConsumerPacket, DistributeAck, ProtocolVersion, ProviderPacket, RemoveValidator,
-    RemoveValidatorsAck,
+    ConsumerPacket, DistributeAck, JailValidatorsAck, ProtocolVersion, ProviderPacket,
+    RemoveValidator, RemoveValidatorsAck,
 };
 
 use crate::contract::ExternalStakingContract;
@@ -149,8 +149,8 @@ pub fn ibc_packet_receive(
             let mut msgs = vec![];
             for RemoveValidator {
                 valoper,
-                end_height,
-                end_time: _end_time,
+                height: end_height,
+                time: _end_time,
             } in to_remove
             {
                 // Check that the validator is active at height and slash it if that is the case
@@ -168,6 +168,32 @@ pub fn ibc_packet_receive(
                 }
             }
             let ack = ack_success(&RemoveValidatorsAck {})?;
+            IbcReceiveResponse::new().set_ack(ack).add_messages(msgs)
+        }
+        ConsumerPacket::JailValidators(to_jail) => {
+            let mut msgs = vec![];
+            for RemoveValidator {
+                valoper,
+                height: end_height,
+                time: _end_time,
+            } in to_jail
+            {
+                // Check that the validator is active at height and slash it if that is the case
+                let active = contract.val_set.is_active_validator_at_height(
+                    deps.storage,
+                    &valoper,
+                    end_height,
+                )?;
+                // We don't change the validator's state here, as that's currently not supported
+                // (only Active and Tombstoned)
+                if active {
+                    // slash the validator
+                    // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
+                    let msg = contract.handle_slashing(&env, deps.storage, &valoper)?;
+                    msgs.push(msg);
+                }
+            }
+            let ack = ack_success(&JailValidatorsAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_messages(msgs)
         }
         ConsumerPacket::Distribute { validator, rewards } => {
