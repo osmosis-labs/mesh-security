@@ -1483,3 +1483,86 @@ fn slashing_pending_tx_full_unbond() {
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 0);
 }
+
+#[test]
+fn slashing_pending_tx_full_unbond_fails() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(200, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(200, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+
+    // Unstake all tokens
+    contract
+        .unstake(validators[0].to_string(), coin(200, OSMO))
+        .call(user)
+        .unwrap();
+
+    // Unstaken should be immediately visible on staked amount (as pending tx)
+    let stake = contract
+        .stake(user.to_string(), validators[0].to_string())
+        .unwrap();
+    assert_eq!(
+        stake.stake,
+        ValueRange::new(Uint128::new(0), Uint128::new(200))
+    );
+
+    // Now validators[0] slashing happens
+    contract
+        .test_methods_proxy()
+        .test_handle_slashing(validators[0].to_string())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault got reduced, for high end of pending unbond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+
+    // Now the unbond gets rolled back (i.e. failed)
+    contract
+        .test_methods_proxy()
+        .test_rollback_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+
+    // Time travel - just enough for unbond to release,
+    app.app_mut().update_block(|block| {
+        block.height += 2;
+        block.time = block.time.plus_seconds(100);
+    });
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+
+    // Withdrawing liens
+    contract.withdraw_unbonded().call(user).unwrap();
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+}
