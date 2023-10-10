@@ -1566,3 +1566,84 @@ fn slashing_pending_tx_full_unbond_fails() {
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 180);
 }
+
+#[test]
+fn slashing_pending_tx_bond() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(300, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1", "validator2"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(300, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+    vault.stake(&contract, user, validators[1], coin(50, OSMO));
+
+    // Stake some more tokens (but don't commit them!)
+    vault
+        .stake_remote(
+            contract.contract_addr.to_string(),
+            coin(50, OSMO),
+            to_binary(&ReceiveVirtualStake {
+                validator: validators[0].into(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
+    // Staken should be immediately visible on staked amount (as pending tx)
+    let stake = contract
+        .stake(user.to_string(), validators[0].to_string())
+        .unwrap();
+    assert_eq!(
+        stake.stake,
+        ValueRange::new(Uint128::new(200), Uint128::new(250))
+    );
+
+    let stake = contract
+        .stake(user.to_string(), validators[1].to_string())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(50)));
+
+    // Claims on vault got adjusted, to account for pending bond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount, ValueRange::new(Uint128::new(250), Uint128::new(300)));
+
+    // Now validators[0] slashing happens
+    contract
+        .test_methods_proxy()
+        .test_handle_slashing(validators[0].to_string())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault got reduced, for high end of pending slashed bond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount, ValueRange::new(Uint128::new(225), Uint128::new(275)));
+
+    // Now the extra bond gets committed (i.e. successful)
+    contract
+        .test_methods_proxy()
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault are now committed
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 275);
+}
