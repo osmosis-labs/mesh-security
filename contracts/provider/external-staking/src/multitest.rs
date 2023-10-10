@@ -1619,7 +1619,10 @@ fn slashing_pending_tx_bond() {
     let claim = vault
         .claim(user.to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount, ValueRange::new(Uint128::new(250), Uint128::new(300)));
+    assert_eq!(
+        claim.amount,
+        ValueRange::new(Uint128::new(250), Uint128::new(300))
+    );
 
     // Now validators[0] slashing happens
     contract
@@ -1632,7 +1635,10 @@ fn slashing_pending_tx_bond() {
     let claim = vault
         .claim(user.to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount, ValueRange::new(Uint128::new(225), Uint128::new(275)));
+    assert_eq!(
+        claim.amount,
+        ValueRange::new(Uint128::new(225), Uint128::new(275))
+    );
 
     // Now the extra bond gets committed (i.e. successful)
     contract
@@ -1677,7 +1683,7 @@ fn slashing_pending_tx_bond_rolled_back() {
             to_binary(&ReceiveVirtualStake {
                 validator: validators[0].into(),
             })
-                .unwrap(),
+            .unwrap(),
         )
         .call(user)
         .unwrap();
@@ -1700,7 +1706,10 @@ fn slashing_pending_tx_bond_rolled_back() {
     let claim = vault
         .claim(user.to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount, ValueRange::new(Uint128::new(250), Uint128::new(300)));
+    assert_eq!(
+        claim.amount,
+        ValueRange::new(Uint128::new(250), Uint128::new(300))
+    );
 
     // Now validators[0] slashing happens
     contract
@@ -1713,7 +1722,10 @@ fn slashing_pending_tx_bond_rolled_back() {
     let claim = vault
         .claim(user.to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount, ValueRange::new(Uint128::new(225), Uint128::new(275)));
+    assert_eq!(
+        claim.amount,
+        ValueRange::new(Uint128::new(225), Uint128::new(275))
+    );
 
     // Now the extra bond gets rolled back (i.e. failed)
     contract
