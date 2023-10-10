@@ -230,6 +230,17 @@ fn proxy_for_user<'a>(
     NativeStakingProxyContractProxy::new(Addr::unchecked(proxy_addr), app)
 }
 
+fn process_staking_unbondings(app: &App<MtApp>) {
+    let mut bi = app.block_info();
+    bi.time = bi.time.plus_seconds(61);
+    app.set_block(bi);
+    app.app_mut()
+        .sudo(cw_multi_test::SudoMsg::Staking(
+            cw_multi_test::StakingSudo::ProcessQueue {},
+        ))
+        .unwrap();
+}
+
 #[track_caller]
 fn get_last_vault_pending_tx_id(contract: &VaultContractProxy<MtApp>) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
@@ -503,6 +514,8 @@ fn stake_local() {
         .unstake(val.to_string(), coin(50, OSMO))
         .call(user)
         .unwrap();
+    process_staking_unbondings(&app);
+    proxy.release_unbonded().call(user).unwrap();
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -527,18 +540,14 @@ fn stake_local() {
             .unwrap(),
         coin(100, OSMO)
     );
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(&local_staking.contract_addr, OSMO)
-            .unwrap(),
-        coin(200, OSMO)
-    );
 
     proxy
-        .unstake(user.to_owned(), coin(100, OSMO))
-        .call(owner)
+        .unstake(val.to_string(), coin(100, OSMO))
+        .call(user)
         .unwrap();
+    process_staking_unbondings(&app);
+    proxy.release_unbonded().call(user).unwrap();
+
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
         AccountResponse {
@@ -562,21 +571,18 @@ fn stake_local() {
             .unwrap(),
         coin(200, OSMO)
     );
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(&local_staking.contract_addr, OSMO)
-            .unwrap(),
-        coin(100, OSMO)
-    );
 
     // Cannot unstake over the lien
-    // Error not verified as it is swallowed by intermediate contract
-    // int this scenario
-    proxy
-        .unstake(user.to_owned(), coin(200, OSMO))
-        .call(owner)
-        .unwrap();
+
+    // TODO: catch subcall error here
+    // let err = proxy
+    //     .unstake(val.to_string(), coin(200, OSMO))
+    //     .call(user)
+    //     .unwrap_err();
+    // assert_eq!(
+    //     err,
+    //     mesh_native_staking_proxy::error::ContractError::Unauthorized {}
+    // );
 }
 
 #[test]
