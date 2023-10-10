@@ -2,7 +2,8 @@ use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Uint128, Validator};
 use cw_multi_test::{App as MtApp, StakingInfo};
 use mesh_apis::ibc::AddValidator;
 use mesh_external_staking::contract::multitest_utils::ExternalStakingContractProxy;
-use mesh_external_staking::msg::{AuthorizedEndpoint, ReceiveVirtualStake};
+use mesh_external_staking::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo};
+use mesh_external_staking::state::Stake;
 use mesh_external_staking::test_methods_impl::test_utils::TestMethods;
 use mesh_native_staking::contract::multitest_utils::NativeStakingContractProxy;
 use mesh_native_staking_proxy::contract::multitest_utils::NativeStakingProxyContractProxy;
@@ -1601,6 +1602,7 @@ fn cross_slash_scenario_1() {
     let collateral = 200;
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
+    let validator2 = validators[1];
 
     let mut app = init_app(&[user], &[1000]);
     let local_validator = "local";
@@ -1636,7 +1638,7 @@ fn cross_slash_scenario_1() {
         [
             LienResponse {
                 lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(190))
+                amount: ValueRange::new_val(Uint128::new(local_stake))
             },
             LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
@@ -1658,6 +1660,16 @@ fn cross_slash_scenario_1() {
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::new(10)));
 
+    // Cross stakes
+    let cross_stake1 = cross_staking
+        .stake(user.to_string(), validator1.to_string())
+        .unwrap();
+    assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(100)));
+    let cross_stake2 = cross_staking
+        .stake(user.to_string(), validator2.to_string())
+        .unwrap();
+    assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50)));
+
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
@@ -1672,7 +1684,7 @@ fn cross_slash_scenario_1() {
         [
             LienResponse {
                 lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(190))
+                amount: ValueRange::new_val(Uint128::new(local_stake))
             },
             LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
@@ -1693,6 +1705,16 @@ fn cross_slash_scenario_1() {
     assert_eq!(acc_details.bonded, Uint128::new(190));
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
+
+    // Cross stake
+    let cross_stake1 = cross_staking
+        .stake(user.to_string(), validator1.to_string())
+        .unwrap();
+    assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(90))); // 10% slashed
+    let cross_stake2 = cross_staking
+        .stake(user.to_string(), validator2.to_string())
+        .unwrap();
+    assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50))); // no slashing
 }
 
 /// Scenario 2:
@@ -1754,6 +1776,12 @@ fn cross_slash_scenario_2() {
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
 
+    // Cross stakes
+    let cross_stake1 = cross_staking
+        .stake(user.to_string(), validator1.to_string())
+        .unwrap();
+    assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(200)));
+
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
@@ -1789,6 +1817,12 @@ fn cross_slash_scenario_2() {
     assert_eq!(acc_details.bonded, Uint128::new(180));
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
+
+    // Cross stakes
+    let cross_stake1 = cross_staking
+        .stake(user.to_string(), validator1.to_string())
+        .unwrap();
+    assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(180))); // 10% slashed
 }
 
 /// Scenario 3:
@@ -1850,6 +1884,12 @@ fn cross_slash_scenario_3() {
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::new(10)));
 
+    // Cross stakes
+    let cross_stake1 = cross_staking
+        .stake(user.to_string(), validator1.to_string())
+        .unwrap();
+    assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(150)));
+
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
@@ -1885,6 +1925,12 @@ fn cross_slash_scenario_3() {
     assert_eq!(acc_details.bonded, Uint128::new(185));
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
+
+    // Cross stakes
+    let cross_stake1 = cross_staking
+        .stake(user.to_string(), validator1.to_string())
+        .unwrap();
+    assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(135))); // 10% slashed
 }
 
 /// Scenario 4:
@@ -1954,6 +2000,29 @@ fn cross_slash_scenario_4() {
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::new(10)));
 
+    // Cross stake
+    let cross_stake1 = cross_staking_1
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake1.stakes,
+        [
+            StakeInfo::new(user, validators_1[0], &Stake::from_amount(140u128.into())),
+            StakeInfo::new(user, validators_1[1], &Stake::from_amount(40u128.into()))
+        ]
+    );
+
+    let cross_stake2 = cross_staking_2
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake2.stakes,
+        [
+            StakeInfo::new(user, validators_2[0], &Stake::from_amount(100u128.into())),
+            StakeInfo::new(user, validators_2[1], &Stake::from_amount(88u128.into()))
+        ]
+    );
+
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
@@ -1993,6 +2062,30 @@ fn cross_slash_scenario_4() {
     assert_eq!(acc_details.bonded, Uint128::new(186));
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
+
+    // Cross stake
+    let cross_stake1 = cross_staking_1
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake1.stakes,
+        [
+            StakeInfo::new(user, validators_1[0], &Stake::from_amount(126u128.into())),
+            StakeInfo::new(user, validators_1[1], &Stake::from_amount(40u128.into()))
+        ]
+    );
+
+    // TODO: external-staking slashing propagation
+    let cross_stake2 = cross_staking_2
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake2.stakes,
+        [
+            StakeInfo::new(user, validators_2[0], &Stake::from_amount(100u128.into())),
+            StakeInfo::new(user, validators_2[1], &Stake::from_amount(88u128.into()))
+        ]
+    );
 }
 
 /// Scenario 5:
@@ -2070,6 +2163,43 @@ fn cross_slash_scenario_5() {
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::new(10)));
 
+    // Cross stake
+    let cross_stake1 = cross_staking_1
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake1.stakes,
+        [StakeInfo::new(
+            user,
+            validators[0],
+            &Stake::from_amount(180u128.into())
+        ),]
+    );
+
+    let cross_stake2 = cross_staking_2
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake2.stakes,
+        [StakeInfo::new(
+            user,
+            validators[1],
+            &Stake::from_amount(80u128.into())
+        ),]
+    );
+
+    let cross_stake3 = cross_staking_3
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake3.stakes,
+        [StakeInfo::new(
+            user,
+            validators[2],
+            &Stake::from_amount(100u128.into())
+        ),]
+    );
+
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
@@ -2113,6 +2243,44 @@ fn cross_slash_scenario_5() {
     assert_eq!(acc_details.bonded, Uint128::new(110));
     // Free collateral
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
+
+    // Cross stake
+    // TODO: external-staking slashing propagation
+    let cross_stake1 = cross_staking_1
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake1.stakes,
+        [StakeInfo::new(
+            user,
+            validators[0],
+            &Stake::from_amount(90u128.into())
+        ),]
+    );
+
+    let cross_stake2 = cross_staking_2
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake2.stakes,
+        [StakeInfo::new(
+            user,
+            validators[1],
+            &Stake::from_amount(80u128.into())
+        ),]
+    );
+
+    let cross_stake3 = cross_staking_3
+        .stakes(user.to_string(), None, None)
+        .unwrap();
+    assert_eq!(
+        cross_stake3.stakes,
+        [StakeInfo::new(
+            user,
+            validators[2],
+            &Stake::from_amount(100u128.into())
+        ),]
+    );
 }
 
 /// Scenario 6:

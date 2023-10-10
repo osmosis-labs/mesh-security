@@ -732,7 +732,7 @@ impl VaultContract<'_> {
             let mut lien = self
                 .liens
                 .load(ctx.deps.storage, (&slash_user, &lien_holder))?;
-            let slash_amount = slash.stake * lien.slashable;
+            let slash_amount = slash.slash;
             let mut user_info = self.users.load(ctx.deps.storage, &slash_user)?;
             let new_collateral = user_info.collateral - slash_amount;
 
@@ -748,7 +748,6 @@ impl VaultContract<'_> {
             self.recalculate_max_lien(ctx.deps.storage, &slash_user, &mut user_info)?;
             // Get free collateral before adjusting collateral, but after slashing
             let free_collateral = user_info.free_collateral().low(); // For simplicity
-                                                                     // TODO: Remove required amount from the user's stake (needs rebalance msg)
             if free_collateral < slash_amount {
                 // Check / adjust mesh security invariants according to the new collateral
                 self.propagate_slash(

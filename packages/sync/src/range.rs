@@ -199,10 +199,34 @@ where
         self.assert_valid_range();
     }
 
+    /// This is to be called at the end of a transaction, if there's the possibility the values
+    /// have changed to the point where they are now lower than during preparation.
+    /// Will not panic, as this can happen in normal operation, by example because of slashing during
+    /// a pending Tx.
+    pub fn rollback_add_saturating(&mut self, value: T) {
+        self.high = self.high - value;
+        if self.low > self.high {
+            self.high = self.low;
+        }
+        self.assert_valid_range();
+    }
+
     /// The caller should limit these to only previous `prepare_add` calls.
     /// We will panic on mistake as this should never happen
     pub fn commit_add(&mut self, value: T) {
         self.low = self.low + value;
+        self.assert_valid_range();
+    }
+
+    /// This is to be called at the end of a transaction, if there's the possibility the values
+    /// have changed to the point where they are now lower than during preparation.
+    /// Will not panic, as this can happen in normal operation, by example because of slashing during
+    /// a pending Tx.
+    pub fn commit_add_saturating(&mut self, value: T) {
+        self.low = self.low + value;
+        if self.low > self.high {
+            self.high = self.low;
+        }
         self.assert_valid_range();
     }
 
@@ -240,10 +264,36 @@ where
         self.assert_valid_range();
     }
 
+    /// This is to be called at the end of a transaction, if there's the possibility the values
+    /// have changed to the point where they are now lower than during preparation.
+    /// Will not panic, as this can happen in normal operation, by example because of slashing during
+    /// a pending Tx.
+    pub fn rollback_sub_saturating(&mut self, value: T) {
+        if self.low + value > self.high {
+            self.low = self.high;
+        } else {
+            self.low = self.low + value;
+        }
+        self.assert_valid_range();
+    }
+
     /// The caller should limit these to only previous `prepare_sub` calls.
     /// We will panic on mistake as this should never happen
     pub fn commit_sub(&mut self, value: T) {
         self.high = self.high - value;
+        self.assert_valid_range();
+    }
+
+    /// This is to be called at the end of a transaction, if there's the possibility of the high value
+    /// to have changed to the point where it is now lower than during preparation.
+    /// Will not panic, as this can happen in normal operation, by example because of slashing during
+    /// a pending Tx.
+    pub fn commit_sub_saturating(&mut self, value: T) {
+        if value > self.high {
+            self.high = self.low;
+        } else {
+            self.high = self.high - value;
+        }
         self.assert_valid_range();
     }
 

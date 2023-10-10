@@ -41,6 +41,7 @@ cw-multi-test          = { workspace = true }
 test-case              = { workspace = true }
 derivative             = { workspace = true }
 anyhow                 = { workspace = true }
+itertools              = { workspace = true }
 
 [[bin]]
 name = "schema"

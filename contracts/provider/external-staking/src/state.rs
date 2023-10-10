@@ -25,7 +25,7 @@ pub struct Config {
 #[cw_serde]
 #[derive(Default)]
 pub struct Stake {
-    /// How much tokens user staken and not in unbonding period
+    /// How much tokens user stake and not in unbonding period
     /// via this contract
     pub stake: ValueRange<Uint128>,
     /// List of token batches scheduled for unbonding
@@ -34,7 +34,7 @@ pub struct Stake {
     /// `unbonding_period` after current time - this way this is guaranteed to be
     /// always sorted (as time is guaranteed to be monotonic).
     pub pending_unbonds: Vec<PendingUnbond>,
-    /// Points alignment is how much points should be added/substracted from points caltulated per
+    /// Points alignment is how much points should be added/subtracted from points calculated per
     /// user due to stake changes.
     pub points_alignment: PointsAlignment,
     /// Tokens already withdrawn by this user
@@ -84,6 +84,23 @@ impl Stake {
             .drain(..non_expired_idx)
             .map(|pending| pending.amount)
             .sum()
+    }
+
+    /// Slashes all the entries in `pending_unbonds`, returning total slashed amount.
+    pub fn slash_pending(&mut self, info: &BlockInfo, slash_ratio: Decimal) -> Uint128 {
+        let mut slashed = Uint128::zero();
+        let _ = self
+            .pending_unbonds
+            .iter_mut()
+            .filter(|pending| pending.release_at >= info.time)
+            .map(|pending| {
+                let slash = pending.amount * slash_ratio;
+                // Add to total slashed
+                slashed += slash;
+                // Slash it
+                pending.amount -= slash
+            });
+        slashed
     }
 }
 

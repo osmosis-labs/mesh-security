@@ -146,6 +146,29 @@ pub(crate) fn add_validators_msg(
     Ok(msg)
 }
 
+pub(crate) fn jail_validators_msg(
+    env: &Env,
+    channel: &IbcChannel,
+    validators: &[String],
+) -> Result<IbcMsg, ContractError> {
+    let packet = ConsumerPacket::JailValidators(
+        validators
+            .iter()
+            .map(|v| RemoveValidator {
+                valoper: v.to_string(),
+                height: env.block.height,
+                time: env.block.time.seconds(),
+            })
+            .collect(),
+    );
+    let msg = IbcMsg::SendPacket {
+        channel_id: channel.endpoint.channel_id.clone(),
+        data: to_binary(&packet)?,
+        timeout: packet_timeout_validator(env),
+    };
+    Ok(msg)
+}
+
 pub(crate) fn tombstone_validators_msg(
     env: &Env,
     channel: &IbcChannel,
@@ -156,8 +179,8 @@ pub(crate) fn tombstone_validators_msg(
             .iter()
             .map(|v| RemoveValidator {
                 valoper: v.to_string(),
-                end_height: env.block.height,
-                end_time: env.block.time.seconds(),
+                height: env.block.height,
+                time: env.block.time.seconds(),
             })
             .collect(),
     );
