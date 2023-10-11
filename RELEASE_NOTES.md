@@ -1,9 +1,10 @@
 # 0.7.0-alhpa.1
 
-- Cross-slashing implementation
-- Valset updates
-- Slashing accounting
-- Slashing propagation at the vault level
+- Cross-slashing implementation.
+- Batch distribute rewards.
+- Valset updates.
+- Slashing accounting.
+- Slashing propagation at the `vault` contract level.
 
 # 0.3.0-beta
 
