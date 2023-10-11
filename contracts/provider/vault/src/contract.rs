@@ -48,7 +48,7 @@ pub struct VaultContract<'a> {
     /// General contract configuration
     pub config: Item<'a, Config>,
     /// Local staking info
-    pub local_staking: Item<'a, LocalStaking>,
+    pub local_staking: Item<'a, Option<LocalStaking>>,
     /// All liens in the protocol
     ///
     /// Liens are indexed with (user, lien_holder), as this pair has to be unique
@@ -87,7 +87,7 @@ impl VaultContract<'_> {
         &self,
         ctx: InstantiateCtx,
         denom: String,
-        local_staking: StakingInitInfo,
+        local_staking: Option<StakingInitInfo>,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
@@ -95,18 +95,23 @@ impl VaultContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-        // instantiate local_staking and handle reply
-        let msg = WasmMsg::Instantiate {
-            admin: local_staking.admin,
-            code_id: local_staking.code_id,
-            msg: local_staking.msg,
-            funds: vec![],
-            label: local_staking
-                .label
-                .unwrap_or_else(|| "Mesh Security Local Staking".to_string()),
-        };
-        let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
-        Ok(Response::new().add_submessage(sub_msg))
+        if let Some(local_staking) = local_staking {
+            // instantiate local_staking and handle reply
+            let msg = WasmMsg::Instantiate {
+                admin: local_staking.admin,
+                code_id: local_staking.code_id,
+                msg: local_staking.msg,
+                funds: vec![],
+                label: local_staking
+                    .label
+                    .unwrap_or_else(|| "Mesh Security Local Staking".to_string()),
+            };
+            let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
+            Ok(Response::new().add_submessage(sub_msg))
+        } else {
+            self.local_staking.save(ctx.deps.storage, &None)?;
+            Ok(Response::new())
+        }
     }
 
     #[msg(exec)]
@@ -224,30 +229,32 @@ impl VaultContract<'_> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
-        let local_staking = self.local_staking.load(ctx.deps.storage)?;
+        if let Some(local_staking) = self.local_staking.load(ctx.deps.storage)? {
+            self.stake(
+                &mut ctx,
+                &config,
+                &local_staking.contract.0,
+                local_staking.max_slash,
+                amount.clone(),
+                false,
+            )?;
 
-        self.stake(
-            &mut ctx,
-            &config,
-            &local_staking.contract.0,
-            local_staking.max_slash,
-            amount.clone(),
-            false,
-        )?;
+            let stake_msg = local_staking.contract.receive_stake(
+                ctx.info.sender.to_string(),
+                msg,
+                vec![amount.clone()],
+            )?;
 
-        let stake_msg = local_staking.contract.receive_stake(
-            ctx.info.sender.to_string(),
-            msg,
-            vec![amount.clone()],
-        )?;
+            let resp = Response::new()
+                .add_message(stake_msg)
+                .add_attribute("action", "stake_local")
+                .add_attribute("sender", ctx.info.sender)
+                .add_attribute("amount", amount.amount.to_string());
 
-        let resp = Response::new()
-            .add_message(stake_msg)
-            .add_attribute("action", "stake_local")
-            .add_attribute("sender", ctx.info.sender)
-            .add_attribute("amount", amount.amount.to_string());
-
-        Ok(resp)
+            Ok(resp)
+        } else {
+            Err(ContractError::NoLocalStaking)
+        }
     }
 
     #[msg(query)]
@@ -295,7 +302,7 @@ impl VaultContract<'_> {
 
         let resp = ConfigResponse {
             denom: config.denom,
-            local_staking: local_staking.contract.0.into(),
+            local_staking: local_staking.map(|ls| ls.contract.0.into()),
         };
 
         Ok(resp)
@@ -462,7 +469,8 @@ impl VaultContract<'_> {
             max_slash,
         };
 
-        self.local_staking.save(deps.storage, &local_staking)?;
+        self.local_staking
+            .save(deps.storage, &Some(local_staking))?;
 
         Ok(Response::new())
     }
