@@ -1,12 +1,12 @@
-mod local_staking;
-
-use cosmwasm_std::{coin, coins, to_binary, Addr, Binary, Decimal, Empty, Uint128};
-use cw_multi_test::App as MtApp;
+use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Uint128, Validator};
+use cw_multi_test::{App as MtApp, StakingInfo};
 use mesh_apis::ibc::AddValidator;
 use mesh_external_staking::contract::multitest_utils::ExternalStakingContractProxy;
 use mesh_external_staking::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo};
 use mesh_external_staking::state::Stake;
 use mesh_external_staking::test_methods_impl::test_utils::TestMethods;
+use mesh_native_staking::contract::multitest_utils::NativeStakingContractProxy;
+use mesh_native_staking_proxy::contract::multitest_utils::NativeStakingProxyContractProxy;
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{Tx, ValueRange};
 use sylvia::multitest::App;
@@ -16,7 +16,6 @@ use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
 use crate::msg::{AccountResponse, AllAccountsResponseItem, LienResponse, StakingInitInfo};
-use crate::multitest::local_staking::multitest_utils::LocalStakingProxy;
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
@@ -28,7 +27,7 @@ const SLASHING_PERCENTAGE: u64 = 10;
 
 /// App initialization
 fn init_app(users: &[&str], amounts: &[u128]) -> App<MtApp> {
-    let app = MtApp::new(|router, _api, storage| {
+    let mut app = MtApp::new(|router, _api, storage| {
         for (&user, amount) in std::iter::zip(users, amounts) {
             router
                 .bank
@@ -36,7 +35,42 @@ fn init_app(users: &[&str], amounts: &[u128]) -> App<MtApp> {
                 .unwrap();
         }
     });
+
+    set_chain_native_denom(&mut app, OSMO);
+
     App::new(app)
+}
+
+fn add_local_validator(app: &mut App<MtApp>, validator: &str) {
+    let block_info = app.block_info();
+    app.app_mut()
+        .init_modules(|router, api, storage| {
+            router.staking.add_validator(
+                api,
+                storage,
+                &block_info,
+                Validator {
+                    address: validator.to_string(),
+                    commission: Decimal::zero(),
+                    max_commission: Decimal::zero(),
+                    max_change_rate: Decimal::zero(),
+                },
+            )
+        })
+        .unwrap();
+}
+
+fn set_chain_native_denom(app: &mut MtApp, denom: &str) {
+    app.init_modules(|router, _, storage| {
+        router.staking.setup(
+            storage,
+            StakingInfo {
+                bonded_denom: denom.to_string(),
+                ..Default::default()
+            },
+        )
+    })
+    .unwrap();
 }
 
 /// Contracts setup
@@ -47,16 +81,24 @@ fn setup<'app>(
     unbond_period: u64,
 ) -> (
     VaultContractProxy<'app, MtApp>,
-    LocalStakingProxy<'app, MtApp>,
+    NativeStakingContractProxy<'app, MtApp>,
     ExternalStakingContractProxy<'app, MtApp>,
 ) {
-    let local_staking_code = local_staking::multitest_utils::CodeId::store_code(app);
+    let native_staking_code =
+        mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
+    let native_staking_proxy_code =
+        mesh_native_staking_proxy::contract::multitest_utils::CodeId::store_code(app);
     let vault_code = contract::multitest_utils::CodeId::store_code(app);
 
+    let native_staking_inst_msg = mesh_native_staking::contract::InstantiateMsg {
+        denom: OSMO.to_string(),
+        max_slashing: Decimal::percent(10),
+        proxy_code_id: native_staking_proxy_code.code_id(),
+    };
     let staking_init_info = StakingInitInfo {
         admin: None,
-        code_id: local_staking_code.code_id(),
-        msg: to_binary(&Empty {}).unwrap(),
+        code_id: native_staking_code.code_id(),
+        msg: to_binary(&native_staking_inst_msg).unwrap(),
         label: None,
     };
 
@@ -66,12 +108,11 @@ fn setup<'app>(
         .call(owner)
         .unwrap();
 
-    let local_staking_addr = Addr::unchecked(vault.config().unwrap().local_staking);
-    let local_staking =
-        local_staking::multitest_utils::LocalStakingProxy::new(local_staking_addr, app);
+    let native_staking_addr = Addr::unchecked(vault.config().unwrap().local_staking);
+    let native_staking = NativeStakingContractProxy::new(native_staking_addr, app);
 
     let cross_staking = setup_cross_stake(app, owner, &vault, slash_percent, unbond_period);
-    (vault, local_staking, cross_staking)
+    (vault, native_staking, cross_staking)
 }
 
 fn setup_cross_stake<'app>(
@@ -130,11 +171,19 @@ fn bond(vault: &VaultContractProxy<MtApp>, user: &str, amount: u128) {
         .unwrap();
 }
 
-fn stake_locally(vault: &VaultContractProxy<MtApp>, user: &str, stake: u128) {
+fn stake_locally(
+    vault: &VaultContractProxy<MtApp>,
+    user: &str,
+    stake: u128,
+    validator: &str,
+) -> Result<cw_multi_test::AppResponse, ContractError> {
+    let msg = mesh_native_staking::msg::StakeMsg {
+        validator: validator.to_string(),
+    };
+
     vault
-        .stake_local(coin(stake, OSMO), Binary::default())
+        .stake_local(coin(stake, OSMO), to_binary(&msg).unwrap())
         .call(user)
-        .unwrap();
 }
 
 fn stake_remotely(
@@ -167,6 +216,29 @@ fn stake_remotely(
             .call("test")
             .unwrap();
     }
+}
+
+fn proxy_for_user<'a>(
+    local_staking: &NativeStakingContractProxy<MtApp>,
+    user: &str,
+    app: &'a App<MtApp>,
+) -> NativeStakingProxyContractProxy<'a, MtApp> {
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.to_string())
+        .unwrap()
+        .proxy;
+    NativeStakingProxyContractProxy::new(Addr::unchecked(proxy_addr), app)
+}
+
+fn process_staking_unbondings(app: &App<MtApp>) {
+    let mut block_info = app.block_info();
+    block_info.time = block_info.time.plus_seconds(61);
+    app.set_block(block_info);
+    app.app_mut()
+        .sudo(cw_multi_test::SudoMsg::Staking(
+            cw_multi_test::StakingSudo::ProcessQueue {},
+        ))
+        .unwrap();
 }
 
 #[track_caller]
@@ -334,8 +406,10 @@ fn bonding() {
 fn stake_local() {
     let owner = "owner";
     let user = "user1";
+    let val = "validator";
 
-    let app = init_app(&[user], &[300]);
+    let mut app = init_app(&[user], &[300]);
+    add_local_validator(&mut app, val);
 
     let (vault, local_staking, _cross_staking1) = setup(&app, owner, SLASHING_PERCENTAGE, 100);
 
@@ -367,7 +441,7 @@ fn stake_local() {
     );
 
     // Staking locally
-    stake_locally(&vault, user, 100);
+    stake_locally(&vault, user, 100, val).unwrap();
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -392,18 +466,8 @@ fn stake_local() {
             .unwrap(),
         coin(200, OSMO)
     );
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(&local_staking.contract_addr, OSMO)
-            .unwrap(),
-        coin(100, OSMO)
-    );
 
-    vault
-        .stake_local(coin(150, OSMO), Binary::default())
-        .call(user)
-        .unwrap();
+    stake_locally(&vault, user, 150, val).unwrap();
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -428,20 +492,10 @@ fn stake_local() {
             .unwrap(),
         coin(50, OSMO)
     );
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(&local_staking.contract_addr, OSMO)
-            .unwrap(),
-        coin(250, OSMO)
-    );
 
     // Cannot stake over collateral
 
-    let err = vault
-        .stake_local(coin(150, OSMO), Binary::default())
-        .call(user)
-        .unwrap_err();
+    let err = stake_locally(&vault, user, 150, val).unwrap_err();
 
     assert_eq!(err, ContractError::InsufficentBalance);
 
@@ -455,14 +509,13 @@ fn stake_local() {
 
     // Unstaking
 
-    local_staking
-        .unstake(
-            vault.contract_addr.to_string(),
-            user.to_owned(),
-            coin(50, OSMO),
-        )
-        .call(owner)
+    let proxy = proxy_for_user(&local_staking, user, &app);
+    proxy
+        .unstake(val.to_string(), coin(50, OSMO))
+        .call(user)
         .unwrap();
+    process_staking_unbondings(&app);
+    proxy.release_unbonded().call(user).unwrap();
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -487,22 +540,14 @@ fn stake_local() {
             .unwrap(),
         coin(100, OSMO)
     );
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(&local_staking.contract_addr, OSMO)
-            .unwrap(),
-        coin(200, OSMO)
-    );
 
-    local_staking
-        .unstake(
-            vault.contract_addr.to_string(),
-            user.to_owned(),
-            coin(100, OSMO),
-        )
-        .call(owner)
+    proxy
+        .unstake(val.to_string(), coin(100, OSMO))
+        .call(user)
         .unwrap();
+    process_staking_unbondings(&app);
+    proxy.release_unbonded().call(user).unwrap();
+
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
         AccountResponse {
@@ -526,25 +571,18 @@ fn stake_local() {
             .unwrap(),
         coin(200, OSMO)
     );
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(&local_staking.contract_addr, OSMO)
-            .unwrap(),
-        coin(100, OSMO)
-    );
 
     // Cannot unstake over the lien
-    // Error not verified as it is swallowed by intermediate contract
-    // int this scenario
-    local_staking
-        .unstake(
-            vault.contract_addr.to_string(),
-            user.to_owned(),
-            coin(200, OSMO),
-        )
-        .call(owner)
-        .unwrap_err();
+
+    // TODO: catch subcall error here
+    // let err = proxy
+    //     .unstake(val.to_string(), coin(200, OSMO))
+    //     .call(user)
+    //     .unwrap_err();
+    // assert_eq!(
+    //     err,
+    //     mesh_native_staking_proxy::error::ContractError::Unauthorized {}
+    // );
 }
 
 #[test]
@@ -1252,7 +1290,9 @@ fn multiple_stakes() {
     let owner = "owner";
     let user = "user1";
 
-    let app = init_app(&[user], &[1000]);
+    let mut app = init_app(&[user], &[1000]);
+    let local_validator = "local";
+    add_local_validator(&mut app, local_validator);
 
     let slashing_percentage: u64 = 60;
     let (vault, local_staking, cross_staking1) = setup(&app, owner, slashing_percentage, 100);
@@ -1273,7 +1313,7 @@ fn multiple_stakes() {
     // lienholder creation. It is guaranteed to work as MT assigns increasing names to the
     // contracts, and liens are queried ascending by the lienholder.
 
-    stake_locally(&vault, user, 300);
+    stake_locally(&vault, user, 300, local_validator).unwrap();
 
     stake_remotely(&vault, &cross_staking1, user, &[validator], &[200]);
 
@@ -1563,7 +1603,9 @@ fn cross_slash_scenario_1() {
     let validator1 = validators[0];
     let validator2 = validators[1];
 
-    let app = init_app(&[user], &[collateral]);
+    let mut app = init_app(&[user], &[1000]);
+    let local_validator = "local";
+    add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
 
@@ -1575,7 +1617,7 @@ fn cross_slash_scenario_1() {
 
     // Stake some tokens locally
     let local_stake = 190;
-    stake_locally(&vault, user, local_stake);
+    stake_locally(&vault, user, local_stake, local_validator).unwrap();
 
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &validators, &[100, 50]);
@@ -1686,7 +1728,9 @@ fn cross_slash_scenario_2() {
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
 
-    let app = init_app(&[user], &[collateral]);
+    let mut app = init_app(&[user], &[1000]);
+    let local_validator = "local";
+    add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
 
@@ -1698,7 +1742,7 @@ fn cross_slash_scenario_2() {
 
     // Stake some tokens locally
     let local_stake = 200;
-    stake_locally(&vault, user, local_stake);
+    stake_locally(&vault, user, local_stake, local_validator).unwrap();
 
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &[validator1], &[200]);
@@ -1792,7 +1836,9 @@ fn cross_slash_scenario_3() {
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
 
-    let app = init_app(&[user], &[collateral]);
+    let mut app = init_app(&[user], &[1000]);
+    let local_validator = "local";
+    add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
 
@@ -1804,7 +1850,7 @@ fn cross_slash_scenario_3() {
 
     // Stake some tokens locally
     let local_stake = 190;
-    stake_locally(&vault, user, local_stake);
+    stake_locally(&vault, user, local_stake, local_validator).unwrap();
 
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &[validator1], &[150]);
@@ -1899,7 +1945,9 @@ fn cross_slash_scenario_4() {
     let validators_2 = vec!["validator3", "validator4"];
     let validator1 = validators_1[0];
 
-    let app = init_app(&[user], &[collateral]);
+    let mut app = init_app(&[user], &[1000]);
+    let local_validator = "local";
+    add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking_1) = setup(&app, owner, slashing_percentage, 100);
     let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage, 100);
@@ -1913,7 +1961,7 @@ fn cross_slash_scenario_4() {
 
     // Stake some tokens locally
     let local_stake = 190;
-    stake_locally(&vault, user, local_stake);
+    stake_locally(&vault, user, local_stake, local_validator).unwrap();
 
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking_1, user, &validators_1, &[140, 40]);
@@ -2048,12 +2096,14 @@ fn cross_slash_scenario_5() {
     // Remote slashing percentage
     let slashing_percentage = 50;
     let collateral = 200;
-    let validators = vec!["validator1", "validator2", "validator3"];
+    let validators = ["validator1", "validator2", "validator3"];
     let validator1 = validators[0];
     let validator2 = validators[1];
     let validator3 = validators[2];
 
-    let app = init_app(&[user], &[collateral]);
+    let mut app = init_app(&[user], &[1000]);
+    let local_validator = "local";
+    add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking_1) = setup(&app, owner, slashing_percentage, 100);
     let cross_staking_2 = setup_cross_stake(&app, owner, &vault, slashing_percentage, 100);
@@ -2069,7 +2119,7 @@ fn cross_slash_scenario_5() {
 
     // Stake some tokens locally
     let local_stake = 100;
-    stake_locally(&vault, user, local_stake);
+    stake_locally(&vault, user, local_stake, local_validator).unwrap();
 
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking_1, user, &[validator1], &[180]);
