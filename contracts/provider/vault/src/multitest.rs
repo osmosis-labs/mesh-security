@@ -16,7 +16,6 @@ use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
 use crate::msg::{AccountResponse, AllAccountsResponseItem, LienResponse, StakingInitInfo};
-//use crate::multitest::local_staking::multitest_utils::LocalStakingProxy;
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
@@ -232,9 +231,9 @@ fn proxy_for_user<'a>(
 }
 
 fn process_staking_unbondings(app: &App<MtApp>) {
-    let mut bi = app.block_info();
-    bi.time = bi.time.plus_seconds(61);
-    app.set_block(bi);
+    let mut block_info = app.block_info();
+    block_info.time = block_info.time.plus_seconds(61);
+    app.set_block(block_info);
     app.app_mut()
         .sudo(cw_multi_test::SudoMsg::Staking(
             cw_multi_test::StakingSudo::ProcessQueue {},
