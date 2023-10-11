@@ -2,7 +2,43 @@
 
 ## [Unreleased](https://github.com/osmosis-labs/mesh-security/tree/HEAD)
 
-[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.6.0...HEAD)
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.7.0-alpha.1...HEAD)
+
+## [v0.7.0-alpha.1](https://github.com/osmosis-labs/mesh-security/tree/v0.7.0-alpha.1) (2023-10-11)
+
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.6.0...v0.7.0-alpha.1)
+
+**Closed issues:**
+
+- Implement validator set historical queries [\#119](https://github.com/osmosis-labs/mesh-security/issues/119)
+- Send validator sync update messages on changing validator set [\#88](https://github.com/osmosis-labs/mesh-security/issues/88)
+- Add better documentation on slashing design [\#84](https://github.com/osmosis-labs/mesh-security/issues/84)
+- Use batch distribute\_rewards for cross-chain distribution efficiency [\#77](https://github.com/osmosis-labs/mesh-security/issues/77)
+- Implement Slashing [\#11](https://github.com/osmosis-labs/mesh-security/issues/11)
+
+**Merged pull requests:**
+
+- F/slashing accounting tests [\#138](https://github.com/osmosis-labs/mesh-security/pull/138) ([maurolacy](https://github.com/maurolacy))
+- F/slash jailed validators [\#137](https://github.com/osmosis-labs/mesh-security/pull/137) ([maurolacy](https://github.com/maurolacy))
+- Fix validator withdrawal follow-up [\#136](https://github.com/osmosis-labs/mesh-security/pull/136) ([maurolacy](https://github.com/maurolacy))
+- vault: remove native staking mock [\#135](https://github.com/osmosis-labs/mesh-security/pull/135) ([uint](https://github.com/uint))
+- F/vault test helpers [\#134](https://github.com/osmosis-labs/mesh-security/pull/134) ([maurolacy](https://github.com/maurolacy))
+- F/slashing accounting [\#133](https://github.com/osmosis-labs/mesh-security/pull/133) ([maurolacy](https://github.com/maurolacy))
+- virtual-staking: Add tests for validator withdrawal and rebalance [\#132](https://github.com/osmosis-labs/mesh-security/pull/132) ([uint](https://github.com/uint))
+- Test `virtual-staking` `reply_rewards` [\#131](https://github.com/osmosis-labs/mesh-security/pull/131) ([uint](https://github.com/uint))
+- Sync `ValsetUpdate` members [\#130](https://github.com/osmosis-labs/mesh-security/pull/130) ([maurolacy](https://github.com/maurolacy))
+- Slashing docs rewrite [\#127](https://github.com/osmosis-labs/mesh-security/pull/127) ([maurolacy](https://github.com/maurolacy))
+- F/slashing [\#126](https://github.com/osmosis-labs/mesh-security/pull/126) ([maurolacy](https://github.com/maurolacy))
+- Batch rewards distribution [\#125](https://github.com/osmosis-labs/mesh-security/pull/125) ([uint](https://github.com/uint))
+- F/validator historical query [\#122](https://github.com/osmosis-labs/mesh-security/pull/122) ([maurolacy](https://github.com/maurolacy))
+- Add Consumer validator tombstoning routing / msgs [\#121](https://github.com/osmosis-labs/mesh-security/pull/121) ([maurolacy](https://github.com/maurolacy))
+- bug: add missing import for macro [\#120](https://github.com/osmosis-labs/mesh-security/pull/120) ([Anmol1696](https://github.com/Anmol1696))
+- feat: Move ibc workaround methods in ExternalStaking to interface [\#117](https://github.com/osmosis-labs/mesh-security/pull/117) ([jawoznia](https://github.com/jawoznia))
+- Ownership check on simple price feeder [\#116](https://github.com/osmosis-labs/mesh-security/pull/116) ([JakeHartnell](https://github.com/JakeHartnell))
+- tests: Remove cross\_staking mock from vault tests [\#115](https://github.com/osmosis-labs/mesh-security/pull/115) ([jawoznia](https://github.com/jawoznia))
+- tests: Remove cross\_staking mock [\#114](https://github.com/osmosis-labs/mesh-security/pull/114) ([jawoznia](https://github.com/jawoznia))
+- Slashing design considerations [\#113](https://github.com/osmosis-labs/mesh-security/pull/113) ([maurolacy](https://github.com/maurolacy))
+- F/valset updates [\#109](https://github.com/osmosis-labs/mesh-security/pull/109) ([maurolacy](https://github.com/maurolacy))
 
 ## [v0.6.0](https://github.com/osmosis-labs/mesh-security/tree/v0.6.0) (2023-08-23)
 
