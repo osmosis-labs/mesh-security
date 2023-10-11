@@ -1162,3 +1162,581 @@ fn batch_distribution_invalid_token() {
         .unwrap_err();
     assert_eq!(err, ContractError::InvalidDenom(STAR.to_string()));
 }
+
+#[test]
+fn slashing() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(300, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1", "validator2"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(300, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+    vault.stake(&contract, user, validators[1], coin(100, OSMO));
+
+    // Unstake some tokens
+    // user unstakes 50 from validators[0] - 150 left staked in 2 batches
+    contract
+        .unstake(validators[0].to_string(), coin(50, OSMO))
+        .call(user)
+        .unwrap();
+    contract
+        .test_methods_proxy()
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    // Unstaken should be immediately visible on staked amount
+    let stake = contract
+        .stake(user.to_string(), validators[0].to_string())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(150)));
+
+    let stake = contract
+        .stake(user.to_string(), validators[1].to_string())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
+
+    // But not on vault side
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
+
+    // Very short travel in future - too short for claims to release
+    app.app_mut().update_block(|block| {
+        block.height += 1;
+        block.time = block.time.plus_seconds(50);
+    });
+
+    // Withdrawing liens
+    contract.withdraw_unbonded().call(user).unwrap();
+
+    // Claims still not changed on the vault side - withdrawal to early
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 300);
+
+    // Adding some more unstakes
+    // user unstakes 70 from validators[0] - 80 left staken
+    contract
+        .unstake(validators[0].to_owned(), coin(70, OSMO))
+        .call(user)
+        .unwrap();
+    contract
+        .test_methods_proxy()
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    contract
+        .unstake(validators[1].to_owned(), coin(90, OSMO))
+        .call(user)
+        .unwrap();
+    contract
+        .test_methods_proxy()
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    // Verify proper stake values
+    let stake = contract
+        .stake(user.to_string(), validators[0].to_string())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(80)));
+
+    let stake = contract
+        .stake(user.to_string(), validators[1].to_string())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(10)));
+
+    // Another timetravel - just enough for first batch of stakes to release,
+    // too early for second batch
+    app.app_mut().update_block(|block| {
+        block.height += 1;
+        block.time = block.time.plus_seconds(50);
+    });
+
+    // But now validators[0] slashing happens
+    contract
+        .test_methods_proxy()
+        .test_handle_slashing(validators[0].to_string())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault got reduced, but only for bonded and second batch amount slashing (10% of (80 + 70) = 15)
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 285);
+
+    // Withdrawing liens
+    contract.withdraw_unbonded().call(user).unwrap();
+
+    // Now claims on vault got reduced, but only for first batch amount (not slashed)
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 235);
+
+    // Moving forward more, passing through second bath pending duration
+    app.app_mut().update_block(|block| {
+        block.height += 1;
+        block.time = block.time.plus_seconds(60);
+    });
+
+    // Nothing gets released automatically, values just like before
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 235);
+
+    // Withdrawing liens
+    contract.withdraw_unbonded().call(user).unwrap();
+
+    // Now everything is released (235 - 90 - 70 + 7 = 82)
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 82);
+}
+
+#[test]
+fn slashing_pending_tx_partial_unbond() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(300, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1", "validator2"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(300, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+    vault.stake(&contract, user, validators[1], coin(100, OSMO));
+
+    // Unstake some tokens
+    contract
+        .unstake(validators[0].to_string(), coin(50, OSMO))
+        .call(user)
+        .unwrap();
+
+    // Unstaken should be immediately visible on staked amount (as pending tx)
+    let stake = contract
+        .stake(user.to_string(), validators[0].to_string())
+        .unwrap();
+    assert_eq!(
+        stake.stake,
+        ValueRange::new(Uint128::new(150), Uint128::new(200))
+    );
+
+    let stake = contract
+        .stake(user.to_string(), validators[1].to_string())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
+
+    // Now validators[0] slashing happens
+    contract
+        .test_methods_proxy()
+        .test_handle_slashing(validators[0].to_string())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault got reduced, for high end of pending unbond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 280);
+
+    // Now the unbond gets committed (i.e. successful)
+    contract
+        .test_methods_proxy()
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 280);
+
+    // Time travel - just enough for unbond to release,
+    app.app_mut().update_block(|block| {
+        block.height += 2;
+        block.time = block.time.plus_seconds(100);
+    });
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 280);
+
+    // Withdrawing liens
+    contract.withdraw_unbonded().call(user).unwrap();
+
+    // Now claims on vault got reduced by the (full) unbonded amount
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 230);
+}
+
+#[test]
+fn slashing_pending_tx_full_unbond() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(200, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1", "validator2"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(200, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+
+    // Unstake all tokens
+    contract
+        .unstake(validators[0].to_string(), coin(200, OSMO))
+        .call(user)
+        .unwrap();
+
+    // Unstaken should be immediately visible on staked amount (as pending tx)
+    let stake = contract
+        .stake(user.to_string(), validators[0].to_string())
+        .unwrap();
+    assert_eq!(
+        stake.stake,
+        ValueRange::new(Uint128::new(0), Uint128::new(200))
+    );
+
+    // Now validators[0] slashing happens
+    contract
+        .test_methods_proxy()
+        .test_handle_slashing(validators[0].to_string())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault got reduced, for high end of pending unbond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+
+    // Now the unbond gets committed (i.e. successful)
+    contract
+        .test_methods_proxy()
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+
+    // Time travel - just enough for unbond to release,
+    app.app_mut().update_block(|block| {
+        block.height += 2;
+        block.time = block.time.plus_seconds(100);
+    });
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+
+    // Withdrawing liens
+    contract.withdraw_unbonded().call(user).unwrap();
+
+    // Now claims on vault got reduced by the (full) unbonded amount
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 0);
+}
+
+#[test]
+fn slashing_pending_tx_full_unbond_rolled_back() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(200, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(200, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+
+    // Unstake all tokens
+    contract
+        .unstake(validators[0].to_string(), coin(200, OSMO))
+        .call(user)
+        .unwrap();
+
+    // Unstaken should be immediately visible on staked amount (as pending tx)
+    let stake = contract
+        .stake(user.to_string(), validators[0].to_string())
+        .unwrap();
+    assert_eq!(
+        stake.stake,
+        ValueRange::new(Uint128::new(0), Uint128::new(200))
+    );
+
+    // Now validators[0] slashing happens
+    contract
+        .test_methods_proxy()
+        .test_handle_slashing(validators[0].to_string())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault got reduced, for high end of pending unbond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+
+    // Now the unbond gets rolled back (i.e. failed)
+    contract
+        .test_methods_proxy()
+        .test_rollback_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+
+    // Time travel - just enough for unbond to release,
+    app.app_mut().update_block(|block| {
+        block.height += 2;
+        block.time = block.time.plus_seconds(100);
+    });
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+
+    // Withdrawing liens
+    contract.withdraw_unbonded().call(user).unwrap();
+
+    // Claims on vault are still unchanged
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 180);
+}
+
+#[test]
+fn slashing_pending_tx_bond() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(300, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1", "validator2"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(300, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+    vault.stake(&contract, user, validators[1], coin(50, OSMO));
+
+    // Stake some more tokens (but don't commit them!)
+    vault
+        .stake_remote(
+            contract.contract_addr.to_string(),
+            coin(50, OSMO),
+            to_binary(&ReceiveVirtualStake {
+                validator: validators[0].into(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
+    // Staken should be immediately visible on staked amount (as pending tx)
+    let stake = contract
+        .stake(user.to_string(), validators[0].to_string())
+        .unwrap();
+    assert_eq!(
+        stake.stake,
+        ValueRange::new(Uint128::new(200), Uint128::new(250))
+    );
+
+    let stake = contract
+        .stake(user.to_string(), validators[1].to_string())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(50)));
+
+    // Claims on vault got adjusted, to account for pending bond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(
+        claim.amount,
+        ValueRange::new(Uint128::new(250), Uint128::new(300))
+    );
+
+    // Now validators[0] slashing happens
+    contract
+        .test_methods_proxy()
+        .test_handle_slashing(validators[0].to_string())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault got reduced, for high end of pending slashed bond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(
+        claim.amount,
+        ValueRange::new(Uint128::new(225), Uint128::new(275))
+    );
+
+    // Now the extra bond gets committed (i.e. successful)
+    contract
+        .test_methods_proxy()
+        .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault are now committed
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 275);
+}
+
+#[test]
+fn slashing_pending_tx_bond_rolled_back() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(300, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1", "validator2"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(300, OSMO))
+        .call(user)
+        .unwrap();
+
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+    vault.stake(&contract, user, validators[1], coin(50, OSMO));
+
+    // Stake some more tokens (but don't commit them!)
+    vault
+        .stake_remote(
+            contract.contract_addr.to_string(),
+            coin(50, OSMO),
+            to_binary(&ReceiveVirtualStake {
+                validator: validators[0].into(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
+    // Staken should be immediately visible on staked amount (as pending tx)
+    let stake = contract
+        .stake(user.to_string(), validators[0].to_string())
+        .unwrap();
+    assert_eq!(
+        stake.stake,
+        ValueRange::new(Uint128::new(200), Uint128::new(250))
+    );
+
+    let stake = contract
+        .stake(user.to_string(), validators[1].to_string())
+        .unwrap();
+    assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(50)));
+
+    // Claims on vault got adjusted, to account for pending bond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(
+        claim.amount,
+        ValueRange::new(Uint128::new(250), Uint128::new(300))
+    );
+
+    // Now validators[0] slashing happens
+    contract
+        .test_methods_proxy()
+        .test_handle_slashing(validators[0].to_string())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault got reduced, for high end of pending slashed bond
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(
+        claim.amount,
+        ValueRange::new(Uint128::new(225), Uint128::new(275))
+    );
+
+    // Now the extra bond gets rolled back (i.e. failed)
+    contract
+        .test_methods_proxy()
+        .test_rollback_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+
+    // Claims on vault are now committed
+    let claim = vault
+        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 225);
+}
