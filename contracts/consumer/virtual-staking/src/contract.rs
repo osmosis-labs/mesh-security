@@ -720,30 +720,17 @@ mod tests {
         // Val1 is bonding some more
         contract.quick_bond(deps.as_mut(), "val1", 20);
 
-        // And it's is being jailed at the same time
+        // And it's being jailed at the same time
         contract.jail(deps.as_mut(), "val1");
 
         contract
             .hit_epoch(deps.as_mut())
-            .assert_bond(&[("val1", (20u128, &denom))]) // Slashing is not affecting pending bonds
+            .assert_bond(&[("val1", (20u128, &denom))]) // Tombstoned validators can still bond
             .assert_unbond(&[]) // No unbond msgs after jailing
             .assert_rewards(&["val1"]); // Rewards are still being gathered
 
         // Check that the non-slashed amounts of val1 have been bonded
         // FIXME: Remove / filter zero amounts
-        let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
-        assert_eq!(bonded, [("val1".to_string(), Uint128::new(29)),]);
-
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
-
-        // Unjail over bonded has no effect
-        contract.unjail(deps.as_mut(), "val1");
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_bond(&[]) // No bond msgs after unjailing
-            .assert_unbond(&[]) // No unbond msgs after unjailing
-            .assert_rewards(&["val1"]);
-
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert_eq!(bonded, [("val1".to_string(), Uint128::new(29)),]);
     }
@@ -766,7 +753,7 @@ mod tests {
         // Val1 is unbonding
         contract.quick_unbond(deps.as_mut(), "val1", 10);
 
-        // And it's is being jailed at the same time
+        // And it's being jailed at the same time
         contract.jail(deps.as_mut(), "val1");
 
         contract
@@ -848,6 +835,40 @@ mod tests {
     }
 
     #[test]
+    fn validator_tombstoning_pending_bond() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 10);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (10u128, &denom))])
+            .assert_rewards(&[]);
+
+        // Val1 is bonding some more
+        contract.quick_bond(deps.as_mut(), "val1", 20);
+
+        // And it's being tombstoned at the same time
+        contract.tombstone(deps.as_mut(), "val1");
+
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after jailing
+            .assert_unbond(&[]) // No unbond of already unbonded on chain
+            .assert_rewards(&["val1"]); // Rewards are still being gathered
+
+        // Check that bonded accounting has been adjusted
+        let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
+        assert!(bonded.is_empty());
+
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]); // Fully unbonded, no rewards msg anymore
+    }
+
+    #[test]
     fn validator_tombstoning_pending_unbond() {
         let (mut deps, knobs) = mock_dependencies();
 
@@ -865,7 +886,7 @@ mod tests {
         // Val1 is unbonding
         contract.quick_unbond(deps.as_mut(), "val1", 10);
 
-        // And it's is being tombstoned at the same time
+        // And it's being tombstoned at the same time
         contract.tombstone(deps.as_mut(), "val1");
 
         contract
