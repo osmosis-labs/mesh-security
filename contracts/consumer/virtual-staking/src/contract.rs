@@ -1099,7 +1099,7 @@ mod tests {
             self
         }
 
-        fn bonded(&self) -> Vec<(&str, (u128, &str))> {
+        fn bond_msgs(&self) -> Vec<(&str, (u128, &str))> {
             self.virtual_stake_msgs
                 .iter()
                 .filter_map(|msg| {
@@ -1115,7 +1115,7 @@ mod tests {
                 .collect()
         }
 
-        fn unbonded(&self) -> Vec<(&str, (u128, &str))> {
+        fn unbond_msgs(&self) -> Vec<(&str, (u128, &str))> {
             self.virtual_stake_msgs
                 .iter()
                 .filter_map(|msg| {
@@ -1134,7 +1134,7 @@ mod tests {
         #[track_caller]
         fn assert_bond(&self, expected: &[(&str, (u128, &str))]) -> &Self {
             let mut expected = expected.to_vec();
-            let mut actual = self.bonded();
+            let mut actual = self.bond_msgs();
             expected.sort();
             actual.sort();
 
@@ -1146,7 +1146,7 @@ mod tests {
         #[track_caller]
         fn assert_unbond(&self, expected: &[(&str, (u128, &str))]) -> &Self {
             let mut expected = expected.to_vec();
-            let mut actual = self.unbonded();
+            let mut actual = self.unbond_msgs();
             expected.sort();
             actual.sort();
 
