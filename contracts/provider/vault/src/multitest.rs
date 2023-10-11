@@ -1289,9 +1289,9 @@ fn stake_cross_rollback_tx() {
 fn multiple_stakes() {
     let owner = "owner";
     let user = "user1";
+    let local_validator = "local";
 
     let mut app = init_app(&[user], &[1000]);
-    let local_validator = "local";
     add_local_validator(&mut app, local_validator);
 
     let slashing_percentage: u64 = 60;
@@ -1599,12 +1599,12 @@ fn cross_slash_scenario_1() {
     // Remote slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
+    let local_validator = "local";
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
     let validator2 = validators[1];
 
     let mut app = init_app(&[user], &[1000]);
-    let local_validator = "local";
     add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
@@ -1725,11 +1725,11 @@ fn cross_slash_scenario_2() {
     // Remote slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
+    let local_validator = "local";
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
 
     let mut app = init_app(&[user], &[1000]);
-    let local_validator = "local";
     add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
@@ -1833,11 +1833,11 @@ fn cross_slash_scenario_3() {
     // Remote slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
+    let local_validator = "local";
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
 
     let mut app = init_app(&[user], &[1000]);
-    let local_validator = "local";
     add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
@@ -1940,13 +1940,13 @@ fn cross_slash_scenario_4() {
     let user = "user1";
     // Remote slashing percentage
     let slashing_percentage = 10;
+    let local_validator = "local";
     let collateral = 200;
     let validators_1 = vec!["validator1", "validator2"];
     let validators_2 = vec!["validator3", "validator4"];
     let validator1 = validators_1[0];
 
     let mut app = init_app(&[user], &[1000]);
-    let local_validator = "local";
     add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking_1) = setup(&app, owner, slashing_percentage, 100);
@@ -2096,13 +2096,13 @@ fn cross_slash_scenario_5() {
     // Remote slashing percentage
     let slashing_percentage = 50;
     let collateral = 200;
+    let local_validator = "local";
     let validators = ["validator1", "validator2", "validator3"];
     let validator1 = validators[0];
     let validator2 = validators[1];
     let validator3 = validators[2];
 
     let mut app = init_app(&[user], &[1000]);
-    let local_validator = "local";
     add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking_1) = setup(&app, owner, slashing_percentage, 100);
@@ -2387,8 +2387,10 @@ fn cross_slash_pending_unbonding() {
     let validators = vec!["validator1", "validator2"];
     let validator1 = validators[0];
     let validator2 = validators[1];
+    let local_validator = "local";
 
-    let app = init_app(&[user], &[collateral]);
+    let mut app = init_app(&[user], &[collateral]);
+    add_local_validator(&mut app, local_validator);
 
     let (vault, local_staking, cross_staking) = setup(&app, owner, slashing_percentage, 100);
 
@@ -2400,7 +2402,7 @@ fn cross_slash_pending_unbonding() {
 
     // Stake some tokens locally
     let local_stake = 190;
-    stake_locally(&vault, user, local_stake);
+    stake_locally(&vault, user, local_stake, local_validator).unwrap();
 
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &validators, &[100, 50]);
