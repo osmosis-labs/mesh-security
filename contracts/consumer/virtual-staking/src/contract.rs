@@ -721,24 +721,36 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn validator_tombstone() {
+    fn validator_tombstoning() {
         let (mut deps, knobs) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        knobs.bond_status.update_cap(10u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 20);
+        contract.quick_bond(deps.as_mut(), "val2", 20);
         contract
             .hit_epoch(deps.as_mut())
-            .assert_bond(&[("val1", (5u128, &denom))])
+            .assert_bond(&[("val1", (20u128, &denom)), ("val2", (20u128, &denom))])
             .assert_rewards(&[]);
 
+        // Val1 is being tombstoned
         contract.tombstone(deps.as_mut(), "val1");
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after tombstoning
+            .assert_unbond(&[]) // No unbond msgs after tombstoning
+            .assert_rewards(&["val1", "val2"]); // Last rewards msgs after tombstoning
+
+        // Check that the bonded amounts of val1 have been fully unbonded.
+        // Val2 is unaffected.
+        // TODO: Check that the amounts have been slashed for double sign on-chain (needs mt slashing support)
+        let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
+        assert_eq!(bonded, [("val2".to_string(), Uint128::new(20))]);
+
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val2"]); // No more rewards msgs after tombstoning
     }
 
     #[test]
@@ -853,9 +865,7 @@ mod tests {
                 querier: MockQuerier::new(&[]).with_custom_handler(handler),
                 custom_query_type: PhantomData,
             },
-            StakingKnobs {
-                bond_status,
-            },
+            StakingKnobs { bond_status },
         )
     }
 
@@ -892,7 +902,6 @@ mod tests {
         fn borrow(&self) -> Ref<'_, SlashRatioResponse> {
             self.0.borrow()
         }
-
     }
 
     fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
