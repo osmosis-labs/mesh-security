@@ -652,7 +652,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn validator_jail_unjail() {
         let (mut deps, knobs) = mock_dependencies();
 
@@ -660,19 +659,45 @@ mod tests {
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        knobs.bond_status.update_cap(10u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 10);
+        contract.quick_bond(deps.as_mut(), "val2", 20);
         contract
             .hit_epoch(deps.as_mut())
-            .assert_bond(&[("val1", (5u128, &denom))])
+            .assert_bond(&[("val1", (10u128, &denom)), ("val2", (20u128, &denom))])
             .assert_rewards(&[]);
 
+        // val1 is being jailed
         contract.jail(deps.as_mut(), "val1");
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
+
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after jailing
+            .assert_unbond(&[]) // No unbond msgs after jailing
+            .assert_rewards(&["val1", "val2"]); // But rewards can still be gathered
+
+        // Check that the bonded amounts of val1 have been slashed for being offline (10%)
+        // Val2 is unaffected.
+        let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
+        assert_eq!(
+            bonded,
+            [
+                ("val1".to_string(), Uint128::new(9)),
+                ("val2".to_string(), Uint128::new(20))
+            ]
+        );
+
+        // FIXME: Subsequent rewards msgs could be removed while validator is jailed / inactive
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_rewards(&["val1", "val2"]); // But rewards can still be gathered
 
         contract.unjail(deps.as_mut(), "val1");
-        contract.hit_epoch(deps.as_mut());
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after unjailing
+            .assert_unbond(&[]) // No unbond msgs after unjailing
+            .assert_rewards(&["val1", "val2"]);
     }
 
     #[test]
@@ -799,8 +824,8 @@ mod tests {
             delegated: coin(0, "DOES NOT MATTER"),
         });
         let slash_ratio = MockSlashRatio::new(SlashRatioResponse {
-            slash_fraction_downtime: "0".to_string(),
-            slash_fraction_double_sign: "0".to_string(),
+            slash_fraction_downtime: "0.1".to_string(),
+            slash_fraction_double_sign: "0.2".to_string(),
         });
 
         let handler = {
