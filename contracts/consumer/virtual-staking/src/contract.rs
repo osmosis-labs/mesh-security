@@ -187,14 +187,15 @@ impl VirtualStakingContract<'_> {
                 // Remove request as well, to avoid unbonding msg (auto unbonded when tombstoned)
                 self.bond_requests.remove(storage, validator);
             } else if jailed {
-                // Apply slash ratio to current
-                *prev -= *prev * slash_ratio;
+                // Apply slash ratio over current
+                let slash_amount = *prev * slash_ratio;
+                *prev -= slash_amount;
                 // Apply to request as well, to avoid unbonding msg
                 let mut request = self
                     .bond_requests
                     .may_load(storage, validator)?
                     .unwrap_or_default();
-                request -= request * slash_ratio;
+                request = request.saturating_sub(slash_amount);
                 self.bond_requests.save(storage, validator, &request)?;
             }
         }
