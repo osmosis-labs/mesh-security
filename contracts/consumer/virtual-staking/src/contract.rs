@@ -531,12 +531,12 @@ pub fn sudo(
             tombstoned,
         } => VirtualStakingContract::new().handle_valset_update(
             deps,
-            &additions,
-            &removals,
-            &updated,
-            &jailed,
-            &unjailed,
-            &tombstoned,
+            &additions.unwrap_or_default(),
+            &removals.unwrap_or_default(),
+            &updated.unwrap_or_default(),
+            &jailed.unwrap_or_default(),
+            &unjailed.unwrap_or_default(),
+            &tombstoned.unwrap_or_default(),
         ),
     }
 }
