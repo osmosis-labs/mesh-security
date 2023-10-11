@@ -731,16 +731,9 @@ mod tests {
         // Check that the non-slashed amounts of val1 have been unbonded
         // FIXME: Remove / filter zero amounts
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
-        assert_eq!(
-            bonded,
-            [
-                ("val1".to_string(), Uint128::new(0)),
-            ]
-        );
+        assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
 
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_rewards(&["val1"]);
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
 
         // Unjail over unbonded has no effect
         contract.unjail(deps.as_mut(), "val1");
@@ -751,12 +744,7 @@ mod tests {
             .assert_rewards(&["val1"]);
 
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
-        assert_eq!(
-            bonded,
-            [
-                ("val1".to_string(), Uint128::new(0)),
-            ]
-        );
+        assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
     }
 
     #[test]
@@ -844,9 +832,7 @@ mod tests {
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert!(bonded.is_empty());
 
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_rewards(&[]); // Fully unbonded, no rewards msg anymore
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]); // Fully unbonded, no rewards msg anymore
     }
 
     #[test]
