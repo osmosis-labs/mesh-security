@@ -813,6 +813,43 @@ mod tests {
     }
 
     #[test]
+    fn validator_tombstoning_pending_unbond() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 10);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (10u128, &denom))])
+            .assert_rewards(&[]);
+
+        // Val1 is unbonding
+        contract.quick_unbond(deps.as_mut(), "val1", 10);
+
+        // And it's is being tombstoned at the same time
+        contract.tombstone(deps.as_mut(), "val1");
+
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after jailing
+            .assert_unbond(&[]) // No unbond of already unbonded on chain
+            .assert_rewards(&["val1"]); // Rewards are still being gathered
+
+        // Check that bonded accounting has been adjusted
+        // FIXME: Remove / filter zero amounts
+        let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
+        assert!(bonded.is_empty());
+
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_rewards(&[]); // Fully unbonded, no rewards msg anymore
+    }
+
+    #[test]
     fn reply_rewards() {
         let (mut deps, _) = mock_dependencies();
         let contract = VirtualStakingContract::new();
