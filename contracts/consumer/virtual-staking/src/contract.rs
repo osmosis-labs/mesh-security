@@ -553,7 +553,7 @@ mod tests {
         coins, from_binary,
         testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
     };
-    use mesh_bindings::BondStatusResponse;
+    use mesh_bindings::{BondStatusResponse, SlashRatioResponse};
     use serde::de::DeserializeOwned;
 
     use super::*;
@@ -564,12 +564,12 @@ mod tests {
 
     #[test]
     fn no_bond_with_zero_cap() {
-        let (mut deps, bond_status) = mock_dependencies();
+        let (mut deps, knobs) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
 
-        bond_status.update_cap(0u128);
+        knobs.bond_status.update_cap(0u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -579,13 +579,13 @@ mod tests {
 
     #[test]
     fn simple_bond() {
-        let (mut deps, bond_status) = mock_dependencies();
+        let (mut deps, knobs) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update_cap(10u128);
+        knobs.bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -595,13 +595,13 @@ mod tests {
 
     #[test]
     fn simple_bond2() {
-        let (mut deps, bond_status) = mock_dependencies();
+        let (mut deps, knobs) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update_cap(10u128);
+        knobs.bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 6);
         contract.quick_bond(deps.as_mut(), "val2", 4);
         contract
@@ -614,13 +614,13 @@ mod tests {
     /// doesn't exceed the cap.
     #[test]
     fn bond_rebalance() {
-        let (mut deps, bond_status) = mock_dependencies();
+        let (mut deps, knobs) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update_cap(5u128);
+        knobs.bond_status.update_cap(5u128);
         contract.quick_bond(deps.as_mut(), "val1", 10);
         contract.quick_bond(deps.as_mut(), "val2", 40);
         contract
@@ -631,13 +631,13 @@ mod tests {
 
     #[test]
     fn unbond() {
-        let (mut deps, bond_status) = mock_dependencies();
+        let (mut deps, knobs) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update_cap(10u128);
+        knobs.bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -654,13 +654,13 @@ mod tests {
     #[test]
     #[ignore]
     fn validator_jail_unjail() {
-        let (mut deps, bond_status) = mock_dependencies();
+        let (mut deps, knobs) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update_cap(10u128);
+        knobs.bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -678,13 +678,13 @@ mod tests {
     #[test]
     #[ignore]
     fn validator_remove() {
-        let (mut deps, bond_status) = mock_dependencies();
+        let (mut deps, knobs) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update_cap(10u128);
+        knobs.bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -699,13 +699,13 @@ mod tests {
     #[test]
     #[ignore]
     fn validator_tombstone() {
-        let (mut deps, bond_status) = mock_dependencies();
+        let (mut deps, knobs) = mock_dependencies();
 
         let contract = VirtualStakingContract::new();
         contract.quick_inst(deps.as_mut());
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
-        bond_status.update_cap(10u128);
+        knobs.bond_status.update_cap(10u128);
         contract.quick_bond(deps.as_mut(), "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
@@ -793,18 +793,33 @@ mod tests {
             .assert_eq(&[("val1", 20), ("val2", 10)]);
     }
 
-    fn mock_dependencies() -> (OwnedDeps, MockBondStatus) {
+    fn mock_dependencies() -> (OwnedDeps, StakingKnobs) {
         let bond_status = MockBondStatus::new(BondStatusResponse {
             cap: coin(0, "DOES NOT MATTER"),
             delegated: coin(0, "DOES NOT MATTER"),
         });
+        let slash_ratio = MockSlashRatio::new(SlashRatioResponse {
+            slash_fraction_downtime: "0".to_string(),
+            slash_fraction_double_sign: "0".to_string(),
+        });
 
         let handler = {
             let bs_copy = bond_status.clone();
-            move |_msg: &_| {
-                cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
-                    to_binary(&*bs_copy.borrow()).unwrap(),
-                ))
+            let sr_copy = slash_ratio.clone();
+            move |msg: &_| {
+                let VirtualStakeCustomQuery::VirtualStake(msg) = msg;
+                match msg {
+                    mesh_bindings::VirtualStakeQuery::BondStatus { .. } => {
+                        cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
+                            to_binary(&*bs_copy.borrow()).unwrap(),
+                        ))
+                    }
+                    mesh_bindings::VirtualStakeQuery::SlashRatio {} => {
+                        cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
+                            to_binary(&*sr_copy.borrow()).unwrap(),
+                        ))
+                    }
+                }
             }
         };
 
@@ -815,8 +830,16 @@ mod tests {
                 querier: MockQuerier::new(&[]).with_custom_handler(handler),
                 custom_query_type: PhantomData,
             },
-            bond_status,
+            StakingKnobs {
+                bond_status,
+                slash_ratio,
+            },
         )
+    }
+
+    struct StakingKnobs {
+        bond_status: MockBondStatus,
+        slash_ratio: MockSlashRatio,
     }
 
     #[derive(Clone)]
@@ -834,6 +857,24 @@ mod tests {
         fn update_cap(&self, cap: impl Into<Uint128>) {
             let mut mut_obj = self.0.borrow_mut();
             mut_obj.cap.amount = cap.into();
+        }
+    }
+
+    #[derive(Clone)]
+    struct MockSlashRatio(Rc<RefCell<SlashRatioResponse>>);
+
+    impl MockSlashRatio {
+        fn new(res: SlashRatioResponse) -> Self {
+            Self(Rc::new(RefCell::new(res)))
+        }
+
+        fn borrow(&self) -> Ref<'_, SlashRatioResponse> {
+            self.0.borrow()
+        }
+
+        fn update_downtime(&self, slash_ratio: &str) {
+            let mut mut_obj = self.0.borrow_mut();
+            mut_obj.slash_fraction_downtime = slash_ratio.into();
         }
     }
 
@@ -904,6 +945,7 @@ mod tests {
             result
         }
 
+        #[track_caller]
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult {
             HitEpochResult::new(self.handle_epoch(deps, mock_env()).unwrap())
         }
