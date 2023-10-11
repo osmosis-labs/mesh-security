@@ -678,6 +678,7 @@ mod tests {
 
         // Check that the bonded amounts of val1 have been slashed for being offline (10%)
         // Val2 is unaffected.
+        // TODO: Check that the amounts have been slashed for being offline on-chain (needs mt slashing support)
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert_eq!(
             bonded,
@@ -746,7 +747,7 @@ mod tests {
 
         // Check that the bonded amounts of val1 have been fully unbonded.
         // Val2 is unaffected.
-        // TODO: Check that the amounts have been slashed for double sign on-chain (needs mt slashing support)
+        // TODO: Check that the amounts have been slashed for double sign on-chain (needs mt slashing / tombstoning support)
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert_eq!(bonded, [("val2".to_string(), Uint128::new(20))]);
 
