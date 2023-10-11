@@ -830,7 +830,6 @@ mod tests {
 
         let handler = {
             let bs_copy = bond_status.clone();
-            let sr_copy = slash_ratio.clone();
             move |msg: &_| {
                 let VirtualStakeCustomQuery::VirtualStake(msg) = msg;
                 match msg {
@@ -841,7 +840,7 @@ mod tests {
                     }
                     mesh_bindings::VirtualStakeQuery::SlashRatio {} => {
                         cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
-                            to_binary(&*sr_copy.borrow()).unwrap(),
+                            to_binary(&*slash_ratio.borrow()).unwrap(),
                         ))
                     }
                 }
@@ -857,14 +856,12 @@ mod tests {
             },
             StakingKnobs {
                 bond_status,
-                slash_ratio,
             },
         )
     }
 
     struct StakingKnobs {
         bond_status: MockBondStatus,
-        slash_ratio: MockSlashRatio,
     }
 
     #[derive(Clone)]
@@ -897,10 +894,6 @@ mod tests {
             self.0.borrow()
         }
 
-        fn update_downtime(&self, slash_ratio: &str) {
-            let mut mut_obj = self.0.borrow_mut();
-            mut_obj.slash_fraction_downtime = slash_ratio.into();
-        }
     }
 
     fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
