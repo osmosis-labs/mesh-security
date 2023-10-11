@@ -1,3 +1,10 @@
+# 0.7.0-alhpa.1
+
+- Cross-slashing implementation
+- Valset updates
+- Slashing accounting
+- Slashing propagation at the vault level
+
 # 0.3.0-beta
 
 - IBC specification is added to the documents.
