@@ -364,16 +364,23 @@ impl ConverterApi for ConverterContract<'_> {
         let tomb_msg = tombstone_validators_msg(&ctx.env, &channel, &tombstoned)?;
         let jail_msg = jail_validators_msg(&ctx.env, &channel, &jailed)?;
 
-        let event = Event::new("valset_update").add_attribute(
-            "additions",
-            additions
-                .iter()
-                .map(|v| v.address.clone())
-                .collect::<Vec<String>>()
-                .join(","),
-        );
-        let event = event.add_attribute("jailed", jailed.join(","));
-        let event = event.add_attribute("tombstoned", tombstoned.join(","));
+        let mut event = Event::new("valset_update");
+        if !additions.is_empty() {
+            event = event.clone().add_attribute(
+                "additions",
+                additions
+                    .iter()
+                    .map(|v| v.address.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+        }
+        if !jailed.is_empty() {
+            event = event.clone().add_attribute("jailed", jailed.join(","));
+        }
+        if !tombstoned.is_empty() {
+            event = event.add_attribute("tombstoned", tombstoned.join(","));
+        }
         let resp = Response::new()
             .add_event(event)
             .add_message(add_msg)
