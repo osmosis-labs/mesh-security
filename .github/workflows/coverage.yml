@@ -1,0 +1,21 @@
+name: Coverage
+
+on: [pull_request, push]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate code coverage
+        run: cargo llvm-cov --workspace --codecov --output-path codecov.json
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          # token: ${{ secrets.CODECOV_TOKEN }} # for private repos
+          files: codecov.json
+          fail_ci_if_error: true
