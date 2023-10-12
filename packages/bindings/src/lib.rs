@@ -3,7 +3,10 @@ mod query;
 mod sudo;
 
 pub use msg::{VirtualStakeCustomMsg, VirtualStakeMsg};
-pub use query::{BondStatusResponse, TokenQuerier, VirtualStakeCustomQuery, VirtualStakeQuery};
+pub use query::{
+    BondStatusResponse, SlashRatioResponse, TokenQuerier, VirtualStakeCustomQuery,
+    VirtualStakeQuery,
+};
 pub use sudo::SudoMsg;
 
 // This is a signal, such that any contract that imports these helpers
