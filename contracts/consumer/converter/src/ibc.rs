@@ -174,7 +174,7 @@ pub(crate) fn tombstone_validators_msg(
     channel: &IbcChannel,
     validators: &[String],
 ) -> Result<IbcMsg, ContractError> {
-    let packet = ConsumerPacket::RemoveValidators(
+    let packet = ConsumerPacket::TombstoneValidators(
         validators
             .iter()
             .map(|v| RemoveValidator {

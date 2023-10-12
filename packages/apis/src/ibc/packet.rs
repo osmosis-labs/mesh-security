@@ -64,7 +64,7 @@ pub enum ConsumerPacket {
     /// This is sent when a validator is tombstoned. Not just leaving the active state,
     /// but when it is no longer a valid target to delegate to.
     /// It contains a list of `valoper_address` to be removed, along with the removal's height.
-    RemoveValidators(Vec<RemoveValidator>),
+    TombstoneValidators(Vec<RemoveValidator>),
     /// This is sent when a validator is jailed.
     /// It contains a list of `valoper_address` to be slashed for temporary jailing, along with the
     /// jail event's block height.
