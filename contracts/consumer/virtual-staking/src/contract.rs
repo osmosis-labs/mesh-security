@@ -130,14 +130,17 @@ impl VirtualStakingContract<'_> {
         let tombstoned = self.tombstoned.load(deps.storage)?;
         let jailed = self.jailed.load(deps.storage)?;
         if !tombstoned.is_empty() || !jailed.is_empty() {
-            let slash_ratio = if !jailed.is_empty() {
-                // Only query if needed
-                let ratios = TokenQuerier::new(&deps.querier).slash_ratio()?;
-                Decimal::from_str(&ratios.slash_fraction_downtime)?
-            } else {
-                Decimal::zero()
-            };
-            self.adjust_slashings(deps.storage, &mut current, tombstoned, jailed, slash_ratio)?;
+            let ratios = TokenQuerier::new(&deps.querier).slash_ratio()?;
+            let slash_ratio_double_sign = Decimal::from_str(&ratios.slash_fraction_double_sign)?;
+            let slash_ratio_downtime = Decimal::from_str(&ratios.slash_fraction_downtime)?;
+            self.adjust_slashings(
+                deps.storage,
+                &mut current,
+                tombstoned,
+                jailed,
+                slash_ratio_double_sign,
+                slash_ratio_downtime,
+            )?;
             // Clear up both lists
             self.tombstoned.save(deps.storage, &vec![])?;
             self.jailed.save(deps.storage, &vec![])?;
@@ -172,7 +175,8 @@ impl VirtualStakingContract<'_> {
         current: &mut [(String, Uint128)],
         tombstones: Vec<String>,
         jailing: Vec<String>,
-        slash_ratio: Decimal,
+        slash_ratio_tombstoning: Decimal,
+        slash_ratio_jailing: Decimal,
     ) -> StdResult<()> {
         let tombstones: BTreeSet<_> = tombstones.into_iter().collect();
         let jailing: BTreeSet<_> = jailing.into_iter().collect();
@@ -181,23 +185,24 @@ impl VirtualStakingContract<'_> {
         for (validator, prev) in current {
             let tombstoned = tombstones.contains(validator);
             let jailed = jailing.contains(validator);
-            if tombstoned {
-                // Set current to zero
-                *prev = Uint128::zero();
-                // Remove request as well, to avoid unbonding msg (auto unbonded when tombstoned)
-                self.bond_requests.remove(storage, validator);
+            // Tombstoned has precedence over jailing
+            let slash_ratio = if tombstoned {
+                slash_ratio_tombstoning
             } else if jailed {
-                // Apply slash ratio over current
-                let slash_amount = *prev * slash_ratio;
-                *prev -= slash_amount;
-                // Apply to request as well, to avoid unbonding msg
-                let mut request = self
-                    .bond_requests
-                    .may_load(storage, validator)?
-                    .unwrap_or_default();
-                request = request.saturating_sub(slash_amount);
-                self.bond_requests.save(storage, validator, &request)?;
-            }
+                slash_ratio_jailing
+            } else {
+                continue;
+            };
+            // Apply slash ratio over current
+            let slash_amount = *prev * slash_ratio;
+            *prev -= slash_amount;
+            // Apply to request as well, to avoid unbonding msg
+            let mut request = self
+                .bond_requests
+                .may_load(storage, validator)?
+                .unwrap_or_default();
+            request = request.saturating_sub(slash_amount);
+            self.bond_requests.save(storage, validator, &request)?;
         }
         Ok(())
     }
@@ -825,13 +830,22 @@ mod tests {
             .assert_unbond(&[]) // No unbond msgs after tombstoning
             .assert_rewards(&["val1", "val2"]); // Last rewards msgs after tombstoning
 
-        // Check that the bonded amounts of val1 have been fully unbonded.
+        // Check that the bonded amounts of val1 have been slashed for double sign (25%)
         // Val2 is unaffected.
         // TODO: Check that the amounts have been slashed for double sign on-chain (needs mt slashing / tombstoning support)
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
-        assert_eq!(bonded, [("val2".to_string(), Uint128::new(20))]);
+        assert_eq!(
+            bonded,
+            [
+                ("val1".to_string(), Uint128::new(15)),
+                ("val2".to_string(), Uint128::new(20))
+            ]
+        );
 
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val2"]); // No more rewards msgs after tombstoning
+        // FIXME: Subsequent rewards msgs could be removed after validator is tombstoned
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_rewards(&["val1", "val2"]);
     }
 
     #[test]
@@ -857,15 +871,22 @@ mod tests {
 
         contract
             .hit_epoch(deps.as_mut())
-            .assert_bond(&[]) // No bond msgs after jailing
-            .assert_unbond(&[]) // No unbond of already unbonded on chain
+            .assert_bond(&[("val1", (20, &denom))]) // FIXME?: Tombstoned validators can still bond
+            .assert_unbond(&[])
             .assert_rewards(&["val1"]); // Rewards are still being gathered
 
-        // Check that bonded accounting has been adjusted
+        // Check that the previously bonded amounts of val1 have been slashed for double sign (25%)
+        // TODO: Check that the amounts have been slashed for double sign on-chain (needs mt slashing / tombstoning support)
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
-        assert!(bonded.is_empty());
+        assert_eq!(
+            bonded,
+            [
+                ("val1".to_string(), Uint128::new(8 + 20)), // Due to rounding up
+            ]
+        );
 
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]); // Fully unbonded, no rewards msg anymore
+        // FIXME: Subsequent rewards msgs could be removed after validator is tombstoned
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
     }
 
     #[test]
@@ -892,15 +913,16 @@ mod tests {
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after jailing
-            .assert_unbond(&[]) // No unbond of already unbonded on chain
+            .assert_unbond(&[("val1", (8u128, &denom))]) // Unbond adjusted for double sign slashing
             .assert_rewards(&["val1"]); // Rewards are still being gathered
 
         // Check that bonded accounting has been adjusted
-        // FIXME: Remove / filter zero amounts
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
-        assert!(bonded.is_empty());
+        //  FIXME: Remove zero amounts
+        assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
 
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]); // Fully unbonded, no rewards msg anymore
+        // FIXME: Subsequent rewards msgs could be removed after validator is tombstoned
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
     }
 
     #[test]
@@ -986,7 +1008,7 @@ mod tests {
         });
         let slash_ratio = MockSlashRatio::new(SlashRatioResponse {
             slash_fraction_downtime: "0.1".to_string(),
-            slash_fraction_double_sign: "0.2".to_string(),
+            slash_fraction_double_sign: "0.25".to_string(),
         });
 
         let handler = {
