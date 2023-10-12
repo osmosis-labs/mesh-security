@@ -44,6 +44,6 @@ pub enum ContractError {
     #[error("The tx {0} exists but comes from the wrong address: {1}")]
     WrongContractTx(u64, Addr),
 
-    #[error("No local staking configured for this vault")]
+    #[error("No local staking configured")]
     NoLocalStaking,
 }
