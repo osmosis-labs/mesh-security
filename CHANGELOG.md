@@ -2,7 +2,16 @@
 
 ## [Unreleased](https://github.com/osmosis-labs/mesh-security/tree/HEAD)
 
-[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.7.0-alpha.1...HEAD)
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.7.0-alpha.2...HEAD)
+
+## [v0.7.0-alpha.2](https://github.com/osmosis-labs/mesh-security/tree/v0.7.0-alpha.2) (2023-10-12)
+
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.7.0-alpha.1...v0.7.0-alpha.2)
+
+**Merged pull requests:**
+
+- Fix/SDK integration [\#145](https://github.com/osmosis-labs/mesh-security/pull/145) ([maurolacy](https://github.com/maurolacy))
+- virtual-staking: jailing / tombstoning tests [\#142](https://github.com/osmosis-labs/mesh-security/pull/142) ([uint](https://github.com/uint))
 
 ## [v0.7.0-alpha.1](https://github.com/osmosis-labs/mesh-security/tree/v0.7.0-alpha.1) (2023-10-11)
 

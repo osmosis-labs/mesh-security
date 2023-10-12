@@ -44,11 +44,11 @@ pub enum SudoMsg {
     ///  - Addition of an existing validator to the active validator set.
     ///  - Permanent removal (i.e. tombstoning) of a validator from the active set. Implies slashing
     ValsetUpdate {
-        additions: Vec<Validator>,
-        removals: Vec<String>,
-        updated: Vec<Validator>,
-        jailed: Vec<String>,
-        unjailed: Vec<String>,
-        tombstoned: Vec<String>,
+        additions: Option<Vec<Validator>>,
+        removals: Option<Vec<String>>,
+        updated: Option<Vec<Validator>>,
+        jailed: Option<Vec<String>>,
+        unjailed: Option<Vec<String>>,
+        tombstoned: Option<Vec<String>>,
     },
 }

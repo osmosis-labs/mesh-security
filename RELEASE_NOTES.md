@@ -1,4 +1,9 @@
-# 0.7.0-alhpa.1
+# 0.7.0-alpha.2
+
+- Remove empty messages / events.
+- Fix virtual-staking slashing accounting.
+
+# 0.7.0-alpha.1
 
 - Cross-slashing implementation.
 - Batch distribute rewards.

@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 edition       = "2021"
-version       = "0.7.0-alpha.1"
+version       = "0.7.0-alpha.2"
 license       = "MIT"
 repository    = "https://github.com/osmosis-labs/mesh-security"
 
@@ -22,7 +22,7 @@ mesh-converter    = { path = "./contracts/consumer/converter" }
 mesh-simple-price-feed    = { path = "./contracts/consumer/simple-price-feed" }
 mesh-virtual-staking    = { path = "./contracts/consumer/virtual-staking" }
 
-sylvia           = "0.7.1"
+sylvia           = "0.8"
 cosmwasm-schema  = "1.2"
 cosmwasm-std     = { version = "1.2", features = ["ibc3", "cosmwasm_1_2"] }
 cosmwasm-storage = "1.2"
