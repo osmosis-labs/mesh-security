@@ -14,7 +14,6 @@ use mesh_apis::ibc::{
 };
 
 use crate::contract::ExternalStakingContract;
-use crate::crdt::ValUpdate;
 use crate::error::ContractError;
 use crate::msg::AuthorizedEndpoint;
 
@@ -133,14 +132,13 @@ pub fn ibc_packet_receive(
                 start_time,
             } in to_add
             {
-                let update = ValUpdate {
-                    pub_key,
+                contract.val_set.add_validator(
+                    deps.storage,
+                    &valoper,
+                    &pub_key,
                     start_height,
                     start_time,
-                };
-                contract
-                    .val_set
-                    .add_validator(deps.storage, &valoper, update)?;
+                )?;
             }
             let ack = ack_success(&AddValidatorsAck {})?;
             IbcReceiveResponse::new().set_ack(ack)
@@ -150,7 +148,7 @@ pub fn ibc_packet_receive(
             for RemoveValidator {
                 valoper,
                 height: end_height,
-                time: _end_time,
+                time: end_time,
             } in to_remove
             {
                 // Check that the validator is active at height and slash it if that is the case
@@ -159,7 +157,9 @@ pub fn ibc_packet_receive(
                     &valoper,
                     end_height,
                 )?;
-                contract.val_set.remove_validator(deps.storage, &valoper)?;
+                contract
+                    .val_set
+                    .remove_validator(deps.storage, &valoper, end_height, end_time)?;
                 if active {
                     // slash the validator
                     // TODO: Error handling / capturing

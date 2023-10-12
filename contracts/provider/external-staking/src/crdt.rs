@@ -2,51 +2,63 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Order, StdError, StdResult, Storage};
 use cw_storage_plus::{Bound, Map};
 
-// Question: Do we need to add more info here if we want to keep historical info for slashing.
-// Would we ever need the pubkeys for a Tombstoned validator? Or do we consider it already slashed and therefore unslashable?
 #[cw_serde]
-pub enum ValidatorState {
-    Active(ActiveState),
-    Tombstoned {},
-}
+/// ValidatorState maintains a sorted list of updates with no duplicates.
+/// The first one is the one with the highest start_height.
+pub struct ValidatorState(Vec<ValState>);
 
 impl ValidatorState {
-    pub fn is_active(&self) -> bool {
-        matches!(self, ValidatorState::Active(_))
-    }
-}
-
-#[cw_serde]
-/// Active state maintains a sorted list of updates with no duplicates.
-/// The first one is the one with the highest start_height.
-pub struct ActiveState(Vec<ValUpdate>);
-
-impl ActiveState {
     /// Add one more element to this list, maintaining the constraints
-    pub fn insert_unique(&mut self, update: ValUpdate) {
+    pub fn insert_unique(&mut self, update: ValState) {
         self.0.push(update);
         self.0.sort_by(|a, b| b.start_height.cmp(&a.start_height));
         self.0.dedup();
     }
 
-    pub fn query_at_height(&self, height: u64) -> Option<&ValUpdate> {
+    pub fn query_at_height(&self, height: u64) -> Option<&ValState> {
         self.0.iter().find(|u| u.start_height <= height)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn is_active(&self) -> bool {
+        !self.is_empty() && self.0[0].state == State::Active {}
+    }
+
+    pub fn is_tombstoned(&self) -> bool {
+        !self.is_empty() && self.0[0].state == State::Tombstoned {}
     }
 }
 
 #[cw_serde]
-pub struct ValUpdate {
+pub struct ValState {
     pub pub_key: String,
     pub start_height: u64,
     pub start_time: u64,
+    pub state: State,
 }
 
-impl ValUpdate {
+#[cw_serde]
+pub enum State {
+    /// Validator is part of the validator set.
+    Active {},
+    /// Validator is not part of the validator set due to being unbonded.
+    Unbonded {},
+    /// Validator is not part of the validator set due to being jailed.
+    Jailed {},
+    /// Validator is not part of the validator set due to being tombstoned.
+    Tombstoned {},
+}
+
+impl ValState {
     pub fn new(pub_key: impl Into<String>, start_height: u64, start_time: u64) -> Self {
-        ValUpdate {
+        ValState {
             pub_key: pub_key.into(),
             start_height,
             start_time,
+            state: State::Active {},
         }
     }
 }
@@ -70,24 +82,28 @@ impl<'a> CrdtState<'a> {
         &self,
         storage: &mut dyn Storage,
         valoper: &str,
-        update: ValUpdate,
+        pub_key: &str,
+        height: u64,
+        time: u64,
     ) -> Result<(), StdError> {
-        let mut state = self
+        let mut validator_state = self
             .validators
             .may_load(storage, valoper)?
-            .unwrap_or_else(|| ValidatorState::Active(ActiveState(vec![])));
+            .unwrap_or_else(|| ValidatorState(vec![]));
 
-        match &mut state {
-            ValidatorState::Active(active) => {
-                // add to the set, ensuring there are no duplicates
-                active.insert_unique(update);
-            }
-            ValidatorState::Tombstoned {} => {
-                // we just silently ignore it here
-            }
+        // We just silently ignore it if already tombstoned
+        if !validator_state.is_tombstoned() {
+            let val_state = ValState {
+                pub_key: pub_key.to_string(),
+                start_height: height,
+                start_time: time,
+                state: State::Active {},
+            };
+            validator_state.insert_unique(val_state);
+            // TODO: drain events that are older than unbonding period (maintenance)
+            self.validators.save(storage, valoper, &validator_state)?;
         }
-
-        self.validators.save(storage, valoper, &state)
+        Ok(())
     }
 
     /// Remove a validator.
@@ -96,9 +112,28 @@ impl<'a> CrdtState<'a> {
         &self,
         storage: &mut dyn Storage,
         valoper: &str,
+        height: u64,
+        time: u64,
     ) -> Result<(), StdError> {
-        let state = ValidatorState::Tombstoned {};
-        self.validators.save(storage, valoper, &state)
+        let mut validator_state = self
+            .validators
+            .may_load(storage, valoper)?
+            .unwrap_or_else(|| ValidatorState(vec![]));
+
+        // We just silently ignore it if already tombstoned
+        if !validator_state.is_tombstoned() {
+            let val_state = ValState {
+                pub_key: "TODO".to_string(),
+                start_height: height,
+                start_time: time,
+                state: State::Tombstoned {},
+            };
+            validator_state.insert_unique(val_state);
+            // TODO: drain events that are newer than `height` (this is the final registered event)
+            // TODO: drain events that are older than unbonding period (maintenance)
+            self.validators.save(storage, valoper, &validator_state)?;
+        }
+        Ok(())
     }
 
     pub fn is_active_validator(&self, storage: &dyn Storage, valoper: &str) -> StdResult<bool> {
@@ -133,8 +168,8 @@ impl<'a> CrdtState<'a> {
         self.validators
             .range(storage, start, None, Order::Ascending)
             .filter_map(|r| match r {
-                Ok((valoper, ValidatorState::Active(_))) => Some(Ok(valoper)),
-                Ok((_, ValidatorState::Tombstoned {})) => None,
+                Ok((valoper, validator_state)) if validator_state.is_active() => Some(Ok(valoper)),
+                Ok(_) => None,
                 Err(e) => Some(Err(e)),
             })
             .take(limit)
@@ -145,11 +180,12 @@ impl<'a> CrdtState<'a> {
         &self,
         storage: &dyn Storage,
         valoper: &str,
-    ) -> StdResult<Option<ValUpdate>> {
+    ) -> StdResult<Option<ValState>> {
         let state = self.validators.load(storage, valoper)?;
-        match state {
-            ValidatorState::Active(active) => Ok(active.0.first().cloned()),
-            ValidatorState::Tombstoned {} => Ok(None),
+        if state.is_active() {
+            Ok(state.0.first().cloned())
+        } else {
+            Ok(None)
         }
     }
 
@@ -158,11 +194,12 @@ impl<'a> CrdtState<'a> {
         storage: &dyn Storage,
         valoper: &str,
         height: u64,
-    ) -> StdResult<Option<ValUpdate>> {
+    ) -> StdResult<Option<ValState>> {
         let state = self.validators.load(storage, valoper)?;
-        match state {
-            ValidatorState::Active(active) => Ok(active.query_at_height(height).cloned()),
-            ValidatorState::Tombstoned {} => Ok(None),
+        match state.query_at_height(height) {
+            Some(val_state) if val_state.state == State::Active {} => Ok(Some(val_state.clone())),
+            Some(_) => Ok(None),
+            None => Ok(None),
         }
     }
 }
@@ -173,31 +210,20 @@ mod tests {
 
     use cosmwasm_std::MemoryStorage;
 
-    fn mock_update(start_height: u64) -> ValUpdate {
-        mock_update_pubkey("TODO", start_height)
-    }
-
-    fn mock_update_pubkey(pubkey: &str, start_height: u64) -> ValUpdate {
-        ValUpdate {
-            pub_key: pubkey.to_string(),
-            start_height,
-            start_time: 1687339542,
-        }
-    }
-
     // We add three new validators, and remove one
     #[test]
     fn happy_path() {
         let mut storage = MemoryStorage::new();
         let crdt = CrdtState::new();
 
-        crdt.add_validator(&mut storage, "alice", mock_update(123))
+        crdt.add_validator(&mut storage, "alice", "alice_pub_key", 123, 1234)
             .unwrap();
-        crdt.add_validator(&mut storage, "bob", mock_update(200))
+        crdt.add_validator(&mut storage, "bob", "bob_pub_key", 200, 2345)
             .unwrap();
-        crdt.add_validator(&mut storage, "carl", mock_update(303))
+        crdt.add_validator(&mut storage, "carl", "carl_pub_key", 303, 3456)
             .unwrap();
-        crdt.remove_validator(&mut storage, "bob").unwrap();
+        crdt.remove_validator(&mut storage, "bob", 201, 2346)
+            .unwrap();
 
         assert!(crdt.is_active_validator(&storage, "alice").unwrap());
         assert!(!crdt.is_active_validator(&storage, "bob").unwrap());
@@ -213,12 +239,13 @@ mod tests {
         let mut storage = MemoryStorage::new();
         let crdt = CrdtState::new();
 
-        crdt.remove_validator(&mut storage, "bob").unwrap();
-        crdt.add_validator(&mut storage, "alice", mock_update(123))
+        crdt.remove_validator(&mut storage, "bob", 199, 2344)
             .unwrap();
-        crdt.add_validator(&mut storage, "bob", mock_update(200))
+        crdt.add_validator(&mut storage, "alice", "pk_a", 123, 1234)
             .unwrap();
-        crdt.add_validator(&mut storage, "carl", mock_update(303))
+        crdt.add_validator(&mut storage, "bob", "pk_b", 200, 2345)
+            .unwrap();
+        crdt.add_validator(&mut storage, "carl", "pk_c", 303, 3459)
             .unwrap();
 
         assert!(crdt.is_active_validator(&storage, "alice").unwrap());
@@ -238,12 +265,13 @@ mod tests {
         // use two digits so numeric and alphabetic sort match (-2 is after -11, but -02 is before -11)
         let mut validators: Vec<_> = (0..20).map(|i| format!("validator-{:02}", i)).collect();
         for v in &validators {
-            crdt.add_validator(&mut storage, v, mock_update(123))
+            crdt.add_validator(&mut storage, v, &format!("{}-pubkey", v), 123, 1234)
                 .unwrap();
         }
         // in reverse order, so remove doesn't shift the indexes we will later read
         for i in [19, 17, 12, 11, 7, 4, 3] {
-            crdt.remove_validator(&mut storage, &validators[i]).unwrap();
+            crdt.remove_validator(&mut storage, &validators[i], 200, 2345)
+                .unwrap();
             validators.remove(i);
         }
 
@@ -272,26 +300,14 @@ mod tests {
         let mut storage = MemoryStorage::new();
         let crdt = CrdtState::new();
 
-        crdt.add_validator(
-            &mut storage,
-            "alice",
-            mock_update_pubkey("alice_pubkey_1", 123),
-        )
-        .unwrap();
-        crdt.add_validator(&mut storage, "bob", mock_update_pubkey("bob_pubkey_1", 200))
+        crdt.add_validator(&mut storage, "alice", "alice_pubkey_1", 123, 1234)
             .unwrap();
-        crdt.add_validator(
-            &mut storage,
-            "alice",
-            mock_update_pubkey("alice_pubkey_2", 202),
-        )
-        .unwrap();
-        crdt.add_validator(
-            &mut storage,
-            "alice",
-            mock_update_pubkey("alice_pubkey_3", 203),
-        )
-        .unwrap();
+        crdt.add_validator(&mut storage, "bob", "bob_pubkey_1", 200, 2345)
+            .unwrap();
+        crdt.add_validator(&mut storage, "alice", "alice_pubkey_2", 202, 2347)
+            .unwrap();
+        crdt.add_validator(&mut storage, "alice", "alice_pubkey_3", 203, 2348)
+            .unwrap();
 
         // query before update
         let alice = crdt
@@ -299,10 +315,11 @@ mod tests {
             .unwrap();
         assert_eq!(
             alice,
-            Some(ValUpdate {
+            Some(ValState {
                 pub_key: "alice_pubkey_1".to_string(),
                 start_height: 123,
-                start_time: 1687339542,
+                start_time: 1234,
+                state: State::Active {}
             })
         );
 
@@ -312,10 +329,11 @@ mod tests {
             .unwrap();
         assert_eq!(
             alice,
-            Some(ValUpdate {
+            Some(ValState {
                 pub_key: "alice_pubkey_2".to_string(),
                 start_height: 202,
-                start_time: 1687339542,
+                start_time: 2347,
+                state: State::Active {}
             })
         );
 
@@ -325,10 +343,11 @@ mod tests {
             .unwrap();
         assert_eq!(
             alice,
-            Some(ValUpdate {
+            Some(ValState {
                 pub_key: "alice_pubkey_3".to_string(),
                 start_height: 203,
-                start_time: 1687339542,
+                start_time: 2348,
+                state: State::Active {}
             })
         );
     }

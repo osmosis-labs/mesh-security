@@ -59,13 +59,13 @@ impl TestMethods for ExternalStakingContract<'_> {
                 start_height,
                 start_time,
             } = validator;
-            let update = crate::crdt::ValUpdate {
-                pub_key,
+            self.val_set.add_validator(
+                ctx.deps.storage,
+                &valoper,
+                &pub_key,
                 start_height,
                 start_time,
-            };
-            self.val_set
-                .add_validator(ctx.deps.storage, &valoper, update)?;
+            )?;
             Ok(Response::new())
         }
         #[cfg(not(any(feature = "mt", test)))]
