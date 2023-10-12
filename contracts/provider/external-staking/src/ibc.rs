@@ -145,7 +145,7 @@ pub fn ibc_packet_receive(
             let ack = ack_success(&AddValidatorsAck {})?;
             IbcReceiveResponse::new().set_ack(ack)
         }
-        ConsumerPacket::RemoveValidators(to_remove) => {
+        ConsumerPacket::TombstoneValidators(to_remove) => {
             let mut msgs = vec![];
             for RemoveValidator {
                 valoper,
