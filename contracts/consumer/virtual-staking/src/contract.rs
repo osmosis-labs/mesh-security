@@ -704,7 +704,7 @@ mod tests {
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after unjailing
             .assert_unbond(&[]) // No unbond msgs after unjailing
-            .assert_rewards(&["val1", "val2"]);
+            .assert_rewards(&["val1", "val2"]); // Rewards are gathered
     }
 
     #[test]
@@ -735,7 +735,6 @@ mod tests {
             .assert_rewards(&["val1"]); // Rewards are still being gathered
 
         // Check that the non-slashed amounts of val1 have been bonded
-        // FIXME: Remove / filter zero amounts
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert_eq!(bonded, [("val1".to_string(), Uint128::new(29)),]);
     }
@@ -876,7 +875,6 @@ mod tests {
             .assert_rewards(&["val1"]); // Rewards are still being gathered
 
         // Check that the previously bonded amounts of val1 have been slashed for double sign (25%)
-        // TODO: Check that the amounts have been slashed for double sign on-chain (needs mt slashing / tombstoning support)
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert_eq!(
             bonded,
