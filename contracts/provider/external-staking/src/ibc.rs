@@ -157,9 +157,12 @@ pub fn ibc_packet_receive(
                     &valoper,
                     end_height,
                 )?;
-                contract
-                    .val_set
-                    .remove_validator(deps.storage, &valoper, end_height, end_time)?;
+                contract.val_set.tombstone_validator(
+                    deps.storage,
+                    &valoper,
+                    end_height,
+                    end_time,
+                )?;
                 if active {
                     // slash the validator
                     // TODO: Error handling / capturing

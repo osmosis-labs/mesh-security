@@ -106,9 +106,9 @@ impl<'a> CrdtState<'a> {
         Ok(())
     }
 
-    /// Remove a validator.
+    /// Tombstone a validator.
     /// In non-test code, this is called from `ibc_packet_receive`
-    pub fn remove_validator(
+    pub fn tombstone_validator(
         &self,
         storage: &mut dyn Storage,
         valoper: &str,
@@ -222,7 +222,7 @@ mod tests {
             .unwrap();
         crdt.add_validator(&mut storage, "carl", "carl_pub_key", 303, 3456)
             .unwrap();
-        crdt.remove_validator(&mut storage, "bob", 201, 2346)
+        crdt.tombstone_validator(&mut storage, "bob", 201, 2346)
             .unwrap();
 
         assert!(crdt.is_active_validator(&storage, "alice").unwrap());
@@ -239,7 +239,7 @@ mod tests {
         let mut storage = MemoryStorage::new();
         let crdt = CrdtState::new();
 
-        crdt.remove_validator(&mut storage, "bob", 199, 2344)
+        crdt.tombstone_validator(&mut storage, "bob", 199, 2344)
             .unwrap();
         crdt.add_validator(&mut storage, "alice", "pk_a", 123, 1234)
             .unwrap();
@@ -270,7 +270,7 @@ mod tests {
         }
         // in reverse order, so remove doesn't shift the indexes we will later read
         for i in [19, 17, 12, 11, 7, 4, 3] {
-            crdt.remove_validator(&mut storage, &validators[i], 200, 2345)
+            crdt.tombstone_validator(&mut storage, &validators[i], 200, 2345)
                 .unwrap();
             validators.remove(i);
         }
