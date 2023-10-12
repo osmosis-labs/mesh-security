@@ -220,7 +220,7 @@ fn releasing_proxy_stake() {
 
     // Instantiates vault and staking contracts
     let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
+        .instantiate(OSMO.to_owned(), Some(staking_init_info))
         .with_label("Vault")
         .call(owner)
         .unwrap();
