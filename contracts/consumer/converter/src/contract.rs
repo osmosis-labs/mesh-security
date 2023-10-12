@@ -346,8 +346,8 @@ impl ConverterApi for ConverterContract<'_> {
 
     /// Valset updates.
     ///
-    /// Send validator set additions (entering the active validator set) to the external staking
-    /// contract on the Consumer via IBC.
+    /// Send validator set additions (entering the active validator set), jailings and tombstonings
+    /// to the external staking contract on the Consumer via IBC.
     #[msg(exec)]
     fn valset_update(
         &self,
