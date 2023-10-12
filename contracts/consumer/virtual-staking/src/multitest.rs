@@ -150,12 +150,12 @@ fn valset_update_sudo() {
     let rems = vec!["cosmosval2".to_string()];
     let tombs = vec!["cosmosval3".to_string()];
     let msg = SudoMsg::ValsetUpdate {
-        additions: adds,
-        removals: rems,
-        updated: vec![],
-        jailed: vec![],
-        unjailed: vec![],
-        tombstoned: tombs,
+        additions: Some(adds),
+        removals: Some(rems),
+        updated: None,
+        jailed: None,
+        unjailed: None,
+        tombstoned: Some(tombs),
     };
 
     let res = app

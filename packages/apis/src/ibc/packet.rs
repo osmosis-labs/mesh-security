@@ -144,7 +144,7 @@ pub struct RemoveValidatorsAck {}
 #[cw_serde]
 pub struct JailValidatorsAck {}
 
-/// Ack sent for ConsumerPacket::Distribute
+/// Ack sent for ConsumerPacket::Distribute and ConsumerPacket::DistributeBatch
 #[cw_serde]
 pub struct DistributeAck {}
 

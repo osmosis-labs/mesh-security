@@ -360,26 +360,33 @@ impl ConverterApi for ConverterContract<'_> {
 
         // Send over IBC to the Consumer
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
-        let add_msg = add_validators_msg(&ctx.env, &channel, &additions)?;
-        let tomb_msg = tombstone_validators_msg(&ctx.env, &channel, &tombstoned)?;
-        let jail_msg = jail_validators_msg(&ctx.env, &channel, &jailed)?;
 
-        let event = Event::new("valset_update").add_attribute(
-            "additions",
-            additions
-                .iter()
-                .map(|v| v.address.clone())
-                .collect::<Vec<String>>()
-                .join(","),
-        );
-        let event = event.add_attribute("jailed", jailed.join(","));
-        let event = event.add_attribute("tombstoned", tombstoned.join(","));
-        let resp = Response::new()
-            .add_event(event)
-            .add_message(add_msg)
-            .add_message(tomb_msg)
-            .add_message(jail_msg);
+        let mut resp = Response::new();
+        let mut event = Event::new("valset_update");
 
+        if !additions.is_empty() {
+            let add_msg = add_validators_msg(&ctx.env, &channel, &additions)?;
+            resp = resp.add_message(add_msg);
+            event = event.add_attribute(
+                "additions",
+                additions
+                    .iter()
+                    .map(|v| v.address.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+        }
+        if !jailed.is_empty() {
+            let jail_msg = jail_validators_msg(&ctx.env, &channel, &jailed)?;
+            resp = resp.add_message(jail_msg);
+            event = event.add_attribute("jailed", jailed.join(","));
+        }
+        if !tombstoned.is_empty() {
+            let tomb_msg = tombstone_validators_msg(&ctx.env, &channel, &tombstoned)?;
+            resp = resp.add_message(tomb_msg);
+            event = event.add_attribute("tombstoned", tombstoned.join(","));
+        }
+        resp = resp.add_event(event);
         Ok(resp)
     }
 }
