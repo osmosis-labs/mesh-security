@@ -144,6 +144,7 @@ impl<'a> CrdtState<'a> {
     }
 
     /// Remove a validator from the active set.
+    /// If the validator does not exist, or it is tombstoned, it does nothing.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn remove_validator(
         &self,
@@ -152,8 +153,30 @@ impl<'a> CrdtState<'a> {
         height: u64,
         time: u64,
     ) -> Result<(), StdError> {
-        let _ = (storage, valoper, height, time);
-        todo!()
+        let mut validator_state = self
+            .validators
+            .may_load(storage, valoper)?
+            .unwrap_or_else(|| ValidatorState(vec![]));
+
+        // We just silently ignore it if does not exist, or tombstoned
+        if !validator_state.is_empty() && !validator_state.is_tombstoned() {
+            // Copy data from previous entry. This is not commutative anymore :-/
+            let old = self.validator_at_height(storage, valoper, height)?;
+            // Ignore if not previous entry at height (should not happen)
+            if old.is_none() {
+                return Ok(());
+            }
+            let old = old.unwrap();
+            let val_state = ValState {
+                pub_key: old.pub_key,
+                start_height: height,
+                start_time: time,
+                state: State::Unbonded {},
+            };
+            validator_state.insert_unique(val_state);
+            self.validators.save(storage, valoper, &validator_state)?;
+        }
+        Ok(())
     }
 
     /// Remove a validator from the active set due to jailing.
