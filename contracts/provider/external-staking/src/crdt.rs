@@ -75,7 +75,8 @@ impl<'a> CrdtState<'a> {
         }
     }
 
-    /// Add a validator to the active set.
+    /// Add a validator and set it to active.
+    /// If the validator already exists, it does nothing.
     /// In test code, this is called from `test_set_active_validator`.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn add_validator(
@@ -91,8 +92,8 @@ impl<'a> CrdtState<'a> {
             .may_load(storage, valoper)?
             .unwrap_or_else(|| ValidatorState(vec![]));
 
-        // We just silently ignore it if already tombstoned
-        if !validator_state.is_tombstoned() {
+        // We just silently ignore it if it already exists
+        if validator_state.is_empty() {
             let val_state = ValState {
                 pub_key: pub_key.to_string(),
                 start_height: height,
@@ -100,14 +101,13 @@ impl<'a> CrdtState<'a> {
                 state: State::Active {},
             };
             validator_state.insert_unique(val_state);
-            // TODO: drain events that are older than unbonding period (maintenance)
             self.validators.save(storage, valoper, &validator_state)?;
         }
         Ok(())
     }
 
     /// Update a validator.
-    /// In test code, this is called from `test_set_active_validator`.
+    /// If the validator does not exist, or it is tombstoned, it does nothing.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn update_validator(
         &self,
@@ -117,12 +117,33 @@ impl<'a> CrdtState<'a> {
         height: u64,
         time: u64,
     ) -> Result<(), StdError> {
-        let _ = (storage, valoper, pub_key, height, time);
-        todo!()
+        let mut validator_state = self
+            .validators
+            .may_load(storage, valoper)?
+            .unwrap_or_else(|| ValidatorState(vec![]));
+
+        // We just silently ignore it if does not exist, or tombstoned
+        if !validator_state.is_empty() && !validator_state.is_tombstoned() {
+            // Copy state from previous entry. This is not commutative anymore :-/
+            let old = self.validator_at_height(storage, valoper, height)?;
+            // Ignore if not previous state at height (should not happen)
+            if old.is_none() {
+                return Ok(());
+            }
+            let old = old.unwrap();
+            let val_state = ValState {
+                pub_key: pub_key.to_string(),
+                start_height: height,
+                start_time: time,
+                state: old.state,
+            };
+            validator_state.insert_unique(val_state);
+            self.validators.save(storage, valoper, &validator_state)?;
+        }
+        Ok(())
     }
 
     /// Remove a validator from the active set.
-    /// In test code, this is called from `test_set_active_validator`.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn remove_validator(
         &self,
@@ -136,7 +157,6 @@ impl<'a> CrdtState<'a> {
     }
 
     /// Remove a validator from the active set due to jailing.
-    /// In test code, this is called from `test_set_active_validator`.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn jail_validator(
         &self,
@@ -150,7 +170,6 @@ impl<'a> CrdtState<'a> {
     }
 
     /// Add an existing validator to the active set after jailing.
-    /// In test code, this is called from `test_set_active_validator`.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn unjail_validator(
         &self,
@@ -259,6 +278,19 @@ impl<'a> CrdtState<'a> {
             None => Ok(None),
         }
     }
+
+    pub fn validator_at_height(
+        &self,
+        storage: &dyn Storage,
+        valoper: &str,
+        height: u64,
+    ) -> StdResult<Option<ValState>> {
+        let state = self.validators.load(storage, valoper)?;
+        match state.query_at_height(height) {
+            Some(val_state) => Ok(Some(val_state.clone())),
+            None => Ok(None),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -361,12 +393,14 @@ mod tests {
             .unwrap();
         crdt.add_validator(&mut storage, "bob", "bob_pubkey_1", 200, 2345)
             .unwrap();
+        // Add does not update
         crdt.add_validator(&mut storage, "alice", "alice_pubkey_2", 202, 2347)
             .unwrap();
-        crdt.add_validator(&mut storage, "alice", "alice_pubkey_3", 203, 2348)
+        // But update does
+        crdt.update_validator(&mut storage, "alice", "alice_pubkey_3", 203, 2348)
             .unwrap();
 
-        // query before update
+        // Query before update
         let alice = crdt
             .active_validator_at_height(&storage, "alice", 200)
             .unwrap();
@@ -380,21 +414,21 @@ mod tests {
             })
         );
 
-        // query at 2nd update height
+        // Query at 2nd (ignored) add height
         let alice = crdt
             .active_validator_at_height(&storage, "alice", 202)
             .unwrap();
         assert_eq!(
             alice,
             Some(ValState {
-                pub_key: "alice_pubkey_2".to_string(),
-                start_height: 202,
-                start_time: 2347,
+                pub_key: "alice_pubkey_1".to_string(),
+                start_height: 123,
+                start_time: 1234,
                 state: State::Active {}
             })
         );
 
-        // query after last update height
+        // Query after last update height
         let alice = crdt
             .active_validator_at_height(&storage, "alice", 500)
             .unwrap();
