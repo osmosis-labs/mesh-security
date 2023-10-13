@@ -155,20 +155,11 @@ pub fn ibc_packet_receive(
                 }
             }
             // Process additions. Already existing validators will be ignored.
+            // If the validator is tombstoned, this will be ignored.
             for AddValidator { valoper, pub_key } in additions {
                 contract
                     .val_set
                     .add_validator(deps.storage, &valoper, &pub_key, height, time)?;
-            }
-            // Process updates. Non-existent validators will be ignored.
-            for AddValidator { valoper, pub_key } in updated {
-                contract.val_set.update_validator(
-                    deps.storage,
-                    &valoper,
-                    &pub_key,
-                    height,
-                    time,
-                )?;
             }
             // Process removals. Non-existent validators will be ignored.
             for valoper in removals {
@@ -201,6 +192,16 @@ pub fn ibc_packet_receive(
                 contract
                     .val_set
                     .unjail_validator(deps.storage, &valoper, height, time)?;
+            }
+            // Process updates. Non-existent and tombstoned validators will be ignored.
+            for AddValidator { valoper, pub_key } in updated {
+                contract.val_set.update_validator(
+                    deps.storage,
+                    &valoper,
+                    &pub_key,
+                    height,
+                    time,
+                )?;
             }
             let ack = ack_success(&ValsetUpdateAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_messages(msgs)
