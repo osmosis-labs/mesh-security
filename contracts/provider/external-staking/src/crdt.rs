@@ -272,7 +272,7 @@ impl<'a> CrdtState<'a> {
         // We just silently ignore it if already tombstoned
         if !validator_state.is_tombstoned() {
             let val_state = ValState {
-                pub_key: "TODO".to_string(),
+                pub_key: "".to_string(), // FIXME? Keep pubkey
                 start_height: height,
                 start_time: time,
                 state: State::Tombstoned {},
