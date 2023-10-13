@@ -75,7 +75,7 @@ impl<'a> CrdtState<'a> {
         }
     }
 
-    /// Add / Update a validator.
+    /// Add a validator to the active set.
     /// In test code, this is called from `test_set_active_validator`.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn add_validator(
@@ -104,6 +104,63 @@ impl<'a> CrdtState<'a> {
             self.validators.save(storage, valoper, &validator_state)?;
         }
         Ok(())
+    }
+
+    /// Update a validator.
+    /// In test code, this is called from `test_set_active_validator`.
+    /// In non-test code, this is called from `ibc_packet_receive`
+    pub fn update_validator(
+        &self,
+        storage: &mut dyn Storage,
+        valoper: &str,
+        pub_key: &str,
+        height: u64,
+        time: u64,
+    ) -> Result<(), StdError> {
+        let _ = (storage, valoper, pub_key, height, time);
+        todo!()
+    }
+
+    /// Remove a validator from the active set.
+    /// In test code, this is called from `test_set_active_validator`.
+    /// In non-test code, this is called from `ibc_packet_receive`
+    pub fn remove_validator(
+        &self,
+        storage: &mut dyn Storage,
+        valoper: &str,
+        height: u64,
+        time: u64,
+    ) -> Result<(), StdError> {
+        let _ = (storage, valoper, height, time);
+        todo!()
+    }
+
+    /// Remove a validator from the active set due to jailing.
+    /// In test code, this is called from `test_set_active_validator`.
+    /// In non-test code, this is called from `ibc_packet_receive`
+    pub fn jail_validator(
+        &self,
+        storage: &mut dyn Storage,
+        valoper: &str,
+        height: u64,
+        time: u64,
+    ) -> Result<(), StdError> {
+        let _ = (storage, valoper, height, time);
+        todo!()
+    }
+
+    /// Add an existing validator to the active set after jailing.
+    /// In test code, this is called from `test_set_active_validator`.
+    /// In non-test code, this is called from `ibc_packet_receive`
+    pub fn unjail_validator(
+        &self,
+        storage: &mut dyn Storage,
+        valoper: &str,
+        height: u64,
+        time: u64,
+    ) -> Result<(), StdError> {
+        let _ = (storage, valoper, height, time);
+        todo!()
     }
 
     /// Tombstone a validator.

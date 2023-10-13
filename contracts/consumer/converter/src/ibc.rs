@@ -11,7 +11,7 @@ use cw_storage_plus::Item;
 
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, ProtocolVersion,
-    ProviderPacket, RemoveValidator, StakeAck, TransferRewardsAck, UnstakeAck, PROTOCOL_NAME,
+    ProviderPacket, StakeAck, TransferRewardsAck, UnstakeAck, PROTOCOL_NAME,
 };
 use sylvia::types::ExecCtx;
 
@@ -131,13 +131,18 @@ pub(crate) fn add_validators_msg(
             valoper: v.address.clone(),
             // TODO: not yet available in CosmWasm APIs. See https://github.com/CosmWasm/cosmwasm/issues/1828
             pub_key: "TODO".to_string(),
-            // Use current height/time as start height/time (no slashing before mesh starts).
-            // Warning: These will be updated as well when updating an already existing validator.
-            start_height: env.block.height,
-            start_time: env.block.time.seconds(),
         })
         .collect();
-    let packet = ConsumerPacket::AddValidators(updates);
+    let packet = ConsumerPacket::ValsetUpdate {
+        height: env.block.height,
+        time: env.block.time.seconds(),
+        additions: updates,
+        removals: vec![],
+        updated: vec![],
+        jailed: vec![],
+        unjailed: vec![],
+        tombstoned: vec![],
+    };
     let msg = IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id.clone(),
         data: to_binary(&packet)?,
@@ -151,16 +156,16 @@ pub(crate) fn jail_validators_msg(
     channel: &IbcChannel,
     validators: &[String],
 ) -> Result<IbcMsg, ContractError> {
-    let packet = ConsumerPacket::JailValidators(
-        validators
-            .iter()
-            .map(|v| RemoveValidator {
-                valoper: v.to_string(),
-                height: env.block.height,
-                time: env.block.time.seconds(),
-            })
-            .collect(),
-    );
+    let packet = ConsumerPacket::ValsetUpdate {
+        height: env.block.height,
+        time: env.block.time.seconds(),
+        additions: vec![],
+        removals: vec![],
+        updated: vec![],
+        jailed: validators.to_vec(),
+        unjailed: vec![],
+        tombstoned: vec![],
+    };
     let msg = IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id.clone(),
         data: to_binary(&packet)?,
@@ -174,16 +179,16 @@ pub(crate) fn tombstone_validators_msg(
     channel: &IbcChannel,
     validators: &[String],
 ) -> Result<IbcMsg, ContractError> {
-    let packet = ConsumerPacket::TombstoneValidators(
-        validators
-            .iter()
-            .map(|v| RemoveValidator {
-                valoper: v.to_string(),
-                height: env.block.height,
-                time: env.block.time.seconds(),
-            })
-            .collect(),
-    );
+    let packet = ConsumerPacket::ValsetUpdate {
+        height: env.block.height,
+        time: env.block.time.seconds(),
+        additions: vec![],
+        removals: vec![],
+        updated: vec![],
+        jailed: vec![],
+        unjailed: vec![],
+        tombstoned: validators.to_vec(),
+    };
     let msg = IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id.clone(),
         data: to_binary(&packet)?,
