@@ -24,6 +24,8 @@ pub trait TestMethods {
         &self,
         ctx: ExecCtx,
         validator: AddValidator,
+        height: u64,
+        time: u64,
     ) -> Result<Response, Self::Error>;
 
     /// Commits a pending unstake.

@@ -50,27 +50,19 @@ impl TestMethods for ExternalStakingContract<'_> {
         &self,
         ctx: ExecCtx,
         validator: AddValidator,
+        height: u64,
+        time: u64,
     ) -> Result<Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
-            let AddValidator {
-                valoper,
-                pub_key,
-                start_height,
-                start_time,
-            } = validator;
-            self.val_set.add_validator(
-                ctx.deps.storage,
-                &valoper,
-                &pub_key,
-                start_height,
-                start_time,
-            )?;
+            let AddValidator { valoper, pub_key } = validator;
+            self.val_set
+                .add_validator(ctx.deps.storage, &valoper, &pub_key, height, time)?;
             Ok(Response::new())
         }
         #[cfg(not(any(feature = "mt", test)))]
         {
-            let _ = (ctx, validator);
+            let _ = (ctx, validator, height, time);
             Err(ContractError::Unauthorized {})
         }
     }

@@ -146,18 +146,16 @@ fn set_active_validators(
     cross_staking: &ExternalStakingContractProxy<MtApp>,
     validators: &[&str],
 ) -> (u64, u64) {
-    let mut update_valset_height = 0;
-    let mut update_valset_time = 0;
+    let update_valset_height = 100;
+    let update_valset_time = 1234;
 
     for validator in validators {
         let activate = AddValidator::mock(validator);
         cross_staking
             .test_methods_proxy()
-            .test_set_active_validator(activate.clone())
+            .test_set_active_validator(activate.clone(), update_valset_height, update_valset_time)
             .call("test")
             .unwrap();
-        update_valset_height = activate.start_height;
-        update_valset_time = activate.start_time;
     }
     (update_valset_height, update_valset_time)
 }

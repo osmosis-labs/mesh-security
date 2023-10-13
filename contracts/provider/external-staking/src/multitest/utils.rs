@@ -81,7 +81,7 @@ impl ContractExt for Contract<'_> {
         for val in validators {
             let activate = AddValidator::mock(val);
             self.test_methods_proxy()
-                .test_set_active_validator(activate)
+                .test_set_active_validator(activate, 100, 1234)
                 .call("test")
                 .unwrap();
         }
