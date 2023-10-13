@@ -351,8 +351,11 @@ impl ConverterApi for ConverterContract<'_> {
         &self,
         ctx: ExecCtx,
         additions: Vec<Validator>,
-        tombstoned: Vec<String>,
+        _removals: Vec<String>,
+        _updated: Vec<Validator>,
         jailed: Vec<String>,
+        _unjailed: Vec<String>,
+        tombstoned: Vec<String>,
     ) -> Result<Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
 

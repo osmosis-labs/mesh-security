@@ -243,13 +243,20 @@ fn valset_update_works() {
     // Check that only the virtual staking contract can call this handler
     let res = converter
         .converter_api_proxy()
-        .valset_update(vec![], vec![], vec![])
+        .valset_update(vec![], vec![], vec![], vec![], vec![], vec![])
         .call(owner);
     assert_eq!(res.unwrap_err(), Unauthorized {});
 
     let res = converter
         .converter_api_proxy()
-        .valset_update(add_validators, rem_validators, vec![])
+        .valset_update(
+            add_validators,
+            rem_validators,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )
         .call(virtual_staking.contract_addr.as_ref());
 
     // This fails because of lack of IBC support in mt now.
@@ -304,7 +311,7 @@ fn unauthorized() {
 
     let err = converter
         .converter_api_proxy()
-        .valset_update(vec![], vec![], vec![])
+        .valset_update(vec![], vec![], vec![], vec![], vec![], vec![])
         .call("mallory")
         .unwrap_err();
 
