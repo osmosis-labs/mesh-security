@@ -76,7 +76,8 @@ impl<'a> CrdtState<'a> {
     }
 
     /// Add a validator and set it to active.
-    /// If the validator already exists, it does nothing.
+    /// If the validator is tombstoned, this does nothing.
+    /// If the validator already exists, it will be set to `Active`, and its pubkey updated.
     /// In test code, this is called from `test_set_active_validator`.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn add_validator(
@@ -92,8 +93,7 @@ impl<'a> CrdtState<'a> {
             .may_load(storage, valoper)?
             .unwrap_or_else(|| ValidatorState(vec![]));
 
-        // We just silently ignore it if it already exists
-        if validator_state.is_empty() {
+        if !validator_state.is_tombstoned() {
             let val_state = ValState {
                 pub_key: pub_key.to_string(),
                 start_height: height,
@@ -466,10 +466,10 @@ mod tests {
             .unwrap();
         crdt.add_validator(&mut storage, "bob", "bob_pubkey_1", 200, 2345)
             .unwrap();
-        // Add does not update
+        // Add does update
         crdt.add_validator(&mut storage, "alice", "alice_pubkey_2", 202, 2347)
             .unwrap();
-        // But update does
+        // Update does as well
         crdt.update_validator(&mut storage, "alice", "alice_pubkey_3", 203, 2348)
             .unwrap();
 
@@ -487,16 +487,16 @@ mod tests {
             })
         );
 
-        // Query at 2nd (ignored) add height
+        // Query at 2nd add height
         let alice = crdt
             .active_validator_at_height(&storage, "alice", 202)
             .unwrap();
         assert_eq!(
             alice,
             Some(ValState {
-                pub_key: "alice_pubkey_1".to_string(),
-                start_height: 123,
-                start_time: 1234,
+                pub_key: "alice_pubkey_2".to_string(),
+                start_height: 202,
+                start_time: 2347,
                 state: State::Active {}
             })
         );
