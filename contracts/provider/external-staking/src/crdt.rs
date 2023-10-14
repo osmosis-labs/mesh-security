@@ -30,6 +30,14 @@ impl ValidatorState {
     pub fn is_tombstoned(&self) -> bool {
         !self.is_empty() && self.0[0].state == State::Tombstoned {}
     }
+
+    fn drain_newer(&mut self, height: u64) {
+        if self.0.is_empty() || self.0[0].start_height < height {
+            return;
+        }
+        let invalidated_idx = self.0.partition_point(|v| v.start_height >= height);
+        self.0.drain(..invalidated_idx);
+    }
 }
 
 #[cw_serde]
@@ -271,6 +279,10 @@ impl<'a> CrdtState<'a> {
 
         // We just silently ignore it if already tombstoned
         if !validator_state.is_tombstoned() {
+            // Drain events that are newer than `height` (this is the final registered event)
+            validator_state.drain_newer(height);
+
+            // Insert tombstoning
             let val_state = ValState {
                 pub_key: "".to_string(), // FIXME? Keep pubkey
                 start_height: height,
@@ -278,7 +290,7 @@ impl<'a> CrdtState<'a> {
                 state: State::Tombstoned {},
             };
             validator_state.insert_unique(val_state);
-            // TODO: drain events that are newer than `height` (this is the final registered event)
+
             // TODO: drain events that are older than unbonding period (maintenance)
             self.validators.save(storage, valoper, &validator_state)?;
         }
@@ -663,6 +675,7 @@ mod tests {
             })
         );
     }
+
     #[test]
     fn tombstone_before_all_works() {
         let mut storage = MemoryStorage::new();
@@ -717,6 +730,36 @@ mod tests {
                 pub_key: "".to_string(),
                 start_height: 100,
                 start_time: 1234,
+                state: State::Tombstoned {}
+            })
+        );
+    }
+
+    #[test]
+    fn tombstone_drains_later_events() {
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        crdt.add_validator(&mut storage, "alice", "pk_a", 100, 1234)
+            .unwrap();
+        crdt.add_validator(&mut storage, "bob", "pk_b", 200, 2345)
+            .unwrap();
+        crdt.tombstone_validator(&mut storage, "bob", 199, 2344)
+            .unwrap();
+
+        assert!(!crdt.is_active_validator(&storage, "bob").unwrap());
+
+        let active = crdt.list_active_validators(&storage, None, 10).unwrap();
+        assert_eq!(active, vec!["alice".to_string()]);
+
+        // Querying bob returns the tombstone
+        let bob = crdt.validator_at_height(&storage, "bob", 500).unwrap();
+        assert_eq!(
+            bob,
+            Some(ValState {
+                pub_key: "".to_string(),
+                start_height: 199,
+                start_time: 2344,
                 state: State::Tombstoned {}
             })
         );
