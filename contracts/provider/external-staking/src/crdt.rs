@@ -663,4 +663,62 @@ mod tests {
             })
         );
     }
+    #[test]
+    fn tombstone_before_all_works() {
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        crdt.add_validator(&mut storage, "alice", "pk_a", 100, 1234)
+            .unwrap();
+        crdt.tombstone_validator(&mut storage, "bob", 100, 1234)
+            .unwrap();
+        crdt.add_validator(&mut storage, "bob", "pk_b", 200, 2345)
+            .unwrap();
+
+        assert!(!crdt.is_active_validator(&storage, "bob").unwrap());
+
+        let active = crdt.list_active_validators(&storage, None, 10).unwrap();
+        assert_eq!(active, vec!["alice".to_string()]);
+
+        // Bob is not active, but we can still query him
+        let bob = crdt.validator_at_height(&storage, "bob", 500).unwrap();
+        assert_eq!(
+            bob,
+            Some(ValState {
+                pub_key: "".to_string(),
+                start_height: 100,
+                start_time: 1234,
+                state: State::Tombstoned {}
+            })
+        );
+
+        // Querying before the first event returns None
+        let bob = crdt.validator_at_height(&storage, "bob", 1).unwrap();
+        assert_eq!(bob, None);
+
+        // All the other state changes are a no op
+        crdt.add_validator(&mut storage, "bob", "pk_b", 300, 3456)
+            .unwrap();
+        crdt.update_validator(&mut storage, "bob", "pk_b", 400, 4567)
+            .unwrap();
+        crdt.remove_validator(&mut storage, "bob", 500, 5678)
+            .unwrap();
+        crdt.jail_validator(&mut storage, "bob", 600, 6789).unwrap();
+        crdt.unjail_validator(&mut storage, "bob", 700, 7890)
+            .unwrap();
+        crdt.tombstone_validator(&mut storage, "bob", 800, 8901)
+            .unwrap();
+
+        // Querying after the last event returns the initial tombstone
+        let bob = crdt.validator_at_height(&storage, "bob", 900).unwrap();
+        assert_eq!(
+            bob,
+            Some(ValState {
+                pub_key: "".to_string(),
+                start_height: 100,
+                start_time: 1234,
+                state: State::Tombstoned {}
+            })
+        );
+    }
 }
