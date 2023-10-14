@@ -467,8 +467,7 @@ impl ExternalStakingContract<'_> {
 
                 Ok(released)
             })
-            .fold(Ok(Uint128::zero()), |acc, released| {
-                let acc = acc?;
+            .try_fold(Uint128::zero(), |acc, released| {
                 released.map(|released| released + acc)
             })?;
 
