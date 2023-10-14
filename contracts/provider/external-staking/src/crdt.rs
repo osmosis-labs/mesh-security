@@ -397,7 +397,7 @@ mod tests {
 
     // Like happy path, but we remove bob before he was ever added
     #[test]
-    fn remove_before_add_works() {
+    fn tombstone_before_add_works() {
         let mut storage = MemoryStorage::new();
         let crdt = CrdtState::new();
 
@@ -512,6 +512,64 @@ mod tests {
                 start_height: 203,
                 start_time: 2348,
                 state: State::Active {}
+            })
+        );
+    }
+
+    #[test]
+    fn add_existing_validator_works() {
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        crdt.add_validator(&mut storage, "alice", "alice_pubkey_1", 123, 1234)
+            .unwrap();
+        // Remove changes state
+        crdt.remove_validator(&mut storage, "alice", 202, 2347)
+            .unwrap();
+
+        // Query before remove height
+        let alice = crdt
+            .validator_at_height(&storage, "alice", 200)
+            .unwrap();
+        assert_eq!(
+            alice,
+            Some(ValState {
+                pub_key: "alice_pubkey_1".to_string(),
+                start_height: 123,
+                start_time: 1234,
+                state: State::Active {}
+            })
+        );
+
+        // Query at remove height
+        let alice = crdt
+            .validator_at_height(&storage, "alice", 202)
+            .unwrap();
+        assert_eq!(
+            alice,
+            Some(ValState {
+                pub_key: "alice_pubkey_1".to_string(),
+                start_height: 202,
+                start_time: 2347,
+                state: State::Unbonded {}
+            })
+        );
+
+        // Add it again
+        crdt.add_validator(&mut storage, "alice", "alice_pubkey_2", 300, 3456)
+            .unwrap();
+
+        // Query after last addition height
+        let alice = crdt
+            .validator_at_height(&storage, "alice", 500)
+            .unwrap();
+        assert_eq!(
+            alice,
+            Some(ValState {
+                pub_key: "alice_pubkey_2".to_string(), // Pubkey has been updated
+                start_height: 300,
+                start_time: 3456,
+                state: State::Active {} // Validator is active
             })
         );
     }
