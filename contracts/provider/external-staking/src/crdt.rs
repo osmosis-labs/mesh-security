@@ -528,9 +528,7 @@ mod tests {
             .unwrap();
 
         // Query before remove height
-        let alice = crdt
-            .validator_at_height(&storage, "alice", 200)
-            .unwrap();
+        let alice = crdt.validator_at_height(&storage, "alice", 200).unwrap();
         assert_eq!(
             alice,
             Some(ValState {
@@ -542,9 +540,7 @@ mod tests {
         );
 
         // Query at remove height
-        let alice = crdt
-            .validator_at_height(&storage, "alice", 202)
-            .unwrap();
+        let alice = crdt.validator_at_height(&storage, "alice", 202).unwrap();
         assert_eq!(
             alice,
             Some(ValState {
@@ -560,9 +556,7 @@ mod tests {
             .unwrap();
 
         // Query after last addition height
-        let alice = crdt
-            .validator_at_height(&storage, "alice", 500)
-            .unwrap();
+        let alice = crdt.validator_at_height(&storage, "alice", 500).unwrap();
         assert_eq!(
             alice,
             Some(ValState {
@@ -570,6 +564,102 @@ mod tests {
                 start_height: 300,
                 start_time: 3456,
                 state: State::Active {} // Validator is active
+            })
+        );
+    }
+
+    #[test]
+    fn jail_unjail_validator_works() {
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        crdt.add_validator(&mut storage, "alice", "alice_pubkey_1", 100, 1234)
+            .unwrap();
+        // Jail changes state
+        crdt.jail_validator(&mut storage, "alice", 200, 2345)
+            .unwrap();
+
+        // Query at jail height
+        let alice = crdt.validator_at_height(&storage, "alice", 200).unwrap();
+        assert_eq!(
+            alice,
+            Some(ValState {
+                pub_key: "alice_pubkey_1".to_string(),
+                start_height: 200,
+                start_time: 2345,
+                state: State::Jailed {}
+            })
+        );
+
+        // Unjail it
+        crdt.unjail_validator(&mut storage, "alice", 300, 3456)
+            .unwrap();
+
+        // Query after unjailing addition height
+        let alice = crdt.validator_at_height(&storage, "alice", 500).unwrap();
+        assert_eq!(
+            alice,
+            Some(ValState {
+                pub_key: "alice_pubkey_1".to_string(), // Pubkey has been updated
+                start_height: 300,
+                start_time: 3456,
+                state: State::Active {} // Validator is active again
+            })
+        );
+    }
+
+    #[test]
+    fn jail_remove_validator_works() {
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        crdt.add_validator(&mut storage, "alice", "alice_pubkey_1", 100, 1234)
+            .unwrap();
+        // Jail changes state
+        crdt.jail_validator(&mut storage, "alice", 200, 2345)
+            .unwrap();
+
+        // Query at jail height
+        let alice = crdt.validator_at_height(&storage, "alice", 200).unwrap();
+        assert_eq!(
+            alice,
+            Some(ValState {
+                pub_key: "alice_pubkey_1".to_string(),
+                start_height: 200,
+                start_time: 2345,
+                state: State::Jailed {}
+            })
+        );
+
+        // Remove it instead of unjailing it
+        crdt.remove_validator(&mut storage, "alice", 300, 3456)
+            .unwrap();
+
+        // Query after remove addition height
+        let alice = crdt.validator_at_height(&storage, "alice", 500).unwrap();
+        assert_eq!(
+            alice,
+            Some(ValState {
+                pub_key: "alice_pubkey_1".to_string(),
+                start_height: 300,
+                start_time: 3456,
+                state: State::Unbonded {}
+            })
+        );
+
+        // Unjail does nothing, even at the same height
+        crdt.unjail_validator(&mut storage, "alice", 300, 3456)
+            .unwrap();
+
+        // Query after unjail attempt height
+        let alice = crdt.validator_at_height(&storage, "alice", 500).unwrap();
+        assert_eq!(
+            alice,
+            Some(ValState {
+                pub_key: "alice_pubkey_1".to_string(),
+                start_height: 300,
+                start_time: 3456,
+                state: State::Unbonded {}
             })
         );
     }
