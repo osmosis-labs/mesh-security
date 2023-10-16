@@ -24,6 +24,14 @@ impl ValidatorState {
         self.0.is_empty()
     }
 
+    pub fn get_state(&self) -> State {
+        if self.is_empty() {
+            State::Unknown {}
+        } else {
+            self.0[0].state.clone()
+        }
+    }
+
     pub fn is_active(&self) -> bool {
         !self.is_empty() && self.0[0].state == State::Active {}
     }
@@ -67,6 +75,8 @@ pub enum State {
     Jailed {},
     /// Validator is not part of the validator set due to being tombstoned.
     Tombstoned {},
+    /// Validator is in the map but we don't have info about its state.
+    Unknown {},
 }
 
 impl ValState {
@@ -336,6 +346,24 @@ impl<'a> CrdtState<'a> {
                 Ok((valoper, validator_state)) if validator_state.is_active() => Some(Ok(valoper)),
                 Ok(_) => None,
                 Err(e) => Some(Err(e)),
+            })
+            .take(limit)
+            .collect()
+    }
+
+    /// This returns the valoper address and latest state of all validators we are aware of
+    pub fn list_validators(
+        &self,
+        storage: &dyn Storage,
+        start_after: Option<&str>,
+        limit: usize,
+    ) -> StdResult<Vec<(String, State)>> {
+        let start = start_after.map(Bound::exclusive);
+        self.validators
+            .range(storage, start, None, Order::Ascending)
+            .map(|r| match r {
+                Ok((valoper, state)) => Ok((valoper, state.get_state())),
+                Err(e) => Err(e),
             })
             .take(limit)
             .collect()

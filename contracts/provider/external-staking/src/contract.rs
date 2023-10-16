@@ -22,8 +22,8 @@ use crate::error::ContractError;
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
 use crate::msg::{
     AllPendingRewards, AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse,
-    IbcChannelResponse, ListRemoteValidatorsResponse, PendingRewards, StakeInfo, StakesResponse,
-    TxResponse, ValidatorPendingRewards,
+    IbcChannelResponse, ListRemoteValidatorsResponse, ListValidatorsResponse, PendingRewards,
+    StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
 };
 use crate::stakes::Stakes;
 use crate::state::{Config, Distribution, Stake};
@@ -934,6 +934,29 @@ impl ExternalStakingContract<'_> {
             self.val_set
                 .list_active_validators(ctx.deps.storage, start_after.as_deref(), limit)?;
         Ok(ListRemoteValidatorsResponse { validators })
+    }
+
+    /// Show all external validators that we know about, along with their state.
+    #[msg(query)]
+    pub fn list_validators(
+        &self,
+        ctx: QueryCtx,
+        start_after: Option<String>,
+        limit: Option<u64>,
+    ) -> Result<ListValidatorsResponse, ContractError> {
+        let limit = limit.unwrap_or(100) as usize;
+        let validators = self
+            .val_set
+            .list_validators(ctx.deps.storage, start_after.as_deref(), limit)?
+            .into_iter()
+            .map(|(valoper, state)| {
+                Ok(crate::msg::ValidatorState {
+                    validator: valoper,
+                    state,
+                })
+            })
+            .collect::<StdResult<Vec<_>>>()?;
+        Ok(ListValidatorsResponse { validators })
     }
 
     /// Queries for stake info
