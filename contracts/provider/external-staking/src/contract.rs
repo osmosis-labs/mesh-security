@@ -6,6 +6,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
 use cw_utils::{nonpayable, PaymentError};
 use std::cmp::min;
+use std::collections::HashSet;
 
 use mesh_apis::converter_api::RewardInfo;
 use sylvia::contract;
@@ -452,6 +453,7 @@ impl ExternalStakingContract<'_> {
         tombstoned: Vec<String>,
     ) -> Result<Vec<WasmMsg>, ContractError> {
         let mut msgs = vec![];
+        let mut valopers: HashSet<String> = HashSet::new();
         // Process tombstoning events first. Once tombstoned, a validator cannot be changed anymore.
         for valoper in tombstoned {
             // Check that the validator is active at height and slash it if that is the case
@@ -466,17 +468,23 @@ impl ExternalStakingContract<'_> {
                 let msg = self.handle_slashing(&env, deps.storage, &valoper)?;
                 msgs.push(msg);
             }
+            // Maintenance
+            valopers.insert(valoper);
         }
         // Process additions. Already existing validators will be ignored.
         // If the validator is tombstoned, this will be ignored.
         for AddValidator { valoper, pub_key } in additions {
             self.val_set
                 .add_validator(deps.storage, &valoper, &pub_key, height, time)?;
+            // Maintenance
+            valopers.insert(valoper);
         }
         // Process removals. Non-existent validators will be ignored.
         for valoper in removals {
             self.val_set
                 .remove_validator(deps.storage, &valoper, height, time)?;
+            // Maintenance
+            valopers.insert(valoper);
         }
         // Process jailings. Non-existent validators will be ignored.
         for valoper in jailed {
@@ -492,6 +500,8 @@ impl ExternalStakingContract<'_> {
                 let msg = self.handle_slashing(&env, deps.storage, &valoper)?;
                 msgs.push(msg);
             }
+            // Maintenance
+            valopers.insert(valoper);
         }
         // Process unjailings. Non-existent validators will be ignored.
         // If the validator is in the jailed state, it will be set to active. Otherwise, it will
@@ -499,11 +509,21 @@ impl ExternalStakingContract<'_> {
         for valoper in unjailed {
             self.val_set
                 .unjail_validator(deps.storage, &valoper, height, time)?;
+            // Maintenance
+            valopers.insert(valoper);
         }
         // Process updates. Non-existent and tombstoned validators will be ignored.
         for AddValidator { valoper, pub_key } in updated {
             self.val_set
                 .update_validator(deps.storage, &valoper, &pub_key, height, time)?;
+            // Maintenance
+            valopers.insert(valoper);
+        }
+        // Maintenance. Drain events that are older than unbonding period
+        let cfg = self.config.load(deps.storage)?;
+        let max_time = time.saturating_sub(cfg.unbonding_period);
+        for valoper in valopers {
+            self.val_set.drain_older(deps.storage, &valoper, max_time)?;
         }
         Ok(msgs)
     }

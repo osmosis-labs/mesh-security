@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Order, StdError, StdResult, Storage};
 use cw_storage_plus::{Bound, Map};
+use std::cmp::max;
 
 #[cw_serde]
 /// ValidatorState maintains a sorted list of updates with no duplicates.
@@ -37,6 +38,14 @@ impl ValidatorState {
         }
         let invalidated_idx = self.0.partition_point(|v| v.start_height >= height);
         self.0.drain(..invalidated_idx);
+    }
+
+    fn drain_older(&mut self, time: u64) {
+        if self.0.is_empty() {
+            return;
+        }
+        let old_idx = max(1, self.0.partition_point(|v| v.start_time > time));
+        self.0.drain(old_idx..);
     }
 }
 
@@ -291,7 +300,6 @@ impl<'a> CrdtState<'a> {
             };
             validator_state.insert_unique(val_state);
 
-            // TODO: drain events that are older than unbonding period (maintenance)
             self.validators.save(storage, valoper, &validator_state)?;
         }
         Ok(())
@@ -375,6 +383,24 @@ impl<'a> CrdtState<'a> {
             Some(val_state) => Ok(Some(val_state.clone())),
             None => Ok(None),
         }
+    }
+
+    pub fn drain_older(
+        &self,
+        storage: &mut dyn Storage,
+        valoper: &str,
+        time: u64,
+    ) -> StdResult<()> {
+        let mut validator_state = self
+            .validators
+            .may_load(storage, valoper)?
+            .unwrap_or_else(|| ValidatorState(vec![]));
+        if validator_state.0.len() <= 1 {
+            return Ok(());
+        }
+        validator_state.drain_older(time);
+        self.validators.save(storage, valoper, &validator_state)?;
+        Ok(())
     }
 }
 
