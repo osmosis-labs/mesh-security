@@ -419,6 +419,16 @@ mod tests {
 
         let active = crdt.list_active_validators(&storage, None, 10).unwrap();
         assert_eq!(active, vec!["alice".to_string(), "carl".to_string()]);
+
+        let validators = crdt.list_validators(&storage, None, 10).unwrap();
+        assert_eq!(
+            validators,
+            vec![
+                ("alice".to_string(), State::Active {}),
+                ("bob".to_string(), State::Tombstoned {}),
+                ("carl".to_string(), State::Active {}),
+            ]
+        );
     }
 
     // Like happy path, but we remove bob before he was ever added
@@ -442,6 +452,16 @@ mod tests {
 
         let active = crdt.list_active_validators(&storage, None, 10).unwrap();
         assert_eq!(active, vec!["alice".to_string(), "carl".to_string()]);
+
+        let validators = crdt.list_validators(&storage, None, 10).unwrap();
+        assert_eq!(
+            validators,
+            vec![
+                ("alice".to_string(), State::Active {}),
+                ("bob".to_string(), State::Tombstoned {}),
+                ("carl".to_string(), State::Active {}),
+            ]
+        );
     }
 
     // add and remove many validators, then iterate over them
