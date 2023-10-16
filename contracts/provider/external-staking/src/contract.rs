@@ -503,7 +503,9 @@ impl ExternalStakingContract<'_> {
             // Maintenance
             valopers.insert(valoper.clone());
         }
-        // Unjailing does nothing at the moment
+        // Process unjailings. Does nothing at the moment, as we don't have a way to know if we the
+        // validator must go to the active or the unbonded state.
+
         // Process updates. Non-existent and tombstoned validators will be ignored.
         for AddValidator { valoper, pub_key } in updated {
             self.val_set
