@@ -233,7 +233,7 @@ impl<'a> CrdtState<'a> {
     }
 
     /// Add an existing validator to the active set after jailing.
-    /// If the validator does not exist, it is tombstoned, or it is not in the `Jailed` state, it does nothing.
+    /// If the validator does not exist, or it is tombstoned, it does nothing.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn unjail_validator(
         &self,
@@ -256,10 +256,6 @@ impl<'a> CrdtState<'a> {
                 return Ok(());
             }
             let old = old.unwrap();
-            // Ignore if not jailed
-            if old.state != (State::Jailed {}) {
-                return Ok(());
-            }
             let val_state = ValState {
                 pub_key: old.pub_key,
                 start_height: height,

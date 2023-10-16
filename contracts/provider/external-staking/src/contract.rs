@@ -504,13 +504,17 @@ impl ExternalStakingContract<'_> {
             valopers.insert(valoper.clone());
         }
         // Process unjailings. Non-existent validators will be ignored.
-        // If the validator is in the jailed state, it will be set to active. Otherwise, it will
-        // be ignored.
-        for valoper in unjailed {
-            self.val_set
-                .unjail_validator(deps.storage, valoper, height, time)?;
-            // Maintenance
-            valopers.insert(valoper.clone());
+        // If the validator is not in the `removals` list, it will be set to active. Otherwise, it will
+        // be ignored (set to unbonded in removals processing).
+        if !unjailed.is_empty() {
+            let unjails: HashSet<_> = unjailed.iter().collect();
+            let rems: HashSet<_> = removals.iter().collect();
+            for &valoper in unjails.difference(&rems) {
+                self.val_set
+                    .unjail_validator(deps.storage, valoper, height, time)?;
+                // Maintenance
+                valopers.insert(valoper.clone());
+            }
         }
         // Process updates. Non-existent and tombstoned validators will be ignored.
         for AddValidator { valoper, pub_key } in updated {
