@@ -445,13 +445,13 @@ impl ExternalStakingContract<'_> {
         env: Env,
         height: u64,
         time: u64,
-        additions: Vec<AddValidator>,
-        removals: Vec<String>,
-        updated: Vec<AddValidator>,
-        jailed: Vec<String>,
-        unjailed: Vec<String>,
-        tombstoned: Vec<String>,
-    ) -> Result<Vec<WasmMsg>, ContractError> {
+        additions: &[AddValidator],
+        removals: &[String],
+        updated: &[AddValidator],
+        jailed: &[String],
+        unjailed: &[String],
+        tombstoned: &[String],
+    ) -> Result<(Event, Vec<WasmMsg>), ContractError> {
         let mut msgs = vec![];
         let mut valopers: HashSet<String> = HashSet::new();
         // Process tombstoning events first. Once tombstoned, a validator cannot be changed anymore.
@@ -459,65 +459,65 @@ impl ExternalStakingContract<'_> {
             // Check that the validator is active at height and slash it if that is the case
             let active =
                 self.val_set
-                    .is_active_validator_at_height(deps.storage, &valoper, height)?;
+                    .is_active_validator_at_height(deps.storage, valoper, height)?;
             self.val_set
-                .tombstone_validator(deps.storage, &valoper, height, time)?;
+                .tombstone_validator(deps.storage, valoper, height, time)?;
             if active {
                 // slash the validator
                 // TODO: Error handling / capturing
-                let msg = self.handle_slashing(&env, deps.storage, &valoper)?;
+                let msg = self.handle_slashing(&env, deps.storage, valoper)?;
                 msgs.push(msg);
             }
             // Maintenance
-            valopers.insert(valoper);
+            valopers.insert(valoper.clone());
         }
         // Process additions. Already existing validators will be ignored.
         // If the validator is tombstoned, this will be ignored.
         for AddValidator { valoper, pub_key } in additions {
             self.val_set
-                .add_validator(deps.storage, &valoper, &pub_key, height, time)?;
+                .add_validator(deps.storage, valoper, pub_key, height, time)?;
             // Maintenance
-            valopers.insert(valoper);
+            valopers.insert(valoper.clone());
         }
         // Process removals. Non-existent validators will be ignored.
         for valoper in removals {
             self.val_set
-                .remove_validator(deps.storage, &valoper, height, time)?;
+                .remove_validator(deps.storage, valoper, height, time)?;
             // Maintenance
-            valopers.insert(valoper);
+            valopers.insert(valoper.clone());
         }
         // Process jailings. Non-existent validators will be ignored.
         for valoper in jailed {
             // Check that the validator is active at height and slash it if that is the case
             let active =
                 self.val_set
-                    .is_active_validator_at_height(deps.storage, &valoper, height)?;
+                    .is_active_validator_at_height(deps.storage, valoper, height)?;
             self.val_set
-                .jail_validator(deps.storage, &valoper, height, time)?;
+                .jail_validator(deps.storage, valoper, height, time)?;
             if active {
                 // slash the validator
                 // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-                let msg = self.handle_slashing(&env, deps.storage, &valoper)?;
+                let msg = self.handle_slashing(&env, deps.storage, valoper)?;
                 msgs.push(msg);
             }
             // Maintenance
-            valopers.insert(valoper);
+            valopers.insert(valoper.clone());
         }
         // Process unjailings. Non-existent validators will be ignored.
         // If the validator is in the jailed state, it will be set to active. Otherwise, it will
         // be ignored.
         for valoper in unjailed {
             self.val_set
-                .unjail_validator(deps.storage, &valoper, height, time)?;
+                .unjail_validator(deps.storage, valoper, height, time)?;
             // Maintenance
-            valopers.insert(valoper);
+            valopers.insert(valoper.clone());
         }
         // Process updates. Non-existent and tombstoned validators will be ignored.
         for AddValidator { valoper, pub_key } in updated {
             self.val_set
-                .update_validator(deps.storage, &valoper, &pub_key, height, time)?;
+                .update_validator(deps.storage, valoper, pub_key, height, time)?;
             // Maintenance
-            valopers.insert(valoper);
+            valopers.insert(valoper.clone());
         }
         // Maintenance. Drain events that are older than unbonding period
         let cfg = self.config.load(deps.storage)?;
@@ -525,7 +525,40 @@ impl ExternalStakingContract<'_> {
         for valoper in valopers {
             self.val_set.drain_older(deps.storage, &valoper, max_time)?;
         }
-        Ok(msgs)
+        let mut event = Event::new("valset_update");
+        if !additions.is_empty() {
+            event = event.add_attribute(
+                "additions",
+                additions
+                    .iter()
+                    .map(|v| v.valoper.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+        }
+        if !removals.is_empty() {
+            event = event.add_attribute("removals", removals.join(","));
+        }
+        if !updated.is_empty() {
+            event = event.add_attribute(
+                "updated",
+                updated
+                    .iter()
+                    .map(|v| v.valoper.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+        }
+        if !jailed.is_empty() {
+            event = event.add_attribute("jailed", jailed.join(","));
+        }
+        if !unjailed.is_empty() {
+            event = event.add_attribute("unjailed", unjailed.join(","));
+        }
+        if !tombstoned.is_empty() {
+            event = event.add_attribute("tombstoned", tombstoned.join(","));
+        }
+        Ok((event, msgs))
     }
 
     /// Withdraws all of their released tokens to the calling user.
@@ -880,7 +913,7 @@ impl ExternalStakingContract<'_> {
     /// Query for the endpoint that can connect
     #[msg(query)]
     pub fn ibc_channel(&self, ctx: QueryCtx) -> Result<IbcChannelResponse, ContractError> {
-        let channel = crate::ibc::IBC_CHANNEL.load(ctx.deps.storage)?;
+        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
         Ok(IbcChannelResponse { channel })
     }
 

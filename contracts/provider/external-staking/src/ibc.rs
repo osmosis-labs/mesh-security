@@ -135,11 +135,23 @@ pub fn ibc_packet_receive(
             unjailed,
             tombstoned,
         } => {
-            let msgs = contract.valset_update(
-                deps, env, height, time, additions, removals, updated, jailed, unjailed, tombstoned,
+            let (evt, msgs) = contract.valset_update(
+                deps,
+                env,
+                height,
+                time,
+                &additions,
+                &removals,
+                &updated,
+                &jailed,
+                &unjailed,
+                &tombstoned,
             )?;
             let ack = ack_success(&ValsetUpdateAck {})?;
-            IbcReceiveResponse::new().set_ack(ack).add_messages(msgs)
+            IbcReceiveResponse::new()
+                .set_ack(ack)
+                .add_event(evt)
+                .add_messages(msgs)
         }
         ConsumerPacket::Distribute { validator, rewards } => {
             let evt = contract.distribute_rewards(deps, &validator, rewards)?;
