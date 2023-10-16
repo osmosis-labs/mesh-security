@@ -36,7 +36,7 @@ pub struct IbcChannelResponse {
 }
 
 #[cw_serde]
-pub struct ListRemoteValidatorsResponse {
+pub struct ListActiveValidatorsResponse {
     pub validators: Vec<String>,
 }
 
