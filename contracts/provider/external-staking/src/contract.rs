@@ -471,7 +471,7 @@ impl ExternalStakingContract<'_> {
             // Maintenance
             valopers.insert(valoper.clone());
         }
-        // Process additions. Already existing validators will be ignored.
+        // Process additions. Already existing validators will be updated and set to active.
         // If the validator is tombstoned, this will be ignored.
         for AddValidator { valoper, pub_key } in additions {
             self.val_set
