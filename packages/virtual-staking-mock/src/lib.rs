@@ -56,6 +56,12 @@ impl VirtualStakingModule<'_> {
     }
 }
 
+impl Default for VirtualStakingModule<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Module for VirtualStakingModule<'_> {
     type ExecT = VirtualStakeCustomMsg;
 
@@ -65,10 +71,10 @@ impl Module for VirtualStakingModule<'_> {
 
     fn execute<ExecC, QueryC>(
         &self,
-        api: &dyn Api,
+        _api: &dyn Api,
         storage: &mut dyn Storage,
-        router: &dyn cw_multi_test::CosmosRouter<ExecC = ExecC, QueryC = QueryC>,
-        block: &BlockInfo,
+        _router: &dyn cw_multi_test::CosmosRouter<ExecC = ExecC, QueryC = QueryC>,
+        _block: &BlockInfo,
         sender: Addr,
         msg: Self::ExecT,
     ) -> AnyResult<cw_multi_test::AppResponse>
@@ -124,11 +130,11 @@ impl Module for VirtualStakingModule<'_> {
 
     fn sudo<ExecC, QueryC>(
         &self,
-        api: &dyn Api,
-        storage: &mut dyn Storage,
-        router: &dyn cw_multi_test::CosmosRouter<ExecC = ExecC, QueryC = QueryC>,
-        block: &BlockInfo,
-        msg: Self::SudoT,
+        _api: &dyn Api,
+        _storage: &mut dyn Storage,
+        _router: &dyn cw_multi_test::CosmosRouter<ExecC = ExecC, QueryC = QueryC>,
+        _block: &BlockInfo,
+        _msg: Self::SudoT,
     ) -> AnyResult<cw_multi_test::AppResponse>
     where
         ExecC: std::fmt::Debug + Clone + PartialEq + JsonSchema + DeserializeOwned + 'static,
@@ -141,10 +147,10 @@ impl Module for VirtualStakingModule<'_> {
 
     fn query(
         &self,
-        api: &dyn Api,
+        _api: &dyn Api,
         storage: &dyn Storage,
         querier: &dyn Querier,
-        block: &BlockInfo,
+        _block: &BlockInfo,
         request: Self::QueryT,
     ) -> AnyResult<Binary> {
         let VirtualStakeCustomQuery::VirtualStake(query) = request;
