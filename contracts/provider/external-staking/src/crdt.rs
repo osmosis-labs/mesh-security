@@ -242,42 +242,6 @@ impl<'a> CrdtState<'a> {
         Ok(())
     }
 
-    /// Add an existing validator to the active set after jailing.
-    /// If the validator does not exist, or it is tombstoned, it does nothing.
-    /// In non-test code, this is called from `ibc_packet_receive`
-    pub fn unjail_validator(
-        &self,
-        storage: &mut dyn Storage,
-        valoper: &str,
-        height: u64,
-        time: u64,
-    ) -> Result<(), StdError> {
-        let mut validator_state = self
-            .validators
-            .may_load(storage, valoper)?
-            .unwrap_or_else(|| ValidatorState(vec![]));
-
-        // We just silently ignore it if does not exist, or tombstoned
-        if !validator_state.is_empty() && !validator_state.is_tombstoned() {
-            // Copy data from previous entry. This is not commutative anymore :-/
-            let old = self.validator_at_height(storage, valoper, height)?;
-            // Ignore if not previous entry at height (should not happen)
-            if old.is_none() {
-                return Ok(());
-            }
-            let old = old.unwrap();
-            let val_state = ValState {
-                pub_key: old.pub_key,
-                start_height: height,
-                start_time: time,
-                state: State::Active {},
-            };
-            validator_state.insert_unique(val_state);
-            self.validators.save(storage, valoper, &validator_state)?;
-        }
-        Ok(())
-    }
-
     /// Tombstone a validator.
     /// In non-test code, this is called from `ibc_packet_receive`
     pub fn tombstone_validator(
@@ -631,7 +595,7 @@ mod tests {
     }
 
     #[test]
-    fn jail_unjail_validator_works() {
+    fn jail_validator_works() {
         let mut storage = MemoryStorage::new();
         let crdt = CrdtState::new();
 
@@ -653,8 +617,8 @@ mod tests {
             })
         );
 
-        // Unjail it
-        crdt.unjail_validator(&mut storage, "alice", 300, 3456)
+        // Unjail it to active
+        crdt.add_validator(&mut storage, "alice", "alice_pubkey_1", 300, 3456)
             .unwrap();
 
         // Query after unjailing addition height
@@ -693,27 +657,11 @@ mod tests {
             })
         );
 
-        // Remove it instead of unjailing it
+        // Remove it instead of unjailing it to active
         crdt.remove_validator(&mut storage, "alice", 300, 3456)
             .unwrap();
 
         // Query after remove addition height
-        let alice = crdt.validator_at_height(&storage, "alice", 500).unwrap();
-        assert_eq!(
-            alice,
-            Some(ValState {
-                pub_key: "alice_pubkey_1".to_string(),
-                start_height: 300,
-                start_time: 3456,
-                state: State::Unbonded {}
-            })
-        );
-
-        // Unjail does nothing, even at the same height
-        crdt.unjail_validator(&mut storage, "alice", 300, 3456)
-            .unwrap();
-
-        // Query after unjail attempt height
         let alice = crdt.validator_at_height(&storage, "alice", 500).unwrap();
         assert_eq!(
             alice,
@@ -767,8 +715,6 @@ mod tests {
         crdt.remove_validator(&mut storage, "bob", 500, 5678)
             .unwrap();
         crdt.jail_validator(&mut storage, "bob", 600, 6789).unwrap();
-        crdt.unjail_validator(&mut storage, "bob", 700, 7890)
-            .unwrap();
         crdt.tombstone_validator(&mut storage, "bob", 800, 8901)
             .unwrap();
 
