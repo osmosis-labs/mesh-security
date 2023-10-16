@@ -351,10 +351,10 @@ impl ConverterApi for ConverterContract<'_> {
         &self,
         ctx: ExecCtx,
         additions: Vec<Validator>,
-        _removals: Vec<String>,
-        _updated: Vec<Validator>,
+        removals: Vec<String>,
+        updated: Vec<Validator>,
         jailed: Vec<String>,
-        _unjailed: Vec<String>,
+        unjailed: Vec<String>,
         tombstoned: Vec<String>,
     ) -> Result<Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
@@ -374,8 +374,24 @@ impl ConverterApi for ConverterContract<'_> {
                     .join(","),
             );
         }
+        if !removals.is_empty() {
+            event = event.add_attribute("removals", removals.join(","));
+        }
+        if !updated.is_empty() {
+            event = event.add_attribute(
+                "updated",
+                updated
+                    .iter()
+                    .map(|v| v.address.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+        }
         if !jailed.is_empty() {
             event = event.add_attribute("jailed", jailed.join(","));
+        }
+        if !unjailed.is_empty() {
+            event = event.add_attribute("unjailed", unjailed.join(","));
         }
         if !tombstoned.is_empty() {
             event = event.add_attribute("tombstoned", tombstoned.join(","));
@@ -386,10 +402,10 @@ impl ConverterApi for ConverterContract<'_> {
                 &ctx.env,
                 &channel,
                 &additions,
-                &[],
-                &[],
+                &removals,
+                &updated,
                 &jailed,
-                &[],
+                &unjailed,
                 &tombstoned,
             )?;
             resp = resp.add_message(valset_msg);
