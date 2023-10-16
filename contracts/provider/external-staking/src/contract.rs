@@ -12,7 +12,7 @@ use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use mesh_apis::cross_staking_api::{self};
-use mesh_apis::ibc::ProviderPacket;
+use mesh_apis::ibc::{AddValidator, ProviderPacket};
 use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
 use mesh_sync::{Tx, ValueRange};
 
@@ -433,6 +433,79 @@ impl ExternalStakingContract<'_> {
         // Remove tx
         self.pending_txs.remove(deps.storage, tx_id);
         Ok(())
+    }
+
+    /// In test code, this is called from `test_valset_update`.
+    /// In non-test code, this is called from `ibc_packet_ack`
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn valset_update(
+        &self,
+        deps: DepsMut,
+        env: Env,
+        height: u64,
+        time: u64,
+        additions: Vec<AddValidator>,
+        removals: Vec<String>,
+        updated: Vec<AddValidator>,
+        jailed: Vec<String>,
+        unjailed: Vec<String>,
+        tombstoned: Vec<String>,
+    ) -> Result<Vec<WasmMsg>, ContractError> {
+        let mut msgs = vec![];
+        // Process tombstoning events first. Once tombstoned, a validator cannot be changed anymore.
+        for valoper in tombstoned {
+            // Check that the validator is active at height and slash it if that is the case
+            let active =
+                self.val_set
+                    .is_active_validator_at_height(deps.storage, &valoper, height)?;
+            self.val_set
+                .tombstone_validator(deps.storage, &valoper, height, time)?;
+            if active {
+                // slash the validator
+                // TODO: Error handling / capturing
+                let msg = self.handle_slashing(&env, deps.storage, &valoper)?;
+                msgs.push(msg);
+            }
+        }
+        // Process additions. Already existing validators will be ignored.
+        // If the validator is tombstoned, this will be ignored.
+        for AddValidator { valoper, pub_key } in additions {
+            self.val_set
+                .add_validator(deps.storage, &valoper, &pub_key, height, time)?;
+        }
+        // Process removals. Non-existent validators will be ignored.
+        for valoper in removals {
+            self.val_set
+                .remove_validator(deps.storage, &valoper, height, time)?;
+        }
+        // Process jailings. Non-existent validators will be ignored.
+        for valoper in jailed {
+            // Check that the validator is active at height and slash it if that is the case
+            let active =
+                self.val_set
+                    .is_active_validator_at_height(deps.storage, &valoper, height)?;
+            self.val_set
+                .jail_validator(deps.storage, &valoper, height, time)?;
+            if active {
+                // slash the validator
+                // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
+                let msg = self.handle_slashing(&env, deps.storage, &valoper)?;
+                msgs.push(msg);
+            }
+        }
+        // Process unjailings. Non-existent validators will be ignored.
+        // If the validator is in the jailed state, it will be set to active. Otherwise, it will
+        // be ignored.
+        for valoper in unjailed {
+            self.val_set
+                .unjail_validator(deps.storage, &valoper, height, time)?;
+        }
+        // Process updates. Non-existent and tombstoned validators will be ignored.
+        for AddValidator { valoper, pub_key } in updated {
+            self.val_set
+                .update_validator(deps.storage, &valoper, &pub_key, height, time)?;
+        }
+        Ok(msgs)
     }
 
     /// Withdraws all of their released tokens to the calling user.

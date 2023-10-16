@@ -8,7 +8,7 @@ use cosmwasm_std::{
 };
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
-    ack_success, validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, DistributeAck,
+    ack_success, validate_channel_order, AckWrapper, ConsumerPacket, DistributeAck,
     ProtocolVersion, ProviderPacket, ValsetUpdateAck,
 };
 
@@ -30,7 +30,7 @@ pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 const DEFAULT_TIMEOUT: u64 = 10 * 60;
 
 pub fn packet_timeout(env: &Env) -> IbcTimeout {
-    // No idea about their blocktime, but 24 hours ahead of our view of the clock
+    // No idea about their block time, but 24 hours ahead of our view of the clock
     // should be decently in the future.
     let timeout = env.block.time.plus_seconds(DEFAULT_TIMEOUT);
     IbcTimeout::with_timestamp(timeout)
@@ -135,85 +135,18 @@ pub fn ibc_packet_receive(
             unjailed,
             tombstoned,
         } => {
-            let mut msgs = vec![];
-            // Process tombstoning events first. Once tombstoned, a validator cannot be changed anymore.
-            for valoper in tombstoned {
-                // Check that the validator is active at height and slash it if that is the case
-                let active = contract.val_set.is_active_validator_at_height(
-                    deps.storage,
-                    &valoper,
-                    height,
-                )?;
-                contract
-                    .val_set
-                    .tombstone_validator(deps.storage, &valoper, height, time)?;
-                if active {
-                    // slash the validator
-                    // TODO: Error handling / capturing
-                    let msg = contract.handle_slashing(&env, deps.storage, &valoper)?;
-                    msgs.push(msg);
-                }
-            }
-            // Process additions. Already existing validators will be ignored.
-            // If the validator is tombstoned, this will be ignored.
-            for AddValidator { valoper, pub_key } in additions {
-                contract
-                    .val_set
-                    .add_validator(deps.storage, &valoper, &pub_key, height, time)?;
-            }
-            // Process removals. Non-existent validators will be ignored.
-            for valoper in removals {
-                contract
-                    .val_set
-                    .remove_validator(deps.storage, &valoper, height, time)?;
-            }
-            // Process jailings. Non-existent validators will be ignored.
-            for valoper in jailed {
-                // Check that the validator is active at height and slash it if that is the case
-                let active = contract.val_set.is_active_validator_at_height(
-                    deps.storage,
-                    &valoper,
-                    height,
-                )?;
-                contract
-                    .val_set
-                    .jail_validator(deps.storage, &valoper, height, time)?;
-                if active {
-                    // slash the validator
-                    // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-                    let msg = contract.handle_slashing(&env, deps.storage, &valoper)?;
-                    msgs.push(msg);
-                }
-            }
-            // Process unjailings. Non-existent validators will be ignored.
-            // If the validator is in the jailed state, it will be set to active. Otherwise, it will
-            // be ignored.
-            for valoper in unjailed {
-                contract
-                    .val_set
-                    .unjail_validator(deps.storage, &valoper, height, time)?;
-            }
-            // Process updates. Non-existent and tombstoned validators will be ignored.
-            for AddValidator { valoper, pub_key } in updated {
-                contract.val_set.update_validator(
-                    deps.storage,
-                    &valoper,
-                    &pub_key,
-                    height,
-                    time,
-                )?;
-            }
+            let msgs = contract.valset_update(
+                deps, env, height, time, additions, removals, updated, jailed, unjailed, tombstoned,
+            )?;
             let ack = ack_success(&ValsetUpdateAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_messages(msgs)
         }
         ConsumerPacket::Distribute { validator, rewards } => {
-            let contract = ExternalStakingContract::new();
             let evt = contract.distribute_rewards(deps, &validator, rewards)?;
             let ack = ack_success(&DistributeAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_event(evt)
         }
         ConsumerPacket::DistributeBatch { rewards, denom } => {
-            let contract = ExternalStakingContract::new();
             let evts = contract.distribute_rewards_batch(deps, &rewards, &denom)?;
             let ack = ack_success(&DistributeAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_events(evts)
