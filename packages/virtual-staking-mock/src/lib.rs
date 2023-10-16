@@ -1,13 +1,59 @@
 use anyhow::Result as AnyResult;
-use cosmwasm_std::{Addr, Api, Binary, BlockInfo, CustomQuery, Empty, Querier, Storage, Uint128};
-use cw_multi_test::Module;
-use cw_storage_plus::Map;
-use mesh_bindings::{VirtualStakeCustomMsg, VirtualStakeCustomQuery};
+use cosmwasm_std::{
+    coin, to_binary, Addr, Api, Binary, BlockInfo, CustomQuery, Empty, Querier, QuerierWrapper,
+    Storage, Uint128,
+};
+use cw_multi_test::{AppResponse, Module};
+use cw_storage_plus::{Item, Map};
+use mesh_bindings::{
+    BondStatusResponse, SlashRatioResponse, VirtualStakeCustomMsg, VirtualStakeCustomQuery,
+};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 
-struct VirtualStakingModule<'a> {
-    delegated: Map<'a, String, Uint128>,
+pub struct VirtualStakingModule<'a> {
+    /// virtual-staking contract -> max cap
+    caps: Map<'a, Addr, Uint128>,
+    /// (virtual-staking contract, validator) -> bonded amount
+    bonds: Map<'a, (Addr, Addr), Uint128>,
+    slash_ratio: Item<'a, SlashRatioResponse>,
+}
+
+impl VirtualStakingModule<'_> {
+    pub fn new() -> Self {
+        Self {
+            caps: Map::new("virtual_staking_caps"),
+            bonds: Map::new("virtual_staking_bonds"),
+            slash_ratio: Item::new("virtual_staking_slash_ratios"),
+        }
+    }
+
+    pub fn init_slash_ratios(
+        &self,
+        storage: &mut dyn Storage,
+        slash_for_downtime: impl Into<String>,
+        slash_for_double_sign: impl Into<String>,
+    ) -> AnyResult<()> {
+        self.slash_ratio.save(
+            storage,
+            &SlashRatioResponse {
+                slash_fraction_downtime: slash_for_downtime.into(),
+                slash_fraction_double_sign: slash_for_double_sign.into(),
+            },
+        )?;
+
+        Ok(())
+    }
+
+    fn bonded_for_contract(&self, storage: &dyn Storage, contract: Addr) -> AnyResult<Uint128> {
+        Ok(self
+            .bonds
+            .range(storage, None, None, cosmwasm_std::Order::Ascending)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter_map(|((c, _), amt)| if c == contract { Some(amt) } else { None })
+            .sum())
+    }
 }
 
 impl Module for VirtualStakingModule<'_> {
@@ -30,7 +76,50 @@ impl Module for VirtualStakingModule<'_> {
         ExecC: std::fmt::Debug + Clone + PartialEq + JsonSchema + DeserializeOwned + 'static,
         QueryC: CustomQuery + DeserializeOwned + 'static,
     {
-        todo!()
+        let VirtualStakeCustomMsg::VirtualStake(msg) = msg;
+
+        let cap = self.caps.load(storage, sender.clone())?;
+
+        match msg {
+            mesh_bindings::VirtualStakeMsg::Bond { amount, validator } => {
+                let all_bonded = self.bonded_for_contract(storage, sender.clone())?;
+
+                if all_bonded + amount.amount <= cap {
+                    let current_bonded = self
+                        .bonds
+                        .may_load(storage, (sender.clone(), Addr::unchecked(&validator)))?
+                        .unwrap_or(Uint128::zero());
+
+                    self.bonds.save(
+                        storage,
+                        (sender, Addr::unchecked(validator)),
+                        &(current_bonded + amount.amount),
+                    )?;
+
+                    Ok(AppResponse::default())
+                } else {
+                    Err(anyhow::anyhow!("cap exceeded"))
+                }
+            }
+            mesh_bindings::VirtualStakeMsg::Unbond { amount, validator } => {
+                let current_bonded = self
+                    .bonds
+                    .may_load(storage, (sender.clone(), Addr::unchecked(&validator)))?
+                    .unwrap_or(Uint128::zero());
+
+                if current_bonded - amount.amount >= Uint128::zero() {
+                    self.bonds.save(
+                        storage,
+                        (sender, Addr::unchecked(validator)),
+                        &(current_bonded - amount.amount),
+                    )?;
+
+                    Ok(AppResponse::default())
+                } else {
+                    Err(anyhow::anyhow!("bonded amount exceeded"))
+                }
+            }
+        }
     }
 
     fn sudo<ExecC, QueryC>(
@@ -45,7 +134,9 @@ impl Module for VirtualStakingModule<'_> {
         ExecC: std::fmt::Debug + Clone + PartialEq + JsonSchema + DeserializeOwned + 'static,
         QueryC: CustomQuery + DeserializeOwned + 'static,
     {
-        panic!("sudo not implemented for")
+        Err(anyhow::anyhow!(
+            "sudo not implemented for the virtual staking module"
+        ))
     }
 
     fn query(
@@ -56,6 +147,26 @@ impl Module for VirtualStakingModule<'_> {
         block: &BlockInfo,
         request: Self::QueryT,
     ) -> AnyResult<Binary> {
-        todo!()
+        let VirtualStakeCustomQuery::VirtualStake(query) = request;
+
+        let result = match query {
+            mesh_bindings::VirtualStakeQuery::BondStatus { contract } => {
+                let denom =
+                    QuerierWrapper::<VirtualStakeCustomQuery>::new(querier).query_bonded_denom()?;
+
+                let cap = self.caps.load(storage, Addr::unchecked(&contract))?;
+                let bonded = self.bonded_for_contract(storage, Addr::unchecked(contract))?;
+
+                to_binary(&BondStatusResponse {
+                    cap: coin(cap.u128(), &denom),
+                    delegated: coin(bonded.u128(), denom),
+                })?
+            }
+            mesh_bindings::VirtualStakeQuery::SlashRatio {} => {
+                to_binary(&self.slash_ratio.load(storage)?)?
+            }
+        };
+
+        Ok(to_binary(&result)?)
     }
 }
