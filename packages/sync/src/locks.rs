@@ -365,8 +365,8 @@ mod tests_plus {
         // We can range over them well
         let total_age = AGES
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
-            .fold(Ok(Uint128::zero()), |sum, item| {
-                Ok::<_, TestsError>(sum? + *item?.1.read()?)
+            .try_fold(Uint128::zero(), |sum, item| {
+                Ok::<_, TestsError>(sum + *item?.1.read()?)
             })
             .unwrap();
         assert_eq!(total_age, Uint128::new(33 + 47 + 2));
@@ -395,8 +395,8 @@ mod tests_plus {
         // We can still range over all
         let total_age = AGES
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
-            .fold(Ok(Uint128::zero()), |sum, item| {
-                Ok::<_, TestsError>(sum? + *item?.1.read()?)
+            .try_fold(Uint128::zero(), |sum, item| {
+                Ok::<_, TestsError>(sum + *item?.1.read()?)
             })
             .unwrap();
         assert_eq!(total_age, Uint128::new(33 + 47 + 2));
@@ -415,8 +415,8 @@ mod tests_plus {
         // We cannot range over all
         let err = AGES
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
-            .fold(Ok(Uint128::zero()), |sum, item| {
-                Ok::<_, TestsError>(sum? + *item?.1.read()?)
+            .try_fold(Uint128::zero(), |sum, item| {
+                Ok::<_, TestsError>(sum + *item?.1.read()?)
             })
             .unwrap_err();
         assert_eq!(err, TestsError::Lock(LockError::WriteLocked));
@@ -478,8 +478,8 @@ mod tests_plus {
         // We can still range over all
         let total_collateral = USERS
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
-            .fold(Ok(Uint128::zero()), |sum, item| {
-                Ok::<_, TestsError>(sum? + item?.1.read()?.collateral)
+            .try_fold(Uint128::zero(), |sum, item| {
+                Ok::<_, TestsError>(sum + item?.1.read()?.collateral)
             })
             .unwrap();
         assert_eq!(total_collateral, Uint128::new(1 + 4));
@@ -498,8 +498,8 @@ mod tests_plus {
         // We cannot range over all
         let err = USERS
             .range(&store, None, None, cosmwasm_std::Order::Ascending)
-            .fold(Ok(Uint128::zero()), |sum, item| {
-                Ok::<_, TestsError>(sum? + item?.1.read()?.max_lien)
+            .try_fold(Uint128::zero(), |sum, item| {
+                Ok::<_, TestsError>(sum + item?.1.read()?.max_lien)
             })
             .unwrap_err();
         assert_eq!(err, TestsError::Lock(LockError::WriteLocked));
