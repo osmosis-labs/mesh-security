@@ -436,7 +436,6 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
-    /// In test code, this is called from `test_valset_update`.
     /// In non-test code, this is called from `ibc_packet_ack`
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn valset_update(
@@ -1245,7 +1244,7 @@ pub mod cross_staking {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{Decimal, DepsMut};
+    use cosmwasm_std::{Attribute, Decimal, DepsMut};
 
     use crate::crdt::State;
     use crate::msg::{AuthorizedEndpoint, ValidatorState};
@@ -1312,7 +1311,7 @@ mod tests {
         ];
         let tombs = vec!["bob".to_string()];
 
-        contract
+        let (evt, msgs) = contract
             .valset_update(
                 ctx.deps.branch(),
                 ctx.env,
@@ -1326,6 +1325,18 @@ mod tests {
                 &tombs,
             )
             .unwrap();
+
+        // Check the event
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("additions", "alice,bob,carl"),
+                Attribute::new("tombstoned", "bob"),
+            ]
+        );
+
+        // Check there are no messages (edge case of tombstoning a validator that is not yet active)
+        assert!(msgs.is_empty());
 
         let query_deps = ctx.deps;
         let query_ctx = QueryCtx {
