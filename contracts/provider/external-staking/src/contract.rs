@@ -1247,7 +1247,8 @@ mod tests {
     use super::*;
     use cosmwasm_std::{Decimal, DepsMut};
 
-    use crate::msg::AuthorizedEndpoint;
+    use crate::crdt::State;
+    use crate::msg::{AuthorizedEndpoint, ValidatorState};
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
 
     static OSMO: &str = "uosmo";
@@ -1283,10 +1284,72 @@ mod tests {
         (exec_ctx, contract)
     }
 
-    // Extra checks of instantiate returned messages and data
     #[test]
     fn instantiating() {
         let mut deps = mock_dependencies();
         let _ = do_instantiate(deps.as_mut());
+    }
+
+    #[test]
+    fn valset_update_happy_path() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add three new validators, and tombstone one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "carl".to_string(),
+                pub_key: "carl_pub_key".to_string(),
+            },
+        ];
+        let tombs = vec!["bob".to_string()];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env,
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &tombs,
+            )
+            .unwrap();
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Tombstoned {}
+                },
+                ValidatorState {
+                    validator: "carl".to_string(),
+                    state: State::Active {}
+                }
+            ]
+        );
     }
 }
