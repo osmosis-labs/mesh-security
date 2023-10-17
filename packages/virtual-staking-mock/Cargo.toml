@@ -1,5 +1,5 @@
 [package]
-name = "virtual-staking-mock"
+name = "mesh-virtual-staking-mock"
 edition.workspace = true
 version.workspace = true
 license.workspace = true

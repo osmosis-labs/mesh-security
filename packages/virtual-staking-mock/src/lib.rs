@@ -1,9 +1,11 @@
 use anyhow::Result as AnyResult;
 use cosmwasm_std::{
-    coin, to_binary, Addr, Api, Binary, BlockInfo, CustomQuery, Empty, Querier, QuerierWrapper,
-    Storage, Uint128,
+    coin,
+    testing::{MockApi, MockStorage},
+    to_binary, Addr, Api, Binary, BlockInfo, CustomQuery, Empty, Querier, QuerierWrapper, Storage,
+    Uint128,
 };
-use cw_multi_test::{AppResponse, Module};
+use cw_multi_test::{AppResponse, BankKeeper, Module, WasmKeeper};
 use cw_storage_plus::{Item, Map};
 use mesh_bindings::{
     BondStatusResponse, SlashRatioResponse, VirtualStakeCustomMsg, VirtualStakeCustomQuery,
@@ -11,15 +13,23 @@ use mesh_bindings::{
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 
-pub struct VirtualStakingModule<'a> {
+pub type App = cw_multi_test::App<
+    BankKeeper,
+    MockApi,
+    MockStorage,
+    VirtualStakingModule,
+    WasmKeeper<VirtualStakeCustomMsg, VirtualStakeCustomQuery>,
+>;
+
+pub struct VirtualStakingModule {
     /// virtual-staking contract -> max cap
-    caps: Map<'a, Addr, Uint128>,
+    caps: Map<'static, Addr, Uint128>,
     /// (virtual-staking contract, validator) -> bonded amount
-    bonds: Map<'a, (Addr, Addr), Uint128>,
-    slash_ratio: Item<'a, SlashRatioResponse>,
+    bonds: Map<'static, (Addr, Addr), Uint128>,
+    slash_ratio: Item<'static, SlashRatioResponse>,
 }
 
-impl VirtualStakingModule<'_> {
+impl VirtualStakingModule {
     pub fn new() -> Self {
         Self {
             caps: Map::new("virtual_staking_caps"),
@@ -56,13 +66,13 @@ impl VirtualStakingModule<'_> {
     }
 }
 
-impl Default for VirtualStakingModule<'_> {
+impl Default for VirtualStakingModule {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Module for VirtualStakingModule<'_> {
+impl Module for VirtualStakingModule {
     type ExecT = VirtualStakeCustomMsg;
 
     type QueryT = VirtualStakeCustomQuery;
