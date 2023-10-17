@@ -1240,3 +1240,53 @@ pub mod cross_staking {
         }
     }
 }
+
+// Some unit tests, to test valset updates and slashing side effects in isolation
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::{Decimal, DepsMut};
+
+    use crate::msg::AuthorizedEndpoint;
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+
+    static OSMO: &str = "uosmo";
+    static CREATOR: &str = "staking"; // The creator of the proxy contract(s) is the staking contract
+    static OWNER: &str = "user";
+
+    fn do_instantiate(deps: DepsMut) -> (ExecCtx, ExternalStakingContract) {
+        let contract = ExternalStakingContract::new();
+        let mut ctx = InstantiateCtx {
+            deps,
+            env: mock_env(),
+            info: mock_info(CREATOR, &[coin(100, OSMO)]),
+        };
+        contract
+            .instantiate(
+                ctx.branch(),
+                OSMO.to_owned(),
+                "ujuno".to_string(),
+                "vault_addr".to_string(),
+                100,
+                AuthorizedEndpoint {
+                    connection_id: "connection_id_1".to_string(),
+                    port_id: "port_id_1".to_string(),
+                },
+                Decimal::percent(10),
+            )
+            .unwrap();
+        let exec_ctx = ExecCtx {
+            deps: ctx.deps,
+            info: mock_info(OWNER, &[]),
+            env: ctx.env,
+        };
+        (exec_ctx, contract)
+    }
+
+    // Extra checks of instantiate returned messages and data
+    #[test]
+    fn instantiating() {
+        let mut deps = mock_dependencies();
+        let _ = do_instantiate(deps.as_mut());
+    }
+}
