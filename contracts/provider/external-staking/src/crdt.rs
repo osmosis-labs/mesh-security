@@ -338,11 +338,11 @@ impl<'a> CrdtState<'a> {
         storage: &dyn Storage,
         valoper: &str,
     ) -> StdResult<Option<ValState>> {
-        let state = self.validators.load(storage, valoper)?;
-        if state.is_active() {
-            Ok(state.0.first().cloned())
-        } else {
-            Ok(None)
+        let state = self.validators.may_load(storage, valoper)?;
+        match state {
+            Some(state) if state.is_active() => Ok(state.0.first().cloned()),
+            Some(_) => Ok(None),
+            None => Ok(None),
         }
     }
 
