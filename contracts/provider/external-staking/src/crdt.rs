@@ -352,9 +352,9 @@ impl<'a> CrdtState<'a> {
         valoper: &str,
         height: u64,
     ) -> StdResult<Option<ValState>> {
-        let state = self.validators.load(storage, valoper)?;
-        match state.query_at_height(height) {
-            Some(val_state) if val_state.state == State::Active {} => Ok(Some(val_state.clone())),
+        let state = self.validator_at_height(storage, valoper, height)?;
+        match state {
+            Some(val_state) if val_state.state == State::Active {} => Ok(Some(val_state)),
             Some(_) => Ok(None),
             None => Ok(None),
         }
@@ -366,9 +366,12 @@ impl<'a> CrdtState<'a> {
         valoper: &str,
         height: u64,
     ) -> StdResult<Option<ValState>> {
-        let state = self.validators.load(storage, valoper)?;
-        match state.query_at_height(height) {
-            Some(val_state) => Ok(Some(val_state.clone())),
+        let state = self.validators.may_load(storage, valoper)?;
+        match state {
+            Some(state) => match state.query_at_height(height) {
+                Some(val_state) => Ok(Some(val_state.clone())),
+                None => Ok(None),
+            },
             None => Ok(None),
         }
     }
