@@ -1377,7 +1377,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // We add three new validators, and tombstone one
+        // We add two new validators, tombstone one and check slashing
         let adds = vec![
             AddValidator {
                 valoper: "alice".to_string(),
@@ -1492,7 +1492,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // We add three new validators, and tombstone one
+        // We add two new validators, and tombstone one with a pending bond
         let adds = vec![
             AddValidator {
                 valoper: "alice".to_string(),
@@ -1606,7 +1606,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // We add three new validators, and tombstone one
+        // We add two new validators, and tombstone one with a pending unbond
         let adds = vec![
             AddValidator {
                 valoper: "alice".to_string(),
@@ -1650,7 +1650,7 @@ mod tests {
                 to_binary(&ReceiveVirtualStake {
                     validator: "bob".to_string(),
                 })
-                    .unwrap(),
+                .unwrap(),
             )
             .unwrap();
         // Commit stake
@@ -1665,11 +1665,7 @@ mod tests {
             info: owner_info,
         };
         contract
-            .unstake(
-                stake_ctx,
-                "bob".to_string(),
-                coin(50, "uosmo"),
-            )
+            .unstake(stake_ctx, "bob".to_string(), coin(50, "uosmo"))
             .unwrap();
         // Unstake tx is pending
 
@@ -1706,7 +1702,7 @@ mod tests {
                         slash: Uint128::new(10), // Owner is slashed over the full stake, including pending
                     }],
                 })
-                    .unwrap(),
+                .unwrap(),
                 funds: vec![],
             }
         );
@@ -1738,7 +1734,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // We add three new validators, and tombstone one
+        // We add two new validators, and tombstone one unbonded one
         let adds = vec![
             AddValidator {
                 valoper: "alice".to_string(),
@@ -1819,7 +1815,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // We add three new validators, and tombstone one
+        // We add two new validators, and tombstone no-one
         let adds = vec![
             AddValidator {
                 valoper: "alice".to_string(),
@@ -1901,7 +1897,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // We add three new validators, and tombstone one
+        // We add two new validators, and jail/unjail one
         let adds = vec![
             AddValidator {
                 valoper: "alice".to_string(),
@@ -2001,7 +1997,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // We add three new validators, and tombstone one
+        // We add two new validators, and jail one
         let adds = vec![
             AddValidator {
                 valoper: "alice".to_string(),
@@ -2045,7 +2041,7 @@ mod tests {
                 to_binary(&ReceiveVirtualStake {
                     validator: "bob".to_string(),
                 })
-                    .unwrap(),
+                .unwrap(),
             )
             .unwrap();
         // Commit stake
@@ -2084,7 +2080,7 @@ mod tests {
                         slash: Uint128::new(10),
                     }],
                 })
-                    .unwrap(),
+                .unwrap(),
                 funds: vec![],
             }
         );
@@ -2116,7 +2112,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // We add three new validators, and tombstone one
+        // We add two new validators, and remove one
         let adds = vec![
             AddValidator {
                 valoper: "alice".to_string(),
@@ -2194,7 +2190,7 @@ mod tests {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
-        // We add two new validators, and tombstone one
+        // We add two new validators, and remove/update one
         let adds = vec![
             AddValidator {
                 valoper: "alice".to_string(),
@@ -2247,14 +2243,13 @@ mod tests {
         let upds = vec![AddValidator {
             valoper: "bob".to_string(),
             pub_key: "bob_pub_key_updated".to_string(),
-            }
-        ];
+        }];
         let (evt, _msgs) = contract
             .valset_update(
                 update_ctx.deps,
                 update_ctx.env,
-                200,
-                2345,
+                300,
+                3456,
                 &[],
                 &[],
                 &upds,
