@@ -867,7 +867,7 @@ impl ExternalStakingContract<'_> {
             stake
                 .points_alignment
                 .stake_decreased(stake_slash, distribution.points_per_stake);
-            distribution.total_stake -= stake_slash;
+            distribution.total_stake = distribution.total_stake.saturating_sub(stake_slash); // Don't fail if pending bond tx
             self.distribution.save(storage, validator, &distribution)?;
 
             // Slash the unbondings
