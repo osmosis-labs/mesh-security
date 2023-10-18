@@ -1,14 +1,16 @@
-use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, StdError, Uint128};
+use cosmwasm_std::{
+    coin, coins, to_binary, Addr, Decimal, Delegation, StdError, Uint128, Validator,
+};
 
-use cw_multi_test::App as MtApp;
+use cw_multi_test::{App as MtApp, StakingInfo};
 use sylvia::multitest::App;
 
+use mesh_native_staking_proxy::contract::multitest_utils::{
+    CodeId as ProxyCodeId, NativeStakingProxyContractProxy,
+};
 use mesh_sync::ValueRange;
 
 use crate::local_staking_api::test_utils::LocalStakingApi;
-use crate::native_staking_callback::test_utils::NativeStakingCallback;
-
-mod local_staking_proxy;
 
 use crate::contract;
 use crate::error::ContractError;
@@ -23,13 +25,83 @@ fn slashing_rate() -> Decimal {
     Decimal::percent(SLASHING_PERCENTAGE)
 }
 
+fn app(balances: &[(&str, (u128, &str))], validators: &[&str]) -> App<MtApp> {
+    let mut mt_app = MtApp::default();
+
+    let block_info = mt_app.block_info();
+    mt_app.init_modules(|router, api, storage| {
+        for (account, (amount, denom)) in balances {
+            router
+                .bank
+                .init_balance(storage, &Addr::unchecked(*account), coins(*amount, *denom))
+                .unwrap();
+        }
+
+        router
+            .staking
+            .setup(
+                storage,
+                StakingInfo {
+                    bonded_denom: OSMO.to_string(),
+                    unbonding_time: 0,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        for validator in validators {
+            router
+                .staking
+                .add_validator(
+                    api,
+                    storage,
+                    &block_info,
+                    Validator {
+                        address: validator.to_string(),
+                        commission: Decimal::zero(),
+                        max_commission: Decimal::zero(),
+                        max_change_rate: Decimal::zero(),
+                    },
+                )
+                .unwrap();
+        }
+    });
+
+    App::new(mt_app)
+}
+
+#[track_caller]
+fn assert_delegations(app: &App<MtApp>, delegator: impl Into<String>, expected: &[(&str, u128)]) {
+    let mut expected = expected
+        .iter()
+        .map(|(val, amount)| (val.to_string(), *amount))
+        .collect::<Vec<_>>();
+    expected.sort();
+
+    let mut queried = app
+        .app()
+        .wrap()
+        .query_all_delegations(delegator)
+        .unwrap()
+        .into_iter()
+        .map(
+            |Delegation {
+                 validator, amount, ..
+             }| (validator, amount.amount.u128()),
+        )
+        .collect::<Vec<_>>();
+    queried.sort();
+
+    assert_eq!(expected, queried);
+}
+
 #[test]
 fn instantiation() {
-    let app = App::default();
+    let app = app(&[], &[]);
 
     let owner = "vault"; // Owner of the staking contract (i. e. the vault contract)
 
-    let staking_proxy_code = local_staking_proxy::multitest_utils::CodeId::store_code(&app);
+    let staking_proxy_code = ProxyCodeId::store_code(&app);
     let staking_code = contract::multitest_utils::CodeId::store_code(&app);
 
     let staking = staking_code
@@ -59,16 +131,10 @@ fn receiving_stake() {
     let validator = "validator1"; // Validator to stake on
 
     // Fund the vault
-    let app = MtApp::new(|router, _api, storage| {
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(owner), coins(300, OSMO))
-            .unwrap();
-    });
-    let app = App::new(app);
+    let app = app(&[(owner, (300, OSMO))], &[validator]);
 
     // Contracts setup
-    let staking_proxy_code = local_staking_proxy::multitest_utils::CodeId::store_code(&app);
+    let staking_proxy_code = ProxyCodeId::store_code(&app);
     let staking_code = contract::multitest_utils::CodeId::store_code(&app);
 
     let staking = staking_code
@@ -109,14 +175,8 @@ fn receiving_stake() {
         }
     );
 
-    // Check that funds are in the proxy contract
-    assert_eq!(
-        app.app()
-            .wrap()
-            .query_balance(proxy1.clone(), OSMO)
-            .unwrap(),
-        coin(100, OSMO)
-    );
+    // Check that funds ended up with the staking module
+    assert_delegations(&app, &proxy1, &[(validator, 100)]);
 
     // Stake some more
     let stake_msg = to_binary(&msg::StakeMsg {
@@ -147,10 +207,7 @@ fn receiving_stake() {
     );
 
     // Check that funds are updated in the proxy contract
-    assert_eq!(
-        app.app().wrap().query_balance(proxy1, OSMO).unwrap(),
-        coin(150, OSMO)
-    );
+    assert_delegations(&app, &proxy1, &[(validator, 150)]);
 
     // Receive some stake on behalf of user2 for validator
     let stake_msg = to_binary(&msg::StakeMsg {
@@ -174,10 +231,7 @@ fn receiving_stake() {
     );
 
     // Check that funds are in the corresponding proxy contract
-    assert_eq!(
-        app.app().wrap().query_balance(proxy2, OSMO).unwrap(),
-        coin(10, OSMO)
-    );
+    assert_delegations(&app, &proxy2, &[(validator, 10)]);
 }
 
 #[test]
@@ -192,18 +246,12 @@ fn releasing_proxy_stake() {
     let validator = "validator1";
 
     // Fund the user
-    let app = MtApp::new(|router, _api, storage| {
-        router
-            .bank
-            .init_balance(storage, &Addr::unchecked(user), coins(300, OSMO))
-            .unwrap();
-    });
-    let app = App::new(app);
+    let app = app(&[(user, (300, OSMO))], &[validator]);
 
     // Contracts setup
     let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(&app);
     let staking_code = contract::multitest_utils::CodeId::store_code(&app);
-    let staking_proxy_code = local_staking_proxy::multitest_utils::CodeId::store_code(&app);
+    let staking_proxy_code = ProxyCodeId::store_code(&app);
 
     // Instantiate vault msg
     let staking_init_info = mesh_vault::msg::StakingInitInfo {
@@ -232,10 +280,7 @@ fn releasing_proxy_stake() {
     );
 
     // Access staking instance
-    let staking = contract::multitest_utils::NativeStakingContractProxy::new(
-        Addr::unchecked(staking_addr),
-        &app,
-    );
+    let proxy = NativeStakingProxyContractProxy::new(Addr::unchecked(proxy_addr), &app);
 
     // User bonds some funds to the vault
     vault
@@ -279,19 +324,26 @@ fn releasing_proxy_stake() {
         }]
     );
 
-    // The other half is in the user's proxy contract
-    assert_eq!(
-        app.app().wrap().query_balance(proxy_addr, OSMO).unwrap(),
-        coin(100, OSMO)
-    );
+    // The other half is delegated
+    assert_delegations(&app, proxy_addr, &[(validator, 100)]);
 
     // Now release the funds (as if called from the user's staking proxy)
-    staking
-        .native_staking_callback_proxy()
-        .release_proxy_stake()
-        .with_funds(&coins(100, OSMO))
-        .call(proxy_addr)
+    // staking
+    //     .native_staking_callback_proxy()
+    //     .release_proxy_stake()
+    //     .with_funds(&coins(100, OSMO))
+    //     .call(proxy_addr)
+    //     .unwrap();
+    proxy
+        .unstake(validator.to_string(), coin(100, OSMO))
+        .call(user)
         .unwrap();
+    app.app_mut()
+        .sudo(cw_multi_test::SudoMsg::Staking(
+            cw_multi_test::StakingSudo::ProcessQueue {},
+        ))
+        .unwrap();
+    proxy.release_unbonded().call(user).unwrap();
 
     // Check that the vault has the funds again
     assert_eq!(
