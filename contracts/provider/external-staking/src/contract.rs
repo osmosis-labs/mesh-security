@@ -1897,6 +1897,106 @@ mod tests {
     }
 
     #[test]
+    fn valset_update_unjailing_noop() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add three new validators, and tombstone one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Bob is jailed next
+        let update_ctx = ctx.branch();
+        let jails = vec!["bob".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &jails,
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("jailed", "bob"),]);
+
+        // Check there's no message
+        assert_eq!(msgs.len(), 0);
+
+        // Bob is unjailed next
+        let update_ctx = ctx.branch();
+        let unjails = vec!["bob".to_string()];
+        let (evt, _msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &[],
+                &unjails,
+                &[],
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("unjailed", "bob"),]);
+
+        // Check that unjail is a no-op
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Jailed {}
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn valset_update_jailing_slashes() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
