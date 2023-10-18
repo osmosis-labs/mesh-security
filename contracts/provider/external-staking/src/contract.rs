@@ -517,6 +517,7 @@ impl ExternalStakingContract<'_> {
         }
         // Maintenance. Drain events that are older than unbonding period from now
         let cfg = self.config.load(deps.storage)?;
+        // Assumes time keeping is the same in both chains
         let max_time = env
             .block
             .time
