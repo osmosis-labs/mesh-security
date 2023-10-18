@@ -1539,7 +1539,7 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        // Tx is pending
+        // Stake tx is pending
 
         // Bob is tombstoned next
         let update_ctx = ctx.branch();
@@ -1575,6 +1575,138 @@ mod tests {
                     }],
                 })
                 .unwrap(),
+                funds: vec![],
+            }
+        );
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Tombstoned {}
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn valset_update_tombstoning_slashes_pending_unbond() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add three new validators, and tombstone one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Cross stake with bob
+        let mut stake_deps = ctx.deps.branch();
+        let vault_info = mock_info("vault_addr", &[]);
+        let stake_ctx = ExecCtx {
+            deps: stake_deps.branch(),
+            env: mock_env(),
+            info: vault_info,
+        };
+        contract
+            .receive_virtual_stake(
+                stake_ctx,
+                OWNER.to_string(),
+                coin(100, "uosmo"),
+                1,
+                to_binary(&ReceiveVirtualStake {
+                    validator: "bob".to_string(),
+                })
+                    .unwrap(),
+            )
+            .unwrap();
+        // Commit it
+        contract.commit_stake(stake_deps, 1).unwrap();
+
+        // OWNER then cross-unstakes half of the stake
+        let mut stake_deps = ctx.deps.branch();
+        let owner_info = mock_info(OWNER, &[]);
+        let stake_ctx = ExecCtx {
+            deps: stake_deps.branch(),
+            env: mock_env(),
+            info: owner_info,
+        };
+        contract
+            .unstake(
+                stake_ctx,
+                "bob".to_string(),
+                coin(50, "uosmo"),
+            )
+            .unwrap();
+        // Unstake tx is pending
+
+        // Bob is tombstoned next
+        let update_ctx = ctx.branch();
+        let tombs = vec!["bob".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &tombs,
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+
+        // Check the slashing message
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(
+            msgs[0],
+            WasmMsg::Execute {
+                contract_addr: "vault_addr".to_string(),
+                msg: to_binary(&CrossSlash {
+                    slashes: vec![SlashInfo {
+                        user: OWNER.to_string(),
+                        slash: Uint128::new(10), // Owner is slashed over the full stake, including pending
+                    }],
+                })
+                    .unwrap(),
                 funds: vec![],
             }
         );
