@@ -783,4 +783,72 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn drain_older_works() {
+        let unbonding_period = 100;
+        let mut storage = MemoryStorage::new();
+        let crdt = CrdtState::new();
+
+        crdt.add_validator(&mut storage, "alice", "pk_a", 100, 1234)
+            .unwrap();
+        assert!(crdt.is_active_validator(&storage, "alice").unwrap());
+
+        crdt.remove_validator(&mut storage, "alice", 200, 2345)
+            .unwrap();
+        assert!(!crdt.is_active_validator(&storage, "alice").unwrap());
+        crdt.add_validator(&mut storage, "alice", "pk_b", 300, 3456)
+            .unwrap();
+        assert!(crdt.is_active_validator(&storage, "alice").unwrap());
+
+        let alice_history = crdt
+            .validators
+            .may_load(&storage, "alice")
+            .unwrap()
+            .unwrap();
+        assert_eq!(alice_history.0.len(), 3);
+
+        // Try to drain older events too soon
+        let current_time = 1300;
+        crdt.drain_older(&mut storage, "alice", current_time - unbonding_period)
+            .unwrap();
+
+        // Nothing happens
+        let alice_history = crdt
+            .validators
+            .may_load(&storage, "alice")
+            .unwrap()
+            .unwrap();
+        assert_eq!(alice_history.0.len(), 3);
+
+        // Try to drain older events a little later
+        let current_time = 3500;
+        crdt.drain_older(&mut storage, "alice", current_time - unbonding_period)
+            .unwrap();
+
+        // Older events are drained
+        let alice_history = crdt
+            .validators
+            .may_load(&storage, "alice")
+            .unwrap()
+            .unwrap();
+        assert_eq!(alice_history.0.len(), 1);
+        // State didn't change
+        assert!(crdt.is_active_validator(&storage, "alice").unwrap());
+
+        // Try to drain older events much later
+        let current_time = 50000;
+        crdt.drain_older(&mut storage, "alice", current_time - unbonding_period)
+            .unwrap();
+
+        // Nothing happens (one event is always kept)
+        let alice_history = crdt
+            .validators
+            .may_load(&storage, "alice")
+            .unwrap()
+            .unwrap();
+        assert_eq!(alice_history.0.len(), 1);
+        // State didn't change
+        assert!(crdt.is_active_validator(&storage, "alice").unwrap());
+    }
 }
