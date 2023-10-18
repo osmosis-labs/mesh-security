@@ -462,10 +462,11 @@ impl ExternalStakingContract<'_> {
             self.val_set
                 .tombstone_validator(deps.storage, valoper, height, time)?;
             if active {
-                // slash the validator
-                // TODO: Error handling / capturing
-                let msg = self.handle_slashing(&env, deps.storage, valoper)?;
-                msgs.push(msg);
+                // Slash the validator (if bonded)
+                let slash_msg = self.handle_slashing(&env, deps.storage, valoper)?;
+                if let Some(msg) = slash_msg {
+                    msgs.push(msg)
+                }
             }
             // Maintenance
             valopers.insert(valoper.clone());
@@ -494,10 +495,12 @@ impl ExternalStakingContract<'_> {
             self.val_set
                 .jail_validator(deps.storage, valoper, height, time)?;
             if active {
-                // slash the validator
+                // Slash the validator, if bonded
                 // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-                let msg = self.handle_slashing(&env, deps.storage, valoper)?;
-                msgs.push(msg);
+                let slash_msg = self.handle_slashing(&env, deps.storage, valoper)?;
+                if let Some(msg) = slash_msg {
+                    msgs.push(msg)
+                }
             }
             // Maintenance
             valopers.insert(valoper.clone());
@@ -828,7 +831,7 @@ impl ExternalStakingContract<'_> {
         env: &Env,
         storage: &mut dyn Storage,
         validator: &str,
-    ) -> Result<WasmMsg, ContractError> {
+    ) -> Result<Option<WasmMsg>, ContractError> {
         let config = self.config.load(storage)?;
         // Get the list of users staking via this validator
         let users = self
@@ -843,6 +846,9 @@ impl ExternalStakingContract<'_> {
                 Ok::<_, ContractError>((user, stake))
             })
             .collect::<Result<Vec<_>, _>>()?;
+        if users.is_empty() {
+            return Ok(None);
+        }
 
         // Slash their stake in passing
         let mut slash_infos = vec![];
@@ -883,7 +889,7 @@ impl ExternalStakingContract<'_> {
 
         // Route associated users to vault for slashing of their collateral
         let msg = config.vault.process_cross_slashing(slash_infos)?;
-        Ok(msg)
+        Ok(Some(msg))
     }
 
     /// Queries for contract configuration
@@ -1530,7 +1536,7 @@ mod tests {
                 to_binary(&ReceiveVirtualStake {
                     validator: "bob".to_string(),
                 })
-                    .unwrap(),
+                .unwrap(),
             )
             .unwrap();
         // Tx is pending
@@ -1568,7 +1574,7 @@ mod tests {
                         slash: Uint128::new(10),
                     }],
                 })
-                    .unwrap(),
+                .unwrap(),
                 funds: vec![],
             }
         );
@@ -1649,7 +1655,7 @@ mod tests {
         // Check the event
         assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
 
-        // Check there's no slashing message
+        // Check that no slashing message is emitted
         assert_eq!(msgs.len(), 0);
 
         let query_deps = ctx.deps;
