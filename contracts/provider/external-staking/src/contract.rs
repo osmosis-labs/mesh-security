@@ -515,9 +515,13 @@ impl ExternalStakingContract<'_> {
             // Maintenance
             valopers.insert(valoper.clone());
         }
-        // Maintenance. Drain events that are older than unbonding period
+        // Maintenance. Drain events that are older than unbonding period from now
         let cfg = self.config.load(deps.storage)?;
-        let max_time = time.saturating_sub(cfg.unbonding_period);
+        let max_time = env
+            .block
+            .time
+            .seconds()
+            .saturating_sub(cfg.unbonding_period);
         for valoper in valopers {
             self.val_set.drain_older(deps.storage, &valoper, max_time)?;
         }
