@@ -41,10 +41,10 @@ pub struct VirtualStakingContract<'a> {
     pub bonded: Item<'a, Vec<(String, Uint128)>>,
     /// This is what validators have been fully unbonded due to tombstoning
     // The list will be cleared after processing in handle_epoch.
-    pub tombstoned: Item<'a, Vec<String>>,
+    pub tombstone_requests: Item<'a, Vec<String>>,
     /// This is what validators have been slashed due to jailing.
     // The list will be cleared after processing in handle_epoch.
-    pub jailed: Item<'a, Vec<String>>,
+    pub jail_requests: Item<'a, Vec<String>>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -58,8 +58,8 @@ impl VirtualStakingContract<'_> {
             config: Item::new("config"),
             bond_requests: Map::new("bond_requests"),
             bonded: Item::new("bonded"),
-            tombstoned: Item::new("tombstoned"),
-            jailed: Item::new("jailed"),
+            tombstone_requests: Item::new("tombstoned"),
+            jail_requests: Item::new("jailed"),
         }
     }
 
@@ -75,8 +75,8 @@ impl VirtualStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         // initialize these to no one, so no issue when reading for the first time
         self.bonded.save(ctx.deps.storage, &vec![])?;
-        self.tombstoned.save(ctx.deps.storage, &vec![])?;
-        self.jailed.save(ctx.deps.storage, &vec![])?;
+        self.tombstone_requests.save(ctx.deps.storage, &vec![])?;
+        self.jail_requests.save(ctx.deps.storage, &vec![])?;
         VALIDATOR_REWARDS_BATCH.init(ctx.deps.storage)?;
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -127,8 +127,8 @@ impl VirtualStakingContract<'_> {
         // Make current bonded mutable
         let mut current = bonded;
         // Process tombstoning (unbonded) and jailing (slashed) over bond_requests and current
-        let tombstoned = self.tombstoned.load(deps.storage)?;
-        let jailed = self.jailed.load(deps.storage)?;
+        let tombstoned = self.tombstone_requests.load(deps.storage)?;
+        let jailed = self.jail_requests.load(deps.storage)?;
         if !tombstoned.is_empty() || !jailed.is_empty() {
             let ratios = TokenQuerier::new(&deps.querier).slash_ratio()?;
             let slash_ratio_double_sign = Decimal::from_str(&ratios.slash_fraction_double_sign)?;
@@ -142,8 +142,8 @@ impl VirtualStakingContract<'_> {
                 slash_ratio_downtime,
             )?;
             // Clear up both lists
-            self.tombstoned.save(deps.storage, &vec![])?;
-            self.jailed.save(deps.storage, &vec![])?;
+            self.tombstone_requests.save(deps.storage, &vec![])?;
+            self.jail_requests.save(deps.storage, &vec![])?;
         }
 
         // calculate what the delegations should be when we are done
@@ -222,16 +222,14 @@ impl VirtualStakingContract<'_> {
         unjailed: &[String],
         tombstoned: &[String],
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        let _ = (removals, updated, unjailed);
-
         // Account for tombstoned validators. Will be processed in handle_epoch
-        self.tombstoned.update(deps.storage, |mut old| {
+        self.tombstone_requests.update(deps.storage, |mut old| {
             old.extend_from_slice(tombstoned);
             Ok::<_, ContractError>(old)
         })?;
 
         // Account for jailed validators. Will be processed in handle_epoch
-        self.jailed.update(deps.storage, |mut old| {
+        self.jail_requests.update(deps.storage, |mut old| {
             old.extend_from_slice(jailed);
             Ok::<_, ContractError>(old)
         })?;
