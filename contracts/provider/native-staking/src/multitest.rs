@@ -6,7 +6,7 @@ use cw_multi_test::{App as MtApp, StakingInfo};
 use sylvia::multitest::App;
 
 use mesh_native_staking_proxy::contract::multitest_utils::{
-    CodeId as ProxyCodeId, NativeStakingProxyContractProxy,
+    CodeId as NativeStakingProxyCodeId, NativeStakingProxyContractProxy,
 };
 use mesh_sync::ValueRange;
 
@@ -101,7 +101,7 @@ fn instantiation() {
 
     let owner = "vault"; // Owner of the staking contract (i. e. the vault contract)
 
-    let staking_proxy_code = ProxyCodeId::store_code(&app);
+    let staking_proxy_code = NativeStakingProxyCodeId::store_code(&app);
     let staking_code = contract::multitest_utils::CodeId::store_code(&app);
 
     let staking = staking_code
@@ -134,7 +134,7 @@ fn receiving_stake() {
     let app = app(&[(owner, (300, OSMO))], &[validator]);
 
     // Contracts setup
-    let staking_proxy_code = ProxyCodeId::store_code(&app);
+    let staking_proxy_code = NativeStakingProxyCodeId::store_code(&app);
     let staking_code = contract::multitest_utils::CodeId::store_code(&app);
 
     let staking = staking_code
@@ -251,7 +251,7 @@ fn releasing_proxy_stake() {
     // Contracts setup
     let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(&app);
     let staking_code = contract::multitest_utils::CodeId::store_code(&app);
-    let staking_proxy_code = ProxyCodeId::store_code(&app);
+    let staking_proxy_code = NativeStakingProxyCodeId::store_code(&app);
 
     // Instantiate vault msg
     let staking_init_info = mesh_vault::msg::StakingInitInfo {
