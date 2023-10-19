@@ -1,0 +1,3 @@
+ignore:
+  # this is a mock for testing - worrying about it being tested itself is a bit much
+  - "packages/virtual-staking-mock"

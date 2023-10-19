@@ -746,6 +746,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-virtual-staking-mock"
+version = "0.7.0-alpha.2"
+dependencies = [
+ "anyhow",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "mesh-bindings",
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

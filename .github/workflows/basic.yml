@@ -48,6 +48,7 @@ jobs:
         with:
           toolchain: 1.70.0
           command: wasm
+          args: --workspace --exclude mesh-virtual-staking-mock
         env:
           RUSTFLAGS: "-C link-arg=-s"
 
