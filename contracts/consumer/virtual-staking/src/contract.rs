@@ -39,11 +39,11 @@ pub struct VirtualStakingContract<'a> {
     // `bonded` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
     pub bonded: Item<'a, Vec<(String, Uint128)>>,
-    /// This is what validators have been fully unbonded due to tombstoning
-    // The list will be cleared after processing in handle_epoch.
+    /// This is what validators have been requested to be slashed due to tombstoning.
+    // The list will be cleared after processing in `handle_epoch`.
     pub tombstone_requests: Item<'a, Vec<String>>,
-    /// This is what validators have been slashed due to jailing.
-    // The list will be cleared after processing in handle_epoch.
+    /// This is what validators have been requested to be slashed due to jailing.
+    // The list will be cleared after processing in `handle_epoch`.
     pub jail_requests: Item<'a, Vec<String>>,
 }
 
