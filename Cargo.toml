@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 edition       = "2021"
-version       = "0.7.0-alpha.2"
+version       = "0.8.0-alpha.1"
 license       = "MIT"
 repository    = "https://github.com/osmosis-labs/mesh-security"
 
@@ -12,6 +12,7 @@ repository    = "https://github.com/osmosis-labs/mesh-security"
 mesh-apis        = { path = "./packages/apis" }
 mesh-bindings        = { path = "./packages/bindings" }
 mesh-sync        = { path = "./packages/sync" }
+mesh-virtual-staking-mock = { path = "./packages/virtual-staking-mock" }
 
 mesh-vault    = { path = "./contracts/provider/vault" }
 mesh-external-staking    = { path = "./contracts/provider/external-staking" }

@@ -1,3 +1,10 @@
+# 0.8.0-alpha.1
+
+- Add code coverage.
+- Disable native staking in vault.
+- Improve rewards withdrawal process.
+- Valset updates for external-staking.
+
 # 0.7.0-alpha.2
 
 - Remove empty messages / events.

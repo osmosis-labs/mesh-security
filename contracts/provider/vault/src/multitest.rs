@@ -84,22 +84,57 @@ fn setup<'app>(
     NativeStakingContractProxy<'app, MtApp>,
     ExternalStakingContractProxy<'app, MtApp>,
 ) {
-    let native_staking_code =
-        mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
-    let native_staking_proxy_code =
-        mesh_native_staking_proxy::contract::multitest_utils::CodeId::store_code(app);
+    let (vault, native, external) = setup_inner(app, owner, slash_percent, unbond_period, true);
+    (vault, native.unwrap(), external)
+}
+
+/// Contracts setup
+fn setup_without_local_staking<'app>(
+    app: &'app App<MtApp>,
+    owner: &str,
+    slash_percent: u64,
+    unbond_period: u64,
+) -> (
+    VaultContractProxy<'app, MtApp>,
+    ExternalStakingContractProxy<'app, MtApp>,
+) {
+    let (vault, _, external) = setup_inner(app, owner, slash_percent, unbond_period, false);
+    (vault, external)
+}
+
+fn setup_inner<'app>(
+    app: &'app App<MtApp>,
+    owner: &str,
+    slash_percent: u64,
+    unbond_period: u64,
+    local_staking: bool,
+) -> (
+    VaultContractProxy<'app, MtApp>,
+    Option<NativeStakingContractProxy<'app, MtApp>>,
+    ExternalStakingContractProxy<'app, MtApp>,
+) {
     let vault_code = contract::multitest_utils::CodeId::store_code(app);
 
-    let native_staking_inst_msg = mesh_native_staking::contract::InstantiateMsg {
-        denom: OSMO.to_string(),
-        max_slashing: Decimal::percent(10),
-        proxy_code_id: native_staking_proxy_code.code_id(),
-    };
-    let staking_init_info = StakingInitInfo {
-        admin: None,
-        code_id: native_staking_code.code_id(),
-        msg: to_binary(&native_staking_inst_msg).unwrap(),
-        label: None,
+    let staking_init_info = if local_staking {
+        let native_staking_code =
+            mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
+        let native_staking_proxy_code =
+            mesh_native_staking_proxy::contract::multitest_utils::CodeId::store_code(app);
+
+        let native_staking_inst_msg = mesh_native_staking::contract::InstantiateMsg {
+            denom: OSMO.to_string(),
+            max_slashing: Decimal::percent(10),
+            proxy_code_id: native_staking_proxy_code.code_id(),
+        };
+
+        Some(StakingInitInfo {
+            admin: None,
+            code_id: native_staking_code.code_id(),
+            msg: to_binary(&native_staking_inst_msg).unwrap(),
+            label: None,
+        })
+    } else {
+        None
     };
 
     let vault = vault_code
@@ -108,8 +143,8 @@ fn setup<'app>(
         .call(owner)
         .unwrap();
 
-    let native_staking_addr = Addr::unchecked(vault.config().unwrap().local_staking);
-    let native_staking = NativeStakingContractProxy::new(native_staking_addr, app);
+    let native_staking_addr = vault.config().unwrap().local_staking.map(Addr::unchecked);
+    let native_staking = native_staking_addr.map(|addr| NativeStakingContractProxy::new(addr, app));
 
     let cross_staking = setup_cross_stake(app, owner, &vault, slash_percent, unbond_period);
     (vault, native_staking, cross_staking)
@@ -401,6 +436,52 @@ fn bonding() {
 }
 
 #[test]
+fn local_staking_disabled() {
+    let owner = "owner";
+    let user = "user1";
+    let local_val = "local";
+    let remote_val = "remote";
+
+    let mut app = init_app(&[user], &[300]);
+    add_local_validator(&mut app, local_val);
+
+    let (vault, cross_staking) = setup_without_local_staking(&app, owner, SLASHING_PERCENTAGE, 100);
+
+    set_active_validators(&cross_staking, &[remote_val]);
+
+    bond(&vault, user, 300);
+
+    assert_eq!(
+        stake_locally(&vault, user, 100, local_val).unwrap_err(),
+        ContractError::NoLocalStaking
+    );
+    assert_eq!(vault.config().unwrap().local_staking, None);
+
+    // cross-staking still works
+    vault
+        .stake_remote(
+            cross_staking.contract_addr.to_string(),
+            coin(100, OSMO),
+            to_binary(&ReceiveVirtualStake {
+                validator: remote_val.to_string(),
+            })
+            .unwrap(),
+        )
+        .call(user)
+        .unwrap();
+
+    let acc = vault.account(user.to_owned()).unwrap();
+    assert_eq!(
+        acc,
+        AccountResponse {
+            denom: OSMO.to_owned(),
+            bonded: Uint128::new(300),
+            free: ValueRange::new(Uint128::new(200), Uint128::new(300)),
+        }
+    );
+}
+
+#[test]
 fn stake_local() {
     let owner = "owner";
     let user = "user1";
@@ -627,7 +708,6 @@ fn stake_cross() {
     );
 
     // Staking remotely
-
     vault
         .stake_remote(
             cross_staking.contract_addr.to_string(),

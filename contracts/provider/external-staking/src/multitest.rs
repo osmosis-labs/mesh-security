@@ -63,7 +63,7 @@ fn setup<'app>(
     };
 
     let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init)
+        .instantiate(OSMO.to_owned(), Some(staking_init))
         .call(owner)?;
 
     let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");

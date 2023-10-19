@@ -76,7 +76,7 @@ fn setup<'app>(
 
     // Instantiates vault and staking
     let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
+        .instantiate(OSMO.to_owned(), Some(staking_init_info))
         .with_label("Vault")
         .call(owner)
         .unwrap();
