@@ -2,7 +2,28 @@
 
 ## [Unreleased](https://github.com/osmosis-labs/mesh-security/tree/HEAD)
 
-[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.7.0-alpha.2...HEAD)
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.8.0-alpha.1...HEAD)
+
+## [v0.8.0-alpha.1](https://github.com/osmosis-labs/mesh-security/tree/v0.8.0-alpha.1) (2023-10-19)
+
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.7.0-alpha.2...v0.8.0-alpha.1)
+
+**Closed issues:**
+
+- Add code coverage [\#141](https://github.com/osmosis-labs/mesh-security/issues/141)
+- Disable native staking [\#140](https://github.com/osmosis-labs/mesh-security/issues/140)
+- Improve rewards withdrawal process [\#123](https://github.com/osmosis-labs/mesh-security/issues/123)
+- Valset update: validator state [\#118](https://github.com/osmosis-labs/mesh-security/issues/118)
+
+**Merged pull requests:**
+
+- Remove `local_staking_proxy` mock from `native_staking` [\#150](https://github.com/osmosis-labs/mesh-security/pull/150) ([uint](https://github.com/uint))
+- Introduce `VirtualStakingMock` [\#149](https://github.com/osmosis-labs/mesh-security/pull/149) ([uint](https://github.com/uint))
+- Refactor: validator state to support multiple states [\#148](https://github.com/osmosis-labs/mesh-security/pull/148) ([maurolacy](https://github.com/maurolacy))
+- Fix/SDK integration 2 [\#147](https://github.com/osmosis-labs/mesh-security/pull/147) ([maurolacy](https://github.com/maurolacy))
+- Update `sylvia` [\#146](https://github.com/osmosis-labs/mesh-security/pull/146) ([uint](https://github.com/uint))
+- vault: toggle local staking on/off [\#144](https://github.com/osmosis-labs/mesh-security/pull/144) ([uint](https://github.com/uint))
+- Set up code coverage with `llvm-cov` [\#143](https://github.com/osmosis-labs/mesh-security/pull/143) ([uint](https://github.com/uint))
 
 ## [v0.7.0-alpha.2](https://github.com/osmosis-labs/mesh-security/tree/v0.7.0-alpha.2) (2023-10-12)
 
