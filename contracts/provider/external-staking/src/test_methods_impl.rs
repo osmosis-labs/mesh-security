@@ -50,27 +50,19 @@ impl TestMethods for ExternalStakingContract<'_> {
         &self,
         ctx: ExecCtx,
         validator: AddValidator,
+        height: u64,
+        time: u64,
     ) -> Result<Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
-            let AddValidator {
-                valoper,
-                pub_key,
-                start_height,
-                start_time,
-            } = validator;
-            let update = crate::crdt::ValUpdate {
-                pub_key,
-                start_height,
-                start_time,
-            };
+            let AddValidator { valoper, pub_key } = validator;
             self.val_set
-                .add_validator(ctx.deps.storage, &valoper, update)?;
+                .add_validator(ctx.deps.storage, &valoper, &pub_key, height, time)?;
             Ok(Response::new())
         }
         #[cfg(not(any(feature = "mt", test)))]
         {
-            let _ = (ctx, validator);
+            let _ = (ctx, validator, height, time);
             Err(ContractError::Unauthorized {})
         }
     }
@@ -192,8 +184,11 @@ impl TestMethods for ExternalStakingContract<'_> {
     ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
-            let msg = self.handle_slashing(&ctx.env, ctx.deps.storage, &validator)?;
-            Ok(Response::new().add_message(msg))
+            let slash_msg = self.handle_slashing(&ctx.env, ctx.deps.storage, &validator)?;
+            match slash_msg {
+                Some(msg) => Ok(Response::new().add_message(msg)),
+                None => Ok(Response::new()),
+            }
         }
         #[cfg(not(any(test, feature = "mt")))]
         {

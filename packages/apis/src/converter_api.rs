@@ -29,20 +29,18 @@ pub trait ConverterApi {
 
     /// Valset updates.
     ///
-    /// Only additions and permanent removals are accepted, as removals (leaving the active
-    /// validator set) are non-permanent and ignored on the Provider (CRDTs only support permanent
-    /// removals).
-    ///
-    /// If a validator that already exists in the list is re-sent for addition, its pubkey
-    /// will be updated.
     /// TODO: pubkeys need to be part of the Validator struct (requires CosmWasm support).
+    #[allow(clippy::too_many_arguments)]
     #[msg(exec)]
     fn valset_update(
         &self,
         ctx: ExecCtx,
         additions: Vec<Validator>,
-        tombstoned: Vec<String>,
+        removals: Vec<String>,
+        updated: Vec<Validator>,
         jailed: Vec<String>,
+        unjailed: Vec<String>,
+        tombstoned: Vec<String>,
     ) -> Result<Response, Self::Error>;
 }
 

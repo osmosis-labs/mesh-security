@@ -236,13 +236,15 @@ impl VirtualStakingContract<'_> {
             Ok::<_, ContractError>(old)
         })?;
 
-        // Send additions and tombstones to the Converter. Removals are non-permanent and ignored.
-        // Send jailed even when they are non-permanent, for slashing.
+        // Send all updates to the Converter.
         let cfg = self.config.load(deps.storage)?;
         let msg = converter_api::ExecMsg::ValsetUpdate {
             additions: additions.to_vec(),
-            tombstoned: tombstoned.to_vec(),
+            removals: removals.to_vec(),
+            updated: updated.to_vec(),
             jailed: jailed.to_vec(),
+            unjailed: unjailed.to_vec(),
+            tombstoned: tombstoned.to_vec(),
         };
         let msg = WasmMsg::Execute {
             contract_addr: cfg.converter.to_string(),

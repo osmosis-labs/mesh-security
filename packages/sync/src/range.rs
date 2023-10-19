@@ -500,7 +500,7 @@ mod tests {
     #[test]
     fn invariants_over_set_of_liens() {
         // some existing outstanding liens
-        let liens = vec![
+        let liens = [
             ValueRange::new(Uint128::new(5000), Uint128::new(7000)),
             ValueRange::new(Uint128::new(2000), Uint128::new(8000)),
             ValueRange::new(Uint128::new(3000), Uint128::new(12000)),

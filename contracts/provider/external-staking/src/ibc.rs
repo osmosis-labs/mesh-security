@@ -8,13 +8,11 @@ use cosmwasm_std::{
 };
 use cw_storage_plus::Item;
 use mesh_apis::ibc::{
-    ack_success, validate_channel_order, AckWrapper, AddValidator, AddValidatorsAck,
-    ConsumerPacket, DistributeAck, JailValidatorsAck, ProtocolVersion, ProviderPacket,
-    RemoveValidator, RemoveValidatorsAck,
+    ack_success, validate_channel_order, AckWrapper, ConsumerPacket, DistributeAck,
+    ProtocolVersion, ProviderPacket, ValsetUpdateAck,
 };
 
 use crate::contract::ExternalStakingContract;
-use crate::crdt::ValUpdate;
 use crate::error::ContractError;
 use crate::msg::AuthorizedEndpoint;
 
@@ -32,7 +30,7 @@ pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 const DEFAULT_TIMEOUT: u64 = 10 * 60;
 
 pub fn packet_timeout(env: &Env) -> IbcTimeout {
-    // No idea about their blocktime, but 24 hours ahead of our view of the clock
+    // No idea about their block time, but 24 hours ahead of our view of the clock
     // should be decently in the future.
     let timeout = env.block.time.plus_seconds(DEFAULT_TIMEOUT);
     IbcTimeout::with_timestamp(timeout)
@@ -121,89 +119,46 @@ pub fn ibc_packet_receive(
     msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
     // There is only one channel, so we don't need to switch.
-    // We also don't care about packet sequence as this is fully commutative.
+    // We also don't care about packet sequence as this is being ordered by height.
+    // If a validator is in more than one of the events, the end result will depend on the
+    // processing order below.
     let contract = ExternalStakingContract::new();
     let packet: ConsumerPacket = from_slice(&msg.packet.data)?;
     let resp = match packet {
-        ConsumerPacket::AddValidators(to_add) => {
-            for AddValidator {
-                valoper,
-                pub_key,
-                start_height,
-                start_time,
-            } in to_add
-            {
-                let update = ValUpdate {
-                    pub_key,
-                    start_height,
-                    start_time,
-                };
-                contract
-                    .val_set
-                    .add_validator(deps.storage, &valoper, update)?;
-            }
-            let ack = ack_success(&AddValidatorsAck {})?;
-            IbcReceiveResponse::new().set_ack(ack)
-        }
-        ConsumerPacket::TombstoneValidators(to_remove) => {
-            let mut msgs = vec![];
-            for RemoveValidator {
-                valoper,
-                height: end_height,
-                time: _end_time,
-            } in to_remove
-            {
-                // Check that the validator is active at height and slash it if that is the case
-                let active = contract.val_set.is_active_validator_at_height(
-                    deps.storage,
-                    &valoper,
-                    end_height,
-                )?;
-                contract.val_set.remove_validator(deps.storage, &valoper)?;
-                if active {
-                    // slash the validator
-                    // TODO: Error handling / capturing
-                    let msg = contract.handle_slashing(&env, deps.storage, &valoper)?;
-                    msgs.push(msg);
-                }
-            }
-            let ack = ack_success(&RemoveValidatorsAck {})?;
-            IbcReceiveResponse::new().set_ack(ack).add_messages(msgs)
-        }
-        ConsumerPacket::JailValidators(to_jail) => {
-            let mut msgs = vec![];
-            for RemoveValidator {
-                valoper,
-                height: end_height,
-                time: _end_time,
-            } in to_jail
-            {
-                // Check that the validator is active at height and slash it if that is the case
-                let active = contract.val_set.is_active_validator_at_height(
-                    deps.storage,
-                    &valoper,
-                    end_height,
-                )?;
-                // We don't change the validator's state here, as that's currently not supported
-                // (only Active and Tombstoned)
-                if active {
-                    // slash the validator
-                    // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-                    let msg = contract.handle_slashing(&env, deps.storage, &valoper)?;
-                    msgs.push(msg);
-                }
-            }
-            let ack = ack_success(&JailValidatorsAck {})?;
-            IbcReceiveResponse::new().set_ack(ack).add_messages(msgs)
+        ConsumerPacket::ValsetUpdate {
+            height,
+            time,
+            additions,
+            removals,
+            updated,
+            jailed,
+            unjailed,
+            tombstoned,
+        } => {
+            let (evt, msgs) = contract.valset_update(
+                deps,
+                env,
+                height,
+                time,
+                &additions,
+                &removals,
+                &updated,
+                &jailed,
+                &unjailed,
+                &tombstoned,
+            )?;
+            let ack = ack_success(&ValsetUpdateAck {})?;
+            IbcReceiveResponse::new()
+                .set_ack(ack)
+                .add_event(evt)
+                .add_messages(msgs)
         }
         ConsumerPacket::Distribute { validator, rewards } => {
-            let contract = ExternalStakingContract::new();
             let evt = contract.distribute_rewards(deps, &validator, rewards)?;
             let ack = ack_success(&DistributeAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_event(evt)
         }
         ConsumerPacket::DistributeBatch { rewards, denom } => {
-            let contract = ExternalStakingContract::new();
             let evts = contract.distribute_rewards_batch(deps, &rewards, &denom)?;
             let ack = ack_success(&DistributeAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_events(evts)

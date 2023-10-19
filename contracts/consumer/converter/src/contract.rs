@@ -14,9 +14,7 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
-use crate::ibc::{
-    add_validators_msg, jail_validators_msg, make_ibc_packet, tombstone_validators_msg, IBC_CHANNEL,
-};
+use crate::ibc::{make_ibc_packet, valset_update_msg, IBC_CHANNEL};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -353,20 +351,20 @@ impl ConverterApi for ConverterContract<'_> {
         &self,
         ctx: ExecCtx,
         additions: Vec<Validator>,
-        tombstoned: Vec<String>,
+        removals: Vec<String>,
+        updated: Vec<Validator>,
         jailed: Vec<String>,
+        unjailed: Vec<String>,
+        tombstoned: Vec<String>,
     ) -> Result<Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         // Send over IBC to the Consumer
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
 
-        let mut resp = Response::new();
         let mut event = Event::new("valset_update");
 
         if !additions.is_empty() {
-            let add_msg = add_validators_msg(&ctx.env, &channel, &additions)?;
-            resp = resp.add_message(add_msg);
             event = event.add_attribute(
                 "additions",
                 additions
@@ -376,15 +374,41 @@ impl ConverterApi for ConverterContract<'_> {
                     .join(","),
             );
         }
+        if !removals.is_empty() {
+            event = event.add_attribute("removals", removals.join(","));
+        }
+        if !updated.is_empty() {
+            event = event.add_attribute(
+                "updated",
+                updated
+                    .iter()
+                    .map(|v| v.address.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+        }
         if !jailed.is_empty() {
-            let jail_msg = jail_validators_msg(&ctx.env, &channel, &jailed)?;
-            resp = resp.add_message(jail_msg);
             event = event.add_attribute("jailed", jailed.join(","));
         }
+        if !unjailed.is_empty() {
+            event = event.add_attribute("unjailed", unjailed.join(","));
+        }
         if !tombstoned.is_empty() {
-            let tomb_msg = tombstone_validators_msg(&ctx.env, &channel, &tombstoned)?;
-            resp = resp.add_message(tomb_msg);
             event = event.add_attribute("tombstoned", tombstoned.join(","));
+        }
+        let mut resp = Response::new();
+        if !event.attributes.is_empty() {
+            let valset_msg = valset_update_msg(
+                &ctx.env,
+                &channel,
+                &additions,
+                &removals,
+                &updated,
+                &jailed,
+                &unjailed,
+                &tombstoned,
+            )?;
+            resp = resp.add_message(valset_msg);
         }
         resp = resp.add_event(event);
         Ok(resp)

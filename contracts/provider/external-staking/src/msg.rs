@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{coin, Coin, IbcChannel};
 
+use crate::crdt::State;
 use crate::state::Stake;
 use crate::{error::ContractError, state::Config};
 
@@ -35,8 +36,19 @@ pub struct IbcChannelResponse {
 }
 
 #[cw_serde]
-pub struct ListRemoteValidatorsResponse {
+pub struct ListActiveValidatorsResponse {
     pub validators: Vec<String>,
+}
+
+#[cw_serde]
+pub struct ListValidatorsResponse {
+    pub validators: Vec<ValidatorState>,
+}
+
+#[cw_serde]
+pub struct ValidatorState {
+    pub validator: String,
+    pub state: State,
 }
 
 /// Config information returned with query

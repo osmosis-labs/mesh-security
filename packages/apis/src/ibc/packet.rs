@@ -57,18 +57,43 @@ pub struct TransferRewardsAck {}
 /// ibc_packet_receive in external-staking must handle them all.
 #[cw_serde]
 pub enum ConsumerPacket {
-    /// This is sent when a new validator registers and is available to receive
-    /// delegations. This is also sent when a validator changes pubkey.
-    /// One such packet is sent right after the channel is opened to sync initial state
-    AddValidators(Vec<AddValidator>),
-    /// This is sent when a validator is tombstoned. Not just leaving the active state,
-    /// but when it is no longer a valid target to delegate to.
-    /// It contains a list of `valoper_address` to be removed, along with the removal's height.
-    TombstoneValidators(Vec<RemoveValidator>),
-    /// This is sent when a validator is jailed.
-    /// It contains a list of `valoper_address` to be slashed for temporary jailing, along with the
-    /// jail event's block height.
-    JailValidators(Vec<RemoveValidator>),
+    ValsetUpdate {
+        /// This is the height of the validator set update event.
+        /// It is used to index the validator update events on the Provider.
+        /// It can be used to detect slashing conditions, e.g. which header heights are punishable.
+        height: u64,
+        /// This is the timestamp of the update event.
+        /// It may be used for unbonding_period issues, maybe just for informational purposes.
+        /// Stored as unix seconds.
+        time: u64,
+        /// This is sent when a new validator registers and is available to receive delegations.
+        /// One such packet is sent right after the channel is opened to sync initial state.
+        /// If the validator already exists, or is tombstoned, this is a no-op for that validator.
+        additions: Vec<AddValidator>,
+        /// This is sent when a validator is removed from the active set because it doesn't have
+        /// enough stake to be part of it.
+        /// If the validator doesn't exist or is tombstoned, this is a no-op for that validator.
+        removals: Vec<String>,
+        /// This is sent sent when a validator changes pubkey. It will not change the validator's state.
+        /// If the validator doesn't exist or is tombstoned, this is a no-op for that validator.
+        updated: Vec<AddValidator>,
+        /// This is sent when a validator is removed from the active set because it's being jailed for
+        /// misbehaviour.
+        /// The validator will be slashed for being offline as well.
+        /// If the validator doesn't exist or is tombstoned, this is a no-op for that validator.
+        jailed: Vec<String>,
+        /// This is sent when a validator is a candidate to be added to the active set again.
+        /// If the validator is also in the `removals` list, it will be marked as inactive /
+        /// unbonded instead.
+        /// If the validator doesn't exist or is tombstoned, this is a no-op for that validator.
+        unjailed: Vec<String>,
+        /// This is sent when a validator is tombstoned. Not just leaving the active state,
+        /// but when it is no longer a valid target to delegate to.
+        /// The validator will be slashed for double signing as well.
+        /// If the validator doesn't exist or is already tombstoned, this is a no-op for that validator.
+        /// This has precedence over all other events in the same packet
+        tombstoned: Vec<String>,
+    },
     /// This is part of the rewards protocol
     Distribute {
         /// The validator whose stakers should receive these rewards
@@ -94,15 +119,6 @@ pub struct AddValidator {
     /// This is the *Tendermint* public key, used for signing blocks.
     /// This is needed to detect slashing conditions
     pub pub_key: String,
-
-    /// This is the first height the validator was active.
-    /// It is used to detect slashing conditions, eg which header heights are punishable.
-    pub start_height: u64,
-
-    /// This is the timestamp of the first block the validator was active.
-    /// It may be used for unbonding_period issues, maybe just for informational purposes.
-    /// Stored as unix seconds.
-    pub start_time: u64,
 }
 
 impl AddValidator {
@@ -110,39 +126,13 @@ impl AddValidator {
         Self {
             valoper: valoper.to_string(),
             pub_key: "mock-pubkey".to_string(),
-            start_height: 12345,
-            start_time: 1687357499,
         }
     }
 }
 
+/// Ack sent for ConsumerPacket::ValsetUpdate
 #[cw_serde]
-pub struct RemoveValidator {
-    /// This is the validator operator (valoper) address used for delegations and rewards
-    pub valoper: String,
-
-    /// This is the height the validator is being removed.
-    /// It is used to detect slashing conditions, that is, avoid slashing an already jailed or tombstoned
-    /// validator.
-    pub height: u64,
-
-    /// This is the timestamp of the block the validator was removed.
-    /// It may be used for unbonding_period issues, maybe just for informational purposes.
-    /// Stored as unix seconds.
-    pub time: u64,
-}
-
-/// Ack sent for ConsumerPacket::AddValidators
-#[cw_serde]
-pub struct AddValidatorsAck {}
-
-/// Ack sent for ConsumerPacket::RemoveValidators
-#[cw_serde]
-pub struct RemoveValidatorsAck {}
-
-/// Ack sent for ConsumerPacket::JailValidators
-#[cw_serde]
-pub struct JailValidatorsAck {}
+pub struct ValsetUpdateAck {}
 
 /// Ack sent for ConsumerPacket::Distribute and ConsumerPacket::DistributeBatch
 #[cw_serde]

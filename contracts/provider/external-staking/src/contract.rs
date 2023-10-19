@@ -6,13 +6,14 @@ use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
 use cw_utils::{nonpayable, PaymentError};
 use std::cmp::min;
+use std::collections::HashSet;
 
 use mesh_apis::converter_api::RewardInfo;
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use mesh_apis::cross_staking_api::{self};
-use mesh_apis::ibc::ProviderPacket;
+use mesh_apis::ibc::{AddValidator, ProviderPacket};
 use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
 use mesh_sync::{Tx, ValueRange};
 
@@ -21,8 +22,8 @@ use crate::error::ContractError;
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
 use crate::msg::{
     AllPendingRewards, AllTxsResponse, AuthorizedEndpointResponse, ConfigResponse,
-    IbcChannelResponse, ListRemoteValidatorsResponse, PendingRewards, StakeInfo, StakesResponse,
-    TxResponse, ValidatorPendingRewards,
+    IbcChannelResponse, ListActiveValidatorsResponse, ListValidatorsResponse, PendingRewards,
+    StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
 };
 use crate::stakes::Stakes;
 use crate::state::{Config, Distribution, Stake};
@@ -435,6 +436,132 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
+    /// In non-test code, this is called from `ibc_packet_ack`
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn valset_update(
+        &self,
+        deps: DepsMut,
+        env: Env,
+        height: u64,
+        time: u64,
+        additions: &[AddValidator],
+        removals: &[String],
+        updated: &[AddValidator],
+        jailed: &[String],
+        unjailed: &[String],
+        tombstoned: &[String],
+    ) -> Result<(Event, Vec<WasmMsg>), ContractError> {
+        let mut msgs = vec![];
+        let mut valopers: HashSet<String> = HashSet::new();
+        // Process tombstoning events first. Once tombstoned, a validator cannot be changed anymore.
+        for valoper in tombstoned {
+            // Check that the validator is active at height and slash it if that is the case
+            let active =
+                self.val_set
+                    .is_active_validator_at_height(deps.storage, valoper, height)?;
+            self.val_set
+                .tombstone_validator(deps.storage, valoper, height, time)?;
+            if active {
+                // Slash the validator (if bonded)
+                let slash_msg = self.handle_slashing(&env, deps.storage, valoper)?;
+                if let Some(msg) = slash_msg {
+                    msgs.push(msg)
+                }
+            }
+            // Maintenance
+            valopers.insert(valoper.clone());
+        }
+        // Process additions. Already existing validators will be updated and set to active.
+        // If the validator is tombstoned, this will be ignored.
+        for AddValidator { valoper, pub_key } in additions {
+            self.val_set
+                .add_validator(deps.storage, valoper, pub_key, height, time)?;
+            // Maintenance
+            valopers.insert(valoper.clone());
+        }
+        // Process removals. Non-existent validators will be ignored.
+        for valoper in removals {
+            self.val_set
+                .remove_validator(deps.storage, valoper, height, time)?;
+            // Maintenance
+            valopers.insert(valoper.clone());
+        }
+        // Process jailings. Non-existent validators will be ignored.
+        for valoper in jailed {
+            // Check that the validator is active at height and slash it if that is the case
+            let active =
+                self.val_set
+                    .is_active_validator_at_height(deps.storage, valoper, height)?;
+            self.val_set
+                .jail_validator(deps.storage, valoper, height, time)?;
+            if active {
+                // Slash the validator, if bonded
+                // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
+                let slash_msg = self.handle_slashing(&env, deps.storage, valoper)?;
+                if let Some(msg) = slash_msg {
+                    msgs.push(msg)
+                }
+            }
+            // Maintenance
+            valopers.insert(valoper.clone());
+        }
+        // Process unjailings. Does nothing at the moment, as we don't have a way to know if we the
+        // validator must go to the active or the unbonded state.
+
+        // Process updates. Non-existent and tombstoned validators will be ignored.
+        for AddValidator { valoper, pub_key } in updated {
+            self.val_set
+                .update_validator(deps.storage, valoper, pub_key, height, time)?;
+            // Maintenance
+            valopers.insert(valoper.clone());
+        }
+        // Maintenance. Drain events that are older than unbonding period from now
+        let cfg = self.config.load(deps.storage)?;
+        // Assumes time keeping is the same in both chains
+        let max_time = env
+            .block
+            .time
+            .seconds()
+            .saturating_sub(cfg.unbonding_period);
+        for valoper in valopers {
+            self.val_set.drain_older(deps.storage, &valoper, max_time)?;
+        }
+        let mut event = Event::new("valset_update");
+        if !additions.is_empty() {
+            event = event.add_attribute(
+                "additions",
+                additions
+                    .iter()
+                    .map(|v| v.valoper.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+        }
+        if !removals.is_empty() {
+            event = event.add_attribute("removals", removals.join(","));
+        }
+        if !updated.is_empty() {
+            event = event.add_attribute(
+                "updated",
+                updated
+                    .iter()
+                    .map(|v| v.valoper.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+        }
+        if !jailed.is_empty() {
+            event = event.add_attribute("jailed", jailed.join(","));
+        }
+        if !unjailed.is_empty() {
+            event = event.add_attribute("unjailed", unjailed.join(","));
+        }
+        if !tombstoned.is_empty() {
+            event = event.add_attribute("tombstoned", tombstoned.join(","));
+        }
+        Ok((event, msgs))
+    }
+
     /// Withdraws all of their released tokens to the calling user.
     ///
     /// Tokens to be claimed have to be unbond before by calling the `unbond` message, and
@@ -467,8 +594,7 @@ impl ExternalStakingContract<'_> {
 
                 Ok(released)
             })
-            .fold(Ok(Uint128::zero()), |acc, released| {
-                let acc = acc?;
+            .try_fold(Uint128::zero(), |acc, released| {
                 released.map(|released| released + acc)
             })?;
 
@@ -710,7 +836,7 @@ impl ExternalStakingContract<'_> {
         env: &Env,
         storage: &mut dyn Storage,
         validator: &str,
-    ) -> Result<WasmMsg, ContractError> {
+    ) -> Result<Option<WasmMsg>, ContractError> {
         let config = self.config.load(storage)?;
         // Get the list of users staking via this validator
         let users = self
@@ -725,6 +851,9 @@ impl ExternalStakingContract<'_> {
                 Ok::<_, ContractError>((user, stake))
             })
             .collect::<Result<Vec<_>, _>>()?;
+        if users.is_empty() {
+            return Ok(None);
+        }
 
         // Slash their stake in passing
         let mut slash_infos = vec![];
@@ -749,7 +878,7 @@ impl ExternalStakingContract<'_> {
             stake
                 .points_alignment
                 .stake_decreased(stake_slash, distribution.points_per_stake);
-            distribution.total_stake -= stake_slash;
+            distribution.total_stake = distribution.total_stake.saturating_sub(stake_slash); // Don't fail if pending bond tx
             self.distribution.save(storage, validator, &distribution)?;
 
             // Slash the unbondings
@@ -765,7 +894,7 @@ impl ExternalStakingContract<'_> {
 
         // Route associated users to vault for slashing of their collateral
         let msg = config.vault.process_cross_slashing(slash_infos)?;
-        Ok(msg)
+        Ok(Some(msg))
     }
 
     /// Queries for contract configuration
@@ -788,23 +917,46 @@ impl ExternalStakingContract<'_> {
     /// Query for the endpoint that can connect
     #[msg(query)]
     pub fn ibc_channel(&self, ctx: QueryCtx) -> Result<IbcChannelResponse, ContractError> {
-        let channel = crate::ibc::IBC_CHANNEL.load(ctx.deps.storage)?;
+        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
         Ok(IbcChannelResponse { channel })
     }
 
     /// Show all external validators that we know to be active (and can delegate to)
     #[msg(query)]
-    pub fn list_remote_validators(
+    pub fn list_active_validators(
         &self,
         ctx: QueryCtx,
         start_after: Option<String>,
         limit: Option<u64>,
-    ) -> Result<ListRemoteValidatorsResponse, ContractError> {
+    ) -> Result<ListActiveValidatorsResponse, ContractError> {
         let limit = limit.unwrap_or(100) as usize;
         let validators =
             self.val_set
                 .list_active_validators(ctx.deps.storage, start_after.as_deref(), limit)?;
-        Ok(ListRemoteValidatorsResponse { validators })
+        Ok(ListActiveValidatorsResponse { validators })
+    }
+
+    /// Show all external validators that we know about, along with their state.
+    #[msg(query)]
+    pub fn list_validators(
+        &self,
+        ctx: QueryCtx,
+        start_after: Option<String>,
+        limit: Option<u64>,
+    ) -> Result<ListValidatorsResponse, ContractError> {
+        let limit = limit.unwrap_or(100) as usize;
+        let validators = self
+            .val_set
+            .list_validators(ctx.deps.storage, start_after.as_deref(), limit)?
+            .into_iter()
+            .map(|(valoper, state)| {
+                Ok(crate::msg::ValidatorState {
+                    validator: valoper,
+                    state,
+                })
+            })
+            .collect::<StdResult<Vec<_>>>()?;
+        Ok(ListValidatorsResponse { validators })
     }
 
     /// Queries for stake info
@@ -1096,5 +1248,1045 @@ pub mod cross_staking {
                 max_slash: max_slashing,
             })
         }
+    }
+}
+
+// Some unit tests, to test valset updates and slashing side effects in isolation
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::{Attribute, Decimal, DepsMut};
+
+    use crate::crdt::State;
+    use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, ValidatorState};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use mesh_apis::cross_staking_api::CrossStakingApi;
+    use mesh_apis::vault_api::VaultApiExecMsg::CrossSlash;
+
+    static OSMO: &str = "uosmo";
+    static CREATOR: &str = "staking"; // The creator of the proxy contract(s) is the staking contract
+    static OWNER: &str = "user";
+
+    fn do_instantiate(deps: DepsMut) -> (ExecCtx, ExternalStakingContract) {
+        let contract = ExternalStakingContract::new();
+        let mut ctx = InstantiateCtx {
+            deps,
+            env: mock_env(),
+            info: mock_info(CREATOR, &[coin(100, OSMO)]),
+        };
+        contract
+            .instantiate(
+                ctx.branch(),
+                OSMO.to_owned(),
+                "ujuno".to_string(),
+                "vault_addr".to_string(),
+                100,
+                AuthorizedEndpoint {
+                    connection_id: "connection_id_1".to_string(),
+                    port_id: "port_id_1".to_string(),
+                },
+                Decimal::percent(10),
+            )
+            .unwrap();
+        let exec_ctx = ExecCtx {
+            deps: ctx.deps,
+            info: mock_info(OWNER, &[]),
+            env: ctx.env,
+        };
+        (exec_ctx, contract)
+    }
+
+    #[test]
+    fn instantiating() {
+        let mut deps = mock_dependencies();
+        let _ = do_instantiate(deps.as_mut());
+    }
+
+    #[test]
+    fn valset_update_happy_path() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add three new validators, and tombstone one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "carl".to_string(),
+                pub_key: "carl_pub_key".to_string(),
+            },
+        ];
+        let tombs = vec!["bob".to_string()];
+
+        let (evt, msgs) = contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env,
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &tombs,
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("additions", "alice,bob,carl"),
+                Attribute::new("tombstoned", "bob"),
+            ]
+        );
+
+        // Check there are no messages (edge case of tombstoning a validator that is not yet active)
+        assert!(msgs.is_empty());
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Tombstoned {}
+                },
+                ValidatorState {
+                    validator: "carl".to_string(),
+                    state: State::Active {}
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn valset_update_tombstoning_slashes() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add two new validators, tombstone one and check slashing
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Cross stake with bob
+        let mut stake_deps = ctx.deps.branch();
+        let vault_info = mock_info("vault_addr", &[]);
+        let stake_ctx = ExecCtx {
+            deps: stake_deps.branch(),
+            env: mock_env(),
+            info: vault_info,
+        };
+        contract
+            .receive_virtual_stake(
+                stake_ctx,
+                OWNER.to_string(),
+                coin(100, "uosmo"),
+                1,
+                to_binary(&ReceiveVirtualStake {
+                    validator: "bob".to_string(),
+                })
+                .unwrap(),
+            )
+            .unwrap();
+        // Commit stake
+        contract.commit_stake(stake_deps, 1).unwrap();
+
+        // Bob is tombstoned next
+        let update_ctx = ctx.branch();
+        let tombs = vec!["bob".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &tombs,
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+
+        // Check the slashing message
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(
+            msgs[0],
+            WasmMsg::Execute {
+                contract_addr: "vault_addr".to_string(),
+                msg: to_binary(&CrossSlash {
+                    slashes: vec![SlashInfo {
+                        user: OWNER.to_string(),
+                        slash: Uint128::new(10),
+                    }],
+                })
+                .unwrap(),
+                funds: vec![],
+            }
+        );
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Tombstoned {}
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn valset_update_tombstoning_slashes_pending_bond() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add two new validators, and tombstone one with a pending bond
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Cross stake with bob
+        let mut stake_deps = ctx.deps.branch();
+        let vault_info = mock_info("vault_addr", &[]);
+        let stake_ctx = ExecCtx {
+            deps: stake_deps.branch(),
+            env: mock_env(),
+            info: vault_info,
+        };
+        contract
+            .receive_virtual_stake(
+                stake_ctx,
+                OWNER.to_string(),
+                coin(100, "uosmo"),
+                1,
+                to_binary(&ReceiveVirtualStake {
+                    validator: "bob".to_string(),
+                })
+                .unwrap(),
+            )
+            .unwrap();
+        // Stake tx is pending
+
+        // Bob is tombstoned next
+        let update_ctx = ctx.branch();
+        let tombs = vec!["bob".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &tombs,
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+
+        // Check the slashing message
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(
+            msgs[0],
+            WasmMsg::Execute {
+                contract_addr: "vault_addr".to_string(),
+                msg: to_binary(&CrossSlash {
+                    slashes: vec![SlashInfo {
+                        user: OWNER.to_string(),
+                        slash: Uint128::new(10),
+                    }],
+                })
+                .unwrap(),
+                funds: vec![],
+            }
+        );
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Tombstoned {}
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn valset_update_tombstoning_slashes_pending_unbond() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add two new validators, and tombstone one with a pending unbond
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Cross stake with bob
+        let mut stake_deps = ctx.deps.branch();
+        let vault_info = mock_info("vault_addr", &[]);
+        let stake_ctx = ExecCtx {
+            deps: stake_deps.branch(),
+            env: mock_env(),
+            info: vault_info,
+        };
+        contract
+            .receive_virtual_stake(
+                stake_ctx,
+                OWNER.to_string(),
+                coin(100, "uosmo"),
+                1,
+                to_binary(&ReceiveVirtualStake {
+                    validator: "bob".to_string(),
+                })
+                .unwrap(),
+            )
+            .unwrap();
+        // Commit stake
+        contract.commit_stake(stake_deps, 1).unwrap();
+
+        // OWNER then cross-unstakes half of the stake
+        let mut stake_deps = ctx.deps.branch();
+        let owner_info = mock_info(OWNER, &[]);
+        let stake_ctx = ExecCtx {
+            deps: stake_deps.branch(),
+            env: mock_env(),
+            info: owner_info,
+        };
+        contract
+            .unstake(stake_ctx, "bob".to_string(), coin(50, "uosmo"))
+            .unwrap();
+        // Unstake tx is pending
+
+        // Bob is tombstoned next
+        let update_ctx = ctx.branch();
+        let tombs = vec!["bob".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &tombs,
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+
+        // Check the slashing message
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(
+            msgs[0],
+            WasmMsg::Execute {
+                contract_addr: "vault_addr".to_string(),
+                msg: to_binary(&CrossSlash {
+                    slashes: vec![SlashInfo {
+                        user: OWNER.to_string(),
+                        slash: Uint128::new(10), // Owner is slashed over the full stake, including pending
+                    }],
+                })
+                .unwrap(),
+                funds: vec![],
+            }
+        );
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Tombstoned {}
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn valset_update_tombstoning_slashes_no_stake() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add two new validators, and tombstone one unbonded one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+        // Bob has no cross-delegations (which can be possible)
+
+        // Bob is tombstoned next
+        let update_ctx = ctx.branch();
+        let tombs = vec!["bob".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &tombs,
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+
+        // Check that no slashing message is emitted
+        assert_eq!(msgs.len(), 0);
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Tombstoned {}
+                },
+            ]
+        );
+    }
+
+    /// Tombstoning of a nonexistent validator is supported for robustness.
+    /// No slashing is performed (non-existent validator assumed to be inactive).
+    #[test]
+    fn valset_update_tombstoning_nonexistent_validator() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add two new validators, and tombstone no-one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Carl is tombstoned next
+        let update_ctx = ctx.branch();
+        let tombs = vec!["carl".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &tombs,
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "carl"),]);
+
+        // Check that no slashing message is emitted
+        assert_eq!(msgs.len(), 0);
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "carl".to_string(),
+                    state: State::Tombstoned {}
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn valset_update_unjailing_noop() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add two new validators, and jail/unjail one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Bob is jailed next
+        let update_ctx = ctx.branch();
+        let jails = vec!["bob".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &jails,
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("jailed", "bob"),]);
+
+        // Check there's no message
+        assert_eq!(msgs.len(), 0);
+
+        // Bob is unjailed next
+        let update_ctx = ctx.branch();
+        let unjails = vec!["bob".to_string()];
+        let (evt, _msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &[],
+                &unjails,
+                &[],
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("unjailed", "bob"),]);
+
+        // Check that unjail is a no-op
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Jailed {}
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn valset_update_jailing_slashes() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add two new validators, and jail one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Cross stake with bob
+        let mut stake_deps = ctx.deps.branch();
+        let vault_info = mock_info("vault_addr", &[]);
+        let stake_ctx = ExecCtx {
+            deps: stake_deps.branch(),
+            env: mock_env(),
+            info: vault_info,
+        };
+        contract
+            .receive_virtual_stake(
+                stake_ctx,
+                OWNER.to_string(),
+                coin(100, "uosmo"),
+                1,
+                to_binary(&ReceiveVirtualStake {
+                    validator: "bob".to_string(),
+                })
+                .unwrap(),
+            )
+            .unwrap();
+        // Commit stake
+        contract.commit_stake(stake_deps, 1).unwrap();
+
+        // Bob is jailed next
+        let update_ctx = ctx.branch();
+        let jails = vec!["bob".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &[],
+                &[],
+                &jails,
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("jailed", "bob"),]);
+
+        // Check the slashing message
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(
+            msgs[0],
+            WasmMsg::Execute {
+                contract_addr: "vault_addr".to_string(),
+                msg: to_binary(&CrossSlash {
+                    slashes: vec![SlashInfo {
+                        user: OWNER.to_string(),
+                        slash: Uint128::new(10),
+                    }],
+                })
+                .unwrap(),
+                funds: vec![],
+            }
+        );
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Jailed {}
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn valset_update_removal_works() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add two new validators, and remove one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Bob is removed next
+        let update_ctx = ctx.branch();
+        let rems = vec!["bob".to_string()];
+        let (evt, msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &rems,
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("removals", "bob"),]);
+
+        // Check there's no slashing message
+        assert_eq!(msgs.len(), 0);
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Unbonded {}
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn valset_update_updates_keep_state() {
+        let mut deps = mock_dependencies();
+        let (mut ctx, contract) = do_instantiate(deps.as_mut());
+
+        // We add two new validators, and remove/update one
+        let adds = vec![
+            AddValidator {
+                valoper: "alice".to_string(),
+                pub_key: "alice_pub_key".to_string(),
+            },
+            AddValidator {
+                valoper: "bob".to_string(),
+                pub_key: "bob_pub_key".to_string(),
+            },
+        ];
+
+        contract
+            .valset_update(
+                ctx.deps.branch(),
+                ctx.env.clone(),
+                100,
+                1234,
+                &adds,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Bob is removed next
+        let update_ctx = ctx.branch();
+        let rems = vec!["bob".to_string()];
+        let (evt, _msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                200,
+                2345,
+                &[],
+                &rems,
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("removals", "bob"),]);
+
+        // Bob is updated next
+        let update_ctx = ctx.branch();
+        let upds = vec![AddValidator {
+            valoper: "bob".to_string(),
+            pub_key: "bob_pub_key_updated".to_string(),
+        }];
+        let (evt, _msgs) = contract
+            .valset_update(
+                update_ctx.deps,
+                update_ctx.env,
+                300,
+                3456,
+                &[],
+                &[],
+                &upds,
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        // Check the event
+        assert_eq!(evt.attributes, vec![Attribute::new("updated", "bob"),]);
+
+        let query_deps = ctx.deps;
+        let query_ctx = QueryCtx {
+            deps: query_deps.as_ref(),
+            env: mock_env(),
+        };
+
+        // Check that bob is still unbonded
+        let vals = contract.list_validators(query_ctx, None, None).unwrap();
+        assert_eq!(
+            vals.validators,
+            vec![
+                ValidatorState {
+                    validator: "alice".to_string(),
+                    state: State::Active {}
+                },
+                ValidatorState {
+                    validator: "bob".to_string(),
+                    state: State::Unbonded {}
+                },
+            ]
+        );
     }
 }
