@@ -1,3 +1,8 @@
+# 0.8.0-alpha.1
+
+- Disable native staking in vault.
+- Valset updates for external-staking.
+
 # 0.7.0-alpha.2
 
 - Remove empty messages / events.
