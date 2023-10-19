@@ -17,7 +17,7 @@ use mesh_apis::ibc::{AddValidator, ProviderPacket};
 use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
 use mesh_sync::{Tx, ValueRange};
 
-use crate::crdt::{CrdtState, State, ValState};
+use crate::crdt::CrdtState;
 use crate::error::ContractError;
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
 use crate::msg::{
@@ -248,16 +248,12 @@ impl ExternalStakingContract<'_> {
     #[msg(exec)]
     pub fn unstake(
         &self,
-        mut ctx: ExecCtx,
+        ctx: ExecCtx,
         validator: String,
         amount: Coin,
     ) -> Result<Response, ContractError> {
-        let ExecCtx {
-            ref info,
-            ref mut deps,
-            ref env,
-        } = ctx;
-        nonpayable(info)?;
+        let ExecCtx { info, deps, env } = ctx;
+        nonpayable(&info)?;
 
         let config = self.config.load(deps.storage)?;
 
@@ -300,18 +296,18 @@ impl ExternalStakingContract<'_> {
         let mut resp = Response::new()
             .add_attribute("action", "unstake")
             .add_attribute("amount", amount.amount.to_string())
-            .add_attribute("owner", info.sender.clone());
+            .add_attribute("owner", info.sender);
 
         let channel = IBC_CHANNEL.load(deps.storage)?;
         let packet = ProviderPacket::Unstake {
-            validator: validator.clone(),
+            validator,
             unstake: amount,
             tx_id,
         };
         let msg = IbcMsg::SendPacket {
             channel_id: channel.endpoint.channel_id,
             data: to_binary(&packet)?,
-            timeout: packet_timeout(env),
+            timeout: packet_timeout(&env),
         };
         // send packet if we are ibc enabled
         // TODO: send in test code when we can handle it
@@ -322,21 +318,6 @@ impl ExternalStakingContract<'_> {
         #[cfg(any(test, feature = "mt"))]
         {
             let _ = msg;
-        }
-
-        if let Some(ValState {
-            state: State::Unbonded {},
-            ..
-        }) = self.val_set.active_validator(deps.storage, &validator)?
-        {
-            // since the validator is unbonded, we shouldn't have to
-            // wait for the unbonding period to finish to unstake
-            let withdraw_resp = self.withdraw_unbonded(ctx)?;
-
-            // combine responses
-            resp = resp.add_attributes(withdraw_resp.attributes);
-            resp = resp.add_events(withdraw_resp.events);
-            resp = resp.add_submessages(withdraw_resp.messages);
         }
 
         Ok(resp)
