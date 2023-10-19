@@ -280,7 +280,7 @@ fn releasing_proxy_stake() {
     );
 
     // Access staking instance
-    let proxy = NativeStakingProxyContractProxy::new(Addr::unchecked(proxy_addr), &app);
+    let staking_proxy = NativeStakingProxyContractProxy::new(Addr::unchecked(proxy_addr), &app);
 
     // User bonds some funds to the vault
     vault
@@ -327,14 +327,8 @@ fn releasing_proxy_stake() {
     // The other half is delegated
     assert_delegations(&app, proxy_addr, &[(validator, 100)]);
 
-    // Now release the funds (as if called from the user's staking proxy)
-    // staking
-    //     .native_staking_callback_proxy()
-    //     .release_proxy_stake()
-    //     .with_funds(&coins(100, OSMO))
-    //     .call(proxy_addr)
-    //     .unwrap();
-    proxy
+    // Now release the funds
+    staking_proxy
         .unstake(validator.to_string(), coin(100, OSMO))
         .call(user)
         .unwrap();
@@ -343,7 +337,7 @@ fn releasing_proxy_stake() {
             cw_multi_test::StakingSudo::ProcessQueue {},
         ))
         .unwrap();
-    proxy.release_unbonded().call(user).unwrap();
+    staking_proxy.release_unbonded().call(user).unwrap();
 
     // Check that the vault has the funds again
     assert_eq!(
