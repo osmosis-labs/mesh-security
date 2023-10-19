@@ -68,7 +68,7 @@ pub struct LienResponse {
 #[cw_serde]
 pub struct ConfigResponse {
     pub denom: String,
-    pub local_staking: String,
+    pub local_staking: Option<String>,
 }
 
 pub type TxResponse = Tx;
