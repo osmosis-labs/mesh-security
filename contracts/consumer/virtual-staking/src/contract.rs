@@ -731,17 +731,31 @@ mod tests {
             ]
         );
 
-        // FIXME: Subsequent rewards msgs could be removed while validator is jailed / inactive
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_rewards(&["val1", "val2"]); // But rewards are still being gathered
+        // Subsequent rewards msgs are removed while validator is jailed / inactive
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val2"]);
 
+        // Unjail does nothing
         contract.unjail(deps.as_mut(), "val1");
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after unjailing
             .assert_unbond(&[]) // No unbond msgs after unjailing
-            .assert_rewards(&["val1", "val2"]); // Rewards are gathered
+            .assert_rewards(&["val2"]);
+        // Removal does nothing (already removed)
+        contract.remove_val(deps.as_mut(), "val1");
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after unjailing
+            .assert_unbond(&[]) // No unbond msgs after unjailing
+            .assert_rewards(&["val2"]);
+
+        // Addition restores the validator to the active set
+        contract.add_val(deps.as_mut(), "val1");
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after unjailing
+            .assert_unbond(&[]) // No unbond msgs after unjailing
+            .assert_rewards(&["val1", "val2"]);
     }
 
     #[test]
@@ -808,7 +822,8 @@ mod tests {
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
 
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+        // No rewards gatherings after the first one for the jailed validator
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
 
         // Unjail over unbonded has no effect
         contract.unjail(deps.as_mut(), "val1");
@@ -816,7 +831,7 @@ mod tests {
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after unjailing
             .assert_unbond(&[]) // No unbond msgs after unjailing
-            .assert_rewards(&["val1"]);
+            .assert_rewards(&[]);
 
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
@@ -838,8 +853,16 @@ mod tests {
             .assert_rewards(&[]);
 
         contract.remove_val(deps.as_mut(), "val1");
-        // FIXME: Subsequent rewards msgs could be removed while validator is inactive
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+        // Subsequent rewards msgs are removed while validator is inactive
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
+
+        // Addition restores the validator to the active set
+        contract.add_val(deps.as_mut(), "val1");
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after unjailing
+            .assert_unbond(&[]) // No unbond msgs after unjailing
+            .assert_rewards(&["val1"]); // Rewards are being gathered again
     }
 
     #[test]
@@ -878,10 +901,8 @@ mod tests {
             ]
         );
 
-        // FIXME: Subsequent rewards msgs could be removed after validator is tombstoned
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_rewards(&["val1", "val2"]);
+        // Subsequent rewards msgs are removed after validator is tombstoned
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val2"]);
     }
 
     #[test]
@@ -920,8 +941,8 @@ mod tests {
             ]
         );
 
-        // FIXME: Subsequent rewards msgs could be removed after validator is tombstoned
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+        // Subsequent rewards msgs are removed after validator is tombstoned
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
     }
 
     #[test]
@@ -956,8 +977,8 @@ mod tests {
         //  FIXME: Remove zero amounts
         assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
 
-        // FIXME: Subsequent rewards msgs could be removed after validator is tombstoned
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+        // Subsequent rewards msgs are removed after validator is tombstoned
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
     }
 
     #[test]
@@ -1133,6 +1154,7 @@ mod tests {
         fn jail(&self, deps: DepsMut, val: &str);
         fn unjail(&self, deps: DepsMut, val: &str);
         fn tombstone(&self, deps: DepsMut, val: &str);
+        fn add_val(&self, deps: DepsMut, val: &str);
         fn remove_val(&self, deps: DepsMut, val: &str);
     }
 
@@ -1225,6 +1247,17 @@ mod tests {
 
         fn tombstone(&self, deps: DepsMut, val: &str) {
             self.handle_valset_update(deps, &[], &[], &[], &[], &[], &[val.to_string()])
+                .unwrap();
+        }
+
+        fn add_val(&self, deps: DepsMut, val: &str) {
+            let val = cosmwasm_std::Validator {
+                address: val.to_string(),
+                commission: Default::default(),
+                max_commission: Default::default(),
+                max_change_rate: Default::default(),
+            };
+            self.handle_valset_update(deps, &[val], &[], &[], &[], &[], &[])
                 .unwrap();
         }
 
