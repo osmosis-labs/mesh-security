@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 
 use cosmwasm_std::{
@@ -116,7 +116,8 @@ impl VirtualStakingContract<'_> {
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         // withdraw rewards
         let bonded = self.bonded.load(deps.storage)?;
-        let withdraw = withdraw_reward_msgs(deps.branch(), &bonded);
+        let inactive = self.inactive.load(deps.storage)?;
+        let withdraw = withdraw_reward_msgs(deps.branch(), &bonded, &inactive);
         let resp = Response::new().add_submessages(withdraw);
 
         let bond =
@@ -236,16 +237,20 @@ impl VirtualStakingContract<'_> {
         tombstoned: &[String],
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         // Account for tombstoned validators. Will be processed in handle_epoch
-        self.tombstone_requests.update(deps.storage, |mut old| {
-            old.extend_from_slice(tombstoned);
-            Ok::<_, ContractError>(old)
-        })?;
+        if !tombstoned.is_empty() {
+            self.tombstone_requests.update(deps.storage, |mut old| {
+                old.extend_from_slice(tombstoned);
+                Ok::<_, ContractError>(old)
+            })?;
+        }
 
         // Account for jailed validators. Will be processed in handle_epoch
-        self.jail_requests.update(deps.storage, |mut old| {
-            old.extend_from_slice(jailed);
-            Ok::<_, ContractError>(old)
-        })?;
+        if !jailed.is_empty() {
+            self.jail_requests.update(deps.storage, |mut old| {
+                old.extend_from_slice(jailed);
+                Ok::<_, ContractError>(old)
+            })?;
+        }
 
         // Update inactive list.
         // We ignore `unjailed` as it's not clear they make the validator active again or not.
@@ -461,7 +466,14 @@ impl<'a> ValidatorRewardsBatch<'a> {
 fn withdraw_reward_msgs<T: CustomQuery>(
     deps: DepsMut<T>,
     bonded: &[(String, Uint128)],
+    inactive: &[String],
 ) -> Vec<SubMsg<VirtualStakeCustomMsg>> {
+    // Filter out inactive validators
+    let inactive = inactive.iter().collect::<HashSet<_>>();
+    let bonded = bonded
+        .iter()
+        .filter(|(v, _)| !inactive.contains(v))
+        .collect::<Vec<_>>();
     // We need to make a list, so we know where to send the rewards later (reversed, so we can pop off the top)
     let targets = bonded
         .iter()
