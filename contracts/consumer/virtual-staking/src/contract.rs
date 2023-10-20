@@ -472,7 +472,7 @@ fn withdraw_reward_msgs<T: CustomQuery>(
     let inactive = inactive.iter().collect::<HashSet<_>>();
     let bonded = bonded
         .iter()
-        .filter(|(v, _)| !inactive.contains(v))
+        .filter(|(validator, amount)| !amount.is_zero() && !inactive.contains(validator))
         .collect::<Vec<_>>();
     // We need to make a list, so we know where to send the rewards later (reversed, so we can pop off the top)
     let targets = bonded
