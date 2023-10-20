@@ -45,6 +45,10 @@ pub struct VirtualStakingContract<'a> {
     /// This is what validators have been requested to be slashed due to jailing.
     // The list will be cleared after processing in `handle_epoch`.
     pub jail_requests: Item<'a, Vec<String>>,
+    /// This is what validators are inactive because of tombstoning, jailing or removal (unbonded).
+    // `inactive` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
+    // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
+    pub inactive: Item<'a, Vec<String>>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -60,6 +64,7 @@ impl VirtualStakingContract<'_> {
             bonded: Item::new("bonded"),
             tombstone_requests: Item::new("tombstoned"),
             jail_requests: Item::new("jailed"),
+            inactive: Item::new("inactive"),
         }
     }
 
@@ -77,6 +82,7 @@ impl VirtualStakingContract<'_> {
         self.bonded.save(ctx.deps.storage, &vec![])?;
         self.tombstone_requests.save(ctx.deps.storage, &vec![])?;
         self.jail_requests.save(ctx.deps.storage, &vec![])?;
+        self.inactive.save(ctx.deps.storage, &vec![])?;
         VALIDATOR_REWARDS_BATCH.init(ctx.deps.storage)?;
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -127,21 +133,28 @@ impl VirtualStakingContract<'_> {
         // Make current bonded mutable
         let mut current = bonded;
         // Process tombstoning (unbonded) and jailing (slashed) over bond_requests and current
-        let tombstoned = self.tombstone_requests.load(deps.storage)?;
-        let jailed = self.jail_requests.load(deps.storage)?;
-        if !tombstoned.is_empty() || !jailed.is_empty() {
+        let tombstone = self.tombstone_requests.load(deps.storage)?;
+        let jail = self.jail_requests.load(deps.storage)?;
+        if !tombstone.is_empty() || !jail.is_empty() {
             let ratios = TokenQuerier::new(&deps.querier).slash_ratio()?;
             let slash_ratio_double_sign = Decimal::from_str(&ratios.slash_fraction_double_sign)?;
             let slash_ratio_downtime = Decimal::from_str(&ratios.slash_fraction_downtime)?;
             self.adjust_slashings(
                 deps.storage,
                 &mut current,
-                tombstoned,
-                jailed,
+                &tombstone,
+                &jail,
                 slash_ratio_double_sign,
                 slash_ratio_downtime,
             )?;
-            // Clear up both lists
+            // Update inactive list
+            self.inactive.update(deps.storage, |mut old| {
+                old.extend_from_slice(&tombstone);
+                old.extend_from_slice(&jail);
+                old.dedup();
+                Ok::<_, ContractError>(old)
+            })?;
+            // Clear up both requests
             self.tombstone_requests.save(deps.storage, &vec![])?;
             self.jail_requests.save(deps.storage, &vec![])?;
         }
@@ -173,13 +186,13 @@ impl VirtualStakingContract<'_> {
         &self,
         storage: &mut dyn Storage,
         current: &mut [(String, Uint128)],
-        tombstones: Vec<String>,
-        jailing: Vec<String>,
+        tombstones: &[String],
+        jailing: &[String],
         slash_ratio_tombstoning: Decimal,
         slash_ratio_jailing: Decimal,
     ) -> StdResult<()> {
-        let tombstones: BTreeSet<_> = tombstones.into_iter().collect();
-        let jailing: BTreeSet<_> = jailing.into_iter().collect();
+        let tombstones: BTreeSet<_> = tombstones.iter().collect();
+        let jailing: BTreeSet<_> = jailing.iter().collect();
 
         // this is linear over current, but better than turn it in to a map
         for (validator, prev) in current {
@@ -234,6 +247,18 @@ impl VirtualStakingContract<'_> {
             Ok::<_, ContractError>(old)
         })?;
 
+        // Update inactive list.
+        // We ignore `unjailed` as it's not clear they make the validator active again or not.
+        if !removals.is_empty() || !additions.is_empty() {
+            self.inactive.update(deps.storage, |mut old| {
+                // Add removals
+                old.extend_from_slice(removals);
+                // Filter additions
+                old.retain(|v| !additions.iter().any(|a| a.address == *v));
+                old.dedup();
+                Ok::<_, ContractError>(old)
+            })?;
+        }
         // Send all updates to the Converter.
         let cfg = self.config.load(deps.storage)?;
         let msg = converter_api::ExecMsg::ValsetUpdate {
