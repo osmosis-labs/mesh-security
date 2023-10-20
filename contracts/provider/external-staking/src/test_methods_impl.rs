@@ -67,13 +67,38 @@ impl TestMethods for ExternalStakingContract<'_> {
         }
     }
 
+    /// Sets validator as `unbonded`.
+    #[msg(exec)]
+    fn test_remove_validator(
+        &self,
+        ctx: ExecCtx,
+        valoper: String,
+        height: u64,
+        time: u64,
+    ) -> Result<Response, ContractError> {
+        #[cfg(any(feature = "mt", test))]
+        {
+            self.val_set
+                .remove_validator(ctx.deps.storage, &valoper, height, time)?;
+            Ok(Response::new())
+        }
+        #[cfg(not(any(feature = "mt", test)))]
+        {
+            let _ = (ctx, valoper, height, time);
+            Err(ContractError::Unauthorized {})
+        }
+    }
+
     /// Commits a pending unstake.
     #[msg(exec)]
     fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
-            self.commit_unstake(ctx.deps, ctx.env, tx_id)?;
-            Ok(Response::new())
+            if let Some(msg) = self.commit_unstake(ctx.deps, ctx.env, tx_id)? {
+                Ok(Response::new().add_message(msg))
+            } else {
+                Ok(Response::new())
+            }
         }
         #[cfg(not(any(test, feature = "mt")))]
         {

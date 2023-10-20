@@ -28,6 +28,16 @@ pub trait TestMethods {
         time: u64,
     ) -> Result<Response, Self::Error>;
 
+    /// Sets validator as `unbonded`.
+    #[msg(exec)]
+    fn test_remove_validator(
+        &self,
+        ctx: ExecCtx,
+        valoper: String,
+        height: u64,
+        time: u64,
+    ) -> Result<Response, Self::Error>;
+
     /// Commits a pending unstake.
     #[msg(exec)]
     fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
