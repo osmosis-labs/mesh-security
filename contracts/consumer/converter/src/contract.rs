@@ -363,6 +363,7 @@ impl ConverterApi for ConverterContract<'_> {
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
 
         let mut event = Event::new("valset_update");
+        let mut is_empty = true;
 
         if !additions.is_empty() {
             event = event.add_attribute(
@@ -373,9 +374,11 @@ impl ConverterApi for ConverterContract<'_> {
                     .collect::<Vec<String>>()
                     .join(","),
             );
+            is_empty = false;
         }
         if !removals.is_empty() {
             event = event.add_attribute("removals", removals.join(","));
+            is_empty = false;
         }
         if !updated.is_empty() {
             event = event.add_attribute(
@@ -386,18 +389,22 @@ impl ConverterApi for ConverterContract<'_> {
                     .collect::<Vec<String>>()
                     .join(","),
             );
+            is_empty = false;
         }
         if !jailed.is_empty() {
             event = event.add_attribute("jailed", jailed.join(","));
+            is_empty = false;
         }
         if !unjailed.is_empty() {
             event = event.add_attribute("unjailed", unjailed.join(","));
+            is_empty = false;
         }
         if !tombstoned.is_empty() {
             event = event.add_attribute("tombstoned", tombstoned.join(","));
+            is_empty = false;
         }
         let mut resp = Response::new();
-        if !event.attributes.is_empty() {
+        if !is_empty {
             let valset_msg = valset_update_msg(
                 &ctx.env,
                 &channel,

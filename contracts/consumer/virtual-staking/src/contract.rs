@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 
 use cosmwasm_std::{
@@ -39,12 +39,16 @@ pub struct VirtualStakingContract<'a> {
     // `bonded` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
     pub bonded: Item<'a, Vec<(String, Uint128)>>,
-    /// This is what validators have been fully unbonded due to tombstoning
-    // The list will be cleared after processing in handle_epoch.
-    pub tombstoned: Item<'a, Vec<String>>,
-    /// This is what validators have been slashed due to jailing.
-    // The list will be cleared after processing in handle_epoch.
-    pub jailed: Item<'a, Vec<String>>,
+    /// This is what validators have been requested to be slashed due to tombstoning.
+    // The list will be cleared after processing in `handle_epoch`.
+    pub tombstone_requests: Item<'a, Vec<String>>,
+    /// This is what validators have been requested to be slashed due to jailing.
+    // The list will be cleared after processing in `handle_epoch`.
+    pub jail_requests: Item<'a, Vec<String>>,
+    /// This is what validators are inactive because of tombstoning, jailing or removal (unbonded).
+    // `inactive` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
+    // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
+    pub inactive: Item<'a, Vec<String>>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -58,8 +62,9 @@ impl VirtualStakingContract<'_> {
             config: Item::new("config"),
             bond_requests: Map::new("bond_requests"),
             bonded: Item::new("bonded"),
-            tombstoned: Item::new("tombstoned"),
-            jailed: Item::new("jailed"),
+            tombstone_requests: Item::new("tombstoned"),
+            jail_requests: Item::new("jailed"),
+            inactive: Item::new("inactive"),
         }
     }
 
@@ -75,8 +80,9 @@ impl VirtualStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         // initialize these to no one, so no issue when reading for the first time
         self.bonded.save(ctx.deps.storage, &vec![])?;
-        self.tombstoned.save(ctx.deps.storage, &vec![])?;
-        self.jailed.save(ctx.deps.storage, &vec![])?;
+        self.tombstone_requests.save(ctx.deps.storage, &vec![])?;
+        self.jail_requests.save(ctx.deps.storage, &vec![])?;
+        self.inactive.save(ctx.deps.storage, &vec![])?;
         VALIDATOR_REWARDS_BATCH.init(ctx.deps.storage)?;
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -110,7 +116,8 @@ impl VirtualStakingContract<'_> {
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         // withdraw rewards
         let bonded = self.bonded.load(deps.storage)?;
-        let withdraw = withdraw_reward_msgs(deps.branch(), &bonded);
+        let inactive = self.inactive.load(deps.storage)?;
+        let withdraw = withdraw_reward_msgs(deps.branch(), &bonded, &inactive);
         let resp = Response::new().add_submessages(withdraw);
 
         let bond =
@@ -127,23 +134,30 @@ impl VirtualStakingContract<'_> {
         // Make current bonded mutable
         let mut current = bonded;
         // Process tombstoning (unbonded) and jailing (slashed) over bond_requests and current
-        let tombstoned = self.tombstoned.load(deps.storage)?;
-        let jailed = self.jailed.load(deps.storage)?;
-        if !tombstoned.is_empty() || !jailed.is_empty() {
+        let tombstone = self.tombstone_requests.load(deps.storage)?;
+        let jail = self.jail_requests.load(deps.storage)?;
+        if !tombstone.is_empty() || !jail.is_empty() {
             let ratios = TokenQuerier::new(&deps.querier).slash_ratio()?;
             let slash_ratio_double_sign = Decimal::from_str(&ratios.slash_fraction_double_sign)?;
             let slash_ratio_downtime = Decimal::from_str(&ratios.slash_fraction_downtime)?;
             self.adjust_slashings(
                 deps.storage,
                 &mut current,
-                tombstoned,
-                jailed,
+                &tombstone,
+                &jail,
                 slash_ratio_double_sign,
                 slash_ratio_downtime,
             )?;
-            // Clear up both lists
-            self.tombstoned.save(deps.storage, &vec![])?;
-            self.jailed.save(deps.storage, &vec![])?;
+            // Update inactive list
+            self.inactive.update(deps.storage, |mut old| {
+                old.extend_from_slice(&tombstone);
+                old.extend_from_slice(&jail);
+                old.dedup();
+                Ok::<_, ContractError>(old)
+            })?;
+            // Clear up both requests
+            self.tombstone_requests.save(deps.storage, &vec![])?;
+            self.jail_requests.save(deps.storage, &vec![])?;
         }
 
         // calculate what the delegations should be when we are done
@@ -173,13 +187,13 @@ impl VirtualStakingContract<'_> {
         &self,
         storage: &mut dyn Storage,
         current: &mut [(String, Uint128)],
-        tombstones: Vec<String>,
-        jailing: Vec<String>,
+        tombstones: &[String],
+        jailing: &[String],
         slash_ratio_tombstoning: Decimal,
         slash_ratio_jailing: Decimal,
     ) -> StdResult<()> {
-        let tombstones: BTreeSet<_> = tombstones.into_iter().collect();
-        let jailing: BTreeSet<_> = jailing.into_iter().collect();
+        let tombstones: BTreeSet<_> = tombstones.iter().collect();
+        let jailing: BTreeSet<_> = jailing.iter().collect();
 
         // this is linear over current, but better than turn it in to a map
         for (validator, prev) in current {
@@ -222,20 +236,34 @@ impl VirtualStakingContract<'_> {
         unjailed: &[String],
         tombstoned: &[String],
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        let _ = (removals, updated, unjailed);
-
         // Account for tombstoned validators. Will be processed in handle_epoch
-        self.tombstoned.update(deps.storage, |mut old| {
-            old.extend_from_slice(tombstoned);
-            Ok::<_, ContractError>(old)
-        })?;
+        if !tombstoned.is_empty() {
+            self.tombstone_requests.update(deps.storage, |mut old| {
+                old.extend_from_slice(tombstoned);
+                Ok::<_, ContractError>(old)
+            })?;
+        }
 
         // Account for jailed validators. Will be processed in handle_epoch
-        self.jailed.update(deps.storage, |mut old| {
-            old.extend_from_slice(jailed);
-            Ok::<_, ContractError>(old)
-        })?;
+        if !jailed.is_empty() {
+            self.jail_requests.update(deps.storage, |mut old| {
+                old.extend_from_slice(jailed);
+                Ok::<_, ContractError>(old)
+            })?;
+        }
 
+        // Update inactive list.
+        // We ignore `unjailed` as it's not clear they make the validator active again or not.
+        if !removals.is_empty() || !additions.is_empty() {
+            self.inactive.update(deps.storage, |mut old| {
+                // Add removals
+                old.extend_from_slice(removals);
+                // Filter additions
+                old.retain(|v| !additions.iter().any(|a| a.address == *v));
+                old.dedup();
+                Ok::<_, ContractError>(old)
+            })?;
+        }
         // Send all updates to the Converter.
         let cfg = self.config.load(deps.storage)?;
         let msg = converter_api::ExecMsg::ValsetUpdate {
@@ -438,7 +466,14 @@ impl<'a> ValidatorRewardsBatch<'a> {
 fn withdraw_reward_msgs<T: CustomQuery>(
     deps: DepsMut<T>,
     bonded: &[(String, Uint128)],
+    inactive: &[String],
 ) -> Vec<SubMsg<VirtualStakeCustomMsg>> {
+    // Filter out inactive validators
+    let inactive = inactive.iter().collect::<HashSet<_>>();
+    let bonded = bonded
+        .iter()
+        .filter(|(validator, amount)| !amount.is_zero() && !inactive.contains(validator))
+        .collect::<Vec<_>>();
     // We need to make a list, so we know where to send the rewards later (reversed, so we can pop off the top)
     let targets = bonded
         .iter()
@@ -696,17 +731,31 @@ mod tests {
             ]
         );
 
-        // FIXME: Subsequent rewards msgs could be removed while validator is jailed / inactive
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_rewards(&["val1", "val2"]); // But rewards are still being gathered
+        // Subsequent rewards msgs are removed while validator is jailed / inactive
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val2"]);
 
+        // Unjail does nothing
         contract.unjail(deps.as_mut(), "val1");
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after unjailing
             .assert_unbond(&[]) // No unbond msgs after unjailing
-            .assert_rewards(&["val1", "val2"]); // Rewards are gathered
+            .assert_rewards(&["val2"]);
+        // Removal does nothing (already removed)
+        contract.remove_val(deps.as_mut(), "val1");
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after unjailing
+            .assert_unbond(&[]) // No unbond msgs after unjailing
+            .assert_rewards(&["val2"]);
+
+        // Addition restores the validator to the active set
+        contract.add_val(deps.as_mut(), "val1");
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after unjailing
+            .assert_unbond(&[]) // No unbond msgs after unjailing
+            .assert_rewards(&["val1", "val2"]);
     }
 
     #[test]
@@ -773,7 +822,8 @@ mod tests {
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
 
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+        // No rewards gatherings after the first one for the jailed validator
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
 
         // Unjail over unbonded has no effect
         contract.unjail(deps.as_mut(), "val1");
@@ -781,7 +831,7 @@ mod tests {
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after unjailing
             .assert_unbond(&[]) // No unbond msgs after unjailing
-            .assert_rewards(&["val1"]);
+            .assert_rewards(&[]);
 
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
         assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
@@ -803,8 +853,16 @@ mod tests {
             .assert_rewards(&[]);
 
         contract.remove_val(deps.as_mut(), "val1");
-        // FIXME: Subsequent rewards msgs could be removed while validator is inactive
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+        // Subsequent rewards msgs are removed while validator is inactive
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
+
+        // Addition restores the validator to the active set
+        contract.add_val(deps.as_mut(), "val1");
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after unjailing
+            .assert_unbond(&[]) // No unbond msgs after unjailing
+            .assert_rewards(&["val1"]); // Rewards are being gathered again
     }
 
     #[test]
@@ -843,10 +901,8 @@ mod tests {
             ]
         );
 
-        // FIXME: Subsequent rewards msgs could be removed after validator is tombstoned
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_rewards(&["val1", "val2"]);
+        // Subsequent rewards msgs are removed after validator is tombstoned
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val2"]);
     }
 
     #[test]
@@ -885,8 +941,8 @@ mod tests {
             ]
         );
 
-        // FIXME: Subsequent rewards msgs could be removed after validator is tombstoned
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+        // Subsequent rewards msgs are removed after validator is tombstoned
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
     }
 
     #[test]
@@ -921,8 +977,8 @@ mod tests {
         //  FIXME: Remove zero amounts
         assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
 
-        // FIXME: Subsequent rewards msgs could be removed after validator is tombstoned
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&["val1"]);
+        // Subsequent rewards msgs are removed after validator is tombstoned
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
     }
 
     #[test]
@@ -1098,6 +1154,7 @@ mod tests {
         fn jail(&self, deps: DepsMut, val: &str);
         fn unjail(&self, deps: DepsMut, val: &str);
         fn tombstone(&self, deps: DepsMut, val: &str);
+        fn add_val(&self, deps: DepsMut, val: &str);
         fn remove_val(&self, deps: DepsMut, val: &str);
     }
 
@@ -1190,6 +1247,17 @@ mod tests {
 
         fn tombstone(&self, deps: DepsMut, val: &str) {
             self.handle_valset_update(deps, &[], &[], &[], &[], &[], &[val.to_string()])
+                .unwrap();
+        }
+
+        fn add_val(&self, deps: DepsMut, val: &str) {
+            let val = cosmwasm_std::Validator {
+                address: val.to_string(),
+                commission: Default::default(),
+                max_commission: Default::default(),
+                max_change_rate: Default::default(),
+            };
+            self.handle_valset_update(deps, &[val], &[], &[], &[], &[], &[])
                 .unwrap();
         }
 
