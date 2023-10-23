@@ -65,7 +65,6 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
     }
 }
 
-// TODO: Redundant test. Remove it.
 #[test]
 fn instantiation() {
     let app = App::default();
