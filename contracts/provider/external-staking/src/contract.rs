@@ -372,7 +372,7 @@ impl ExternalStakingContract<'_> {
 
         let immediate_release = matches!(
             self.val_set.validator_state(deps.storage, &tx_validator)?,
-            State::Unbonded {}
+            State::Unbonded {} | State::Tombstoned {}
         );
 
         // FIXME? Release period being computed after successful IBC tx
