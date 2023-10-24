@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, ensure_eq, to_binary, Addr, Coin, CosmosMsg, Decimal, DepsMut, Env, Event,
-    IbcMsg, Order, Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
+    coin, ensure, ensure_eq, to_binary, Coin, Decimal, DepsMut, Env, Event, IbcMsg, Order,
+    Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -327,10 +327,10 @@ impl ExternalStakingContract<'_> {
     /// In non-test code, this is called from `ibc_packet_ack`
     pub(crate) fn commit_unstake(
         &self,
-        mut deps: DepsMut,
+        deps: DepsMut,
         env: Env,
         tx_id: u64,
-    ) -> Result<Option<CosmosMsg>, ContractError> {
+    ) -> Result<(), ContractError> {
         use crate::state::PendingUnbond;
 
         // Load tx
@@ -400,18 +400,9 @@ impl ExternalStakingContract<'_> {
         self.distribution
             .save(deps.storage, &tx_validator, &distribution)?;
 
-        let unbond_msg = if immediate_release {
-            // since the validator is unbonded, we shouldn't have to
-            // wait for the unbonding period to finish to unstake
-            self.withdraw_unbonded_inner(deps.branch(), env, &tx_user)?
-                .0
-        } else {
-            None
-        };
-
         // Remove tx
         self.pending_txs.remove(deps.storage, tx_id);
-        Ok(unbond_msg)
+        Ok(())
     }
 
     /// In test code, this is called from `test_rollback_unstake`.
@@ -588,46 +579,26 @@ impl ExternalStakingContract<'_> {
     pub fn withdraw_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
-        let mut resp = Response::new()
-            .add_attribute("action", "withdraw_unbonded")
-            .add_attribute("owner", ctx.info.sender.to_string());
-
-        let (maybe_msg, released) =
-            self.withdraw_unbonded_inner(ctx.deps, ctx.env, &ctx.info.sender)?;
-
-        if let Some(msg) = maybe_msg {
-            resp = resp.add_message(msg);
-        }
-
-        let resp = resp.add_attribute("amount", released.to_string());
-
-        Ok(resp)
-    }
-
-    pub fn withdraw_unbonded_inner(
-        &self,
-        deps: DepsMut,
-        env: Env,
-        account: &Addr,
-    ) -> Result<(Option<CosmosMsg>, Uint128), ContractError> {
-        let config = self.config.load(deps.storage)?;
+        let config = self.config.load(ctx.deps.storage)?;
 
         let stakes: Vec<_> = self
             .stakes
             .stake
-            .prefix(account)
-            .range(deps.storage, None, None, Order::Ascending)
+            .prefix(&ctx.info.sender)
+            .range(ctx.deps.storage, None, None, Order::Ascending)
             .collect::<Result<_, _>>()?;
 
         let released: Uint128 = stakes
             .into_iter()
             .map(|(validator, mut stake)| -> Result<_, ContractError> {
-                let released = stake.release_pending(&env.block);
+                let released = stake.release_pending(&ctx.env.block);
 
                 if !released.is_zero() {
-                    self.stakes
-                        .stake
-                        .save(deps.storage, (account, &validator), &stake)?
+                    self.stakes.stake.save(
+                        ctx.deps.storage,
+                        (&ctx.info.sender, &validator),
+                        &stake,
+                    )?
                 }
 
                 Ok(released)
@@ -636,19 +607,22 @@ impl ExternalStakingContract<'_> {
                 released.map(|released| released + acc)
             })?;
 
-        let maybe_msg = if !released.is_zero() {
+        let mut resp = Response::new()
+            .add_attribute("action", "withdraw_unbonded")
+            .add_attribute("owner", ctx.info.sender.to_string())
+            .add_attribute("amount", released.to_string());
+
+        if !released.is_zero() {
             let release_msg = config.vault.release_cross_stake(
-                account.to_string(),
+                ctx.info.sender.into_string(),
                 coin(released.u128(), &config.denom),
                 vec![],
             )?;
 
-            Some(release_msg.into())
-        } else {
-            None
-        };
+            resp = resp.add_message(release_msg);
+        }
 
-        Ok((maybe_msg, released))
+        Ok(resp)
     }
 
     /// Distributes reward among users staking via particular validator. Distribution is performed

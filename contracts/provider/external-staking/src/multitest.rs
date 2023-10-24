@@ -483,6 +483,7 @@ fn immediate_unstake_if_unbonded_validator() {
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
         .call("test")
         .unwrap();
+    contract.withdraw_unbonded().call(user).unwrap();
 
     let claim = vault
         .claim(user.to_string(), contract.contract_addr.to_string())

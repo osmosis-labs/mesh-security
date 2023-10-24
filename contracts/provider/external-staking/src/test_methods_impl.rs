@@ -94,11 +94,8 @@ impl TestMethods for ExternalStakingContract<'_> {
     fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
-            if let Some(msg) = self.commit_unstake(ctx.deps, ctx.env, tx_id)? {
-                Ok(Response::new().add_message(msg))
-            } else {
-                Ok(Response::new())
-            }
+            self.commit_unstake(ctx.deps, ctx.env, tx_id)?;
+            Ok(Response::new())
         }
         #[cfg(not(any(test, feature = "mt")))]
         {

@@ -197,9 +197,7 @@ pub fn ibc_packet_ack(
                 .add_attribute("tx_id", tx_id.to_string());
         }
         (ProviderPacket::Unstake { tx_id, .. }, AckWrapper::Result(_)) => {
-            if let Some(msg) = contract.commit_unstake(deps, env, tx_id)? {
-                resp = resp.add_message(msg);
-            }
+            contract.commit_unstake(deps, env, tx_id)?;
             resp = resp
                 .add_attribute("success", "true")
                 .add_attribute("tx_id", tx_id.to_string());
