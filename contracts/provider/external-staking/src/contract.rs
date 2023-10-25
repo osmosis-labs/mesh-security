@@ -436,6 +436,71 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
+    /// In test code, this is called from `test_commit_burn`.
+    /// In non-test code, this is called from `ibc_packet_ack`
+    pub(crate) fn commit_burn(&self, deps: DepsMut, tx_id: u64) -> Result<(), ContractError> {
+        // Load tx
+        let tx = self.pending_txs.load(deps.storage, tx_id)?;
+
+        // Verify tx is of the right type
+        ensure!(
+            matches!(tx, Tx::InFlightRemoteBurn { .. }),
+            ContractError::WrongTypeTx(tx_id, tx)
+        );
+
+        let (tx_amount, tx_user, tx_validator) = match tx {
+            Tx::InFlightRemoteBurn {
+                amount,
+                user,
+                validator,
+                ..
+            } => (amount, user, validator),
+            _ => unreachable!(),
+        };
+
+        // Load stake
+        let mut stake = self
+            .stakes
+            .stake
+            .load(deps.storage, (&tx_user, &tx_validator))?;
+
+        // Load distribution
+        let mut distribution = self
+            .distribution
+            .may_load(deps.storage, &tx_validator)?
+            .unwrap_or_default();
+
+        // Commit sub amount
+        stake.stake.commit_sub(tx_amount);
+
+        // Distribution alignment
+        stake
+            .points_alignment
+            .stake_decreased(tx_amount, distribution.points_per_stake);
+        distribution.total_stake -= tx_amount;
+
+        // Save stake
+        self.stakes
+            .stake
+            .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
+
+        // Save distribution
+        self.distribution
+            .save(deps.storage, &tx_validator, &distribution)?;
+
+        // Remove tx
+        self.pending_txs.remove(deps.storage, tx_id);
+        Ok(())
+    }
+
+    /// If this failed we cannot do much, as the call is part of slashing propagation accounting /
+    /// invariants preservation. So we just call commit and assume the caller will log the failure.
+    /// In non-test code, this is called from `ibc_packet_ack` or `ibc_packet_timeout`
+    pub(crate) fn rollback_burn(&self, deps: DepsMut, tx_id: u64) -> Result<(), ContractError> {
+        // Failure should be logged by the caller
+        self.commit_burn(deps, tx_id)
+    }
+
     /// In non-test code, this is called from `ibc_packet_ack`
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn valset_update(
