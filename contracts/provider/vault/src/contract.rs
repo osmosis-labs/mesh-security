@@ -782,7 +782,7 @@ impl VaultContract<'_> {
         user: &Addr,
         user_info: &mut UserInfo,
         new_collateral: Uint128,
-        required_collateral: Uint128,
+        claimed_collateral: Uint128,
     ) -> Result<(), ContractError> {
         if user_info.max_lien.high() >= user_info.total_slashable.high() {
             // Liens adjustment
@@ -821,15 +821,15 @@ impl VaultContract<'_> {
                     let (_, lien) = item?;
                     Ok::<_, ContractError>(sum + lien.slashable)
                 })?;
-            let round_up = if (required_collateral * slash_ratio_sum.inv().unwrap())
+            let round_up = if (claimed_collateral * slash_ratio_sum.inv().unwrap())
                 * slash_ratio_sum
-                != required_collateral
+                != claimed_collateral
             {
                 Uint128::one()
             } else {
                 Uint128::zero()
             };
-            let sub_amount = required_collateral * slash_ratio_sum.inv().unwrap() + round_up;
+            let sub_amount = claimed_collateral * slash_ratio_sum.inv().unwrap() + round_up;
             let all_liens = self
                 .liens
                 .prefix(user)
