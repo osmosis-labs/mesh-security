@@ -208,8 +208,17 @@ pub fn ibc_packet_ack(
                 .add_attribute("error", e)
                 .add_attribute("tx_id", tx_id.to_string());
         }
-        (ProviderPacket::Burn { .. }, _) => {
-            todo!()
+        (ProviderPacket::Burn { tx_id, .. }, AckWrapper::Result(_)) => {
+            contract.commit_burn(deps, tx_id)?;
+            resp = resp
+                .add_attribute("success", "true")
+                .add_attribute("tx_id", tx_id.to_string());
+        }
+        (ProviderPacket::Burn { tx_id, .. }, AckWrapper::Error(e)) => {
+            contract.rollback_burn(deps, tx_id)?;
+            resp = resp
+                .add_attribute("error", e)
+                .add_attribute("tx_id", tx_id.to_string());
         }
         (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Result(_)) => {
             // TODO: Any events to add?
@@ -226,7 +235,7 @@ pub fn ibc_packet_ack(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// This should trigger a rollback of staking/unstaking
+/// This should trigger a rollback of staking/unstaking/burning
 pub fn ibc_packet_timeout(
     deps: DepsMut,
     _env: Env,
@@ -246,8 +255,9 @@ pub fn ibc_packet_timeout(
             contract.rollback_unstake(deps, tx_id)?;
             resp = resp.add_attribute("tx_id", tx_id.to_string());
         }
-        ProviderPacket::Burn { .. } => {
-            todo!()
+        ProviderPacket::Burn { tx_id, .. } => {
+            contract.rollback_burn(deps, tx_id)?;
+            resp = resp.add_attribute("tx_id", tx_id.to_string());
         }
         ProviderPacket::TransferRewards { tx_id, .. } => {
             contract.rollback_withdraw_rewards(deps, tx_id)?;
