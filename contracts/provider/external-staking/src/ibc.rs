@@ -208,6 +208,9 @@ pub fn ibc_packet_ack(
                 .add_attribute("error", e)
                 .add_attribute("tx_id", tx_id.to_string());
         }
+        (ProviderPacket::Burn { .. }, _) => {
+            todo!()
+        }
         (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Result(_)) => {
             // TODO: Any events to add?
             contract.commit_withdraw_rewards(deps, tx_id)?;
@@ -242,6 +245,9 @@ pub fn ibc_packet_timeout(
         ProviderPacket::Unstake { tx_id, .. } => {
             contract.rollback_unstake(deps, tx_id)?;
             resp = resp.add_attribute("tx_id", tx_id.to_string());
+        }
+        ProviderPacket::Burn { .. } => {
+            todo!()
         }
         ProviderPacket::TransferRewards { tx_id, .. } => {
             contract.rollback_withdraw_rewards(deps, tx_id)?;

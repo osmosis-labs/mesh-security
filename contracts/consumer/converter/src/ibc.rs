@@ -214,6 +214,9 @@ pub fn ibc_packet_receive(
                 .add_events(response.events)
                 .add_attributes(response.attributes)
         }
+        ProviderPacket::Burn { .. } => {
+            todo!()
+        }
         ProviderPacket::TransferRewards {
             rewards, recipient, ..
         } => {

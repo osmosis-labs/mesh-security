@@ -1155,7 +1155,7 @@ impl ExternalStakingContract<'_> {
 }
 
 pub mod cross_staking {
-    use crate::msg::ReceiveVirtualStake;
+    use crate::msg::{BurnVirtualStake, ReceiveVirtualStake};
 
     use super::*;
     use cosmwasm_std::{from_binary, Binary};
@@ -1243,6 +1243,84 @@ pub mod cross_staking {
 
             resp = resp
                 .add_attribute("action", "receive_virtual_stake")
+                .add_attribute("owner", owner)
+                .add_attribute("amount", amount.amount.to_string())
+                .add_attribute("tx_id", tx_id.to_string());
+
+            Ok(resp)
+        }
+
+        #[msg(exec)]
+        fn burn_virtual_stake(
+            &self,
+            ctx: ExecCtx,
+            owner: String,
+            amount: Coin,
+            tx_id: u64,
+            msg: Binary,
+        ) -> Result<Response, Self::Error> {
+            let config = self.config.load(ctx.deps.storage)?;
+            ensure_eq!(ctx.info.sender, config.vault.0, ContractError::Unauthorized);
+
+            // sending proper denom
+            ensure_eq!(
+                amount.denom,
+                config.denom,
+                ContractError::InvalidDenom(config.denom)
+            );
+
+            let owner = ctx.deps.api.addr_validate(&owner)?;
+
+            // parse and validate message
+            let msg: BurnVirtualStake = from_binary(&msg)?;
+            let mut stake = self
+                .stakes
+                .stake
+                .may_load(ctx.deps.storage, (&owner, &msg.validator))?
+                .unwrap_or_default();
+
+            // Prepare stake subtraction and save stake.
+            // We don't check for min here, as this call can only come from the `vault` contract, which already
+            // performed the proper check.
+            stake.stake.prepare_sub(amount.amount, None)?;
+            self.stakes
+                .stake
+                .save(ctx.deps.storage, (&owner, &msg.validator), &stake)?;
+
+            // Save tx
+            let new_tx = Tx::InFlightRemoteBurn {
+                id: tx_id,
+                amount: amount.amount,
+                user: owner.clone(),
+                validator: msg.validator.clone(),
+            };
+            self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
+
+            let mut resp = Response::new();
+
+            let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+            let packet = ProviderPacket::Burn {
+                validator: msg.validator,
+                burn: amount.clone(),
+                tx_id,
+            };
+            let msg = IbcMsg::SendPacket {
+                channel_id: channel.endpoint.channel_id,
+                data: to_binary(&packet)?,
+                timeout: packet_timeout(&ctx.env),
+            };
+            // add ibc packet if we are ibc enabled (skip in tests)
+            #[cfg(not(any(feature = "mt", test)))]
+            {
+                resp = resp.add_message(msg);
+            }
+            #[cfg(any(feature = "mt", test))]
+            {
+                let _ = msg;
+            }
+
+            resp = resp
+                .add_attribute("action", "burn_virtual_stake")
                 .add_attribute("owner", owner)
                 .add_attribute("amount", amount.amount.to_string())
                 .add_attribute("tx_id", tx_id.to_string());
