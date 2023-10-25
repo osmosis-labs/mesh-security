@@ -36,16 +36,6 @@ pub enum Tx {
         /// Remote validator
         validator: String,
     },
-    InFlightRemoteBurn {
-        /// Transaction id
-        id: u64,
-        /// Associated amount
-        amount: Uint128,
-        /// Associated owner
-        user: Addr,
-        /// Remote validator
-        validator: String,
-    },
     /// This is stored on the provider side when releasing funds
     InFlightTransferFunds {
         id: u64,
@@ -64,7 +54,6 @@ impl Tx {
             Tx::InFlightStaking { id, .. } => *id,
             Tx::InFlightRemoteStaking { id, .. } => *id,
             Tx::InFlightRemoteUnstaking { id, .. } => *id,
-            Tx::InFlightRemoteBurn { id, .. } => *id,
             Tx::InFlightTransferFunds { id, .. } => *id,
         }
     }
