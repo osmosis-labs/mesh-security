@@ -1312,7 +1312,6 @@ pub mod cross_staking {
             ctx: ExecCtx,
             owner: String,
             amount: Coin,
-            tx_id: u64,
             msg: Binary,
         ) -> Result<Response, Self::Error> {
             let config = self.config.load(ctx.deps.storage)?;
@@ -1342,6 +1341,9 @@ pub mod cross_staking {
             self.stakes
                 .stake
                 .save(ctx.deps.storage, (&owner, &msg.validator), &stake)?;
+
+            // Create new tx
+            let tx_id = self.next_tx_id(ctx.deps.storage)?;
 
             // Save tx
             let new_tx = Tx::InFlightRemoteBurn {
