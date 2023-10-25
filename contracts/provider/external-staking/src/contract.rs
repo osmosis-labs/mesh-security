@@ -445,71 +445,6 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
-    /// In test code, this is called from `test_commit_burn`.
-    /// In non-test code, this is called from `ibc_packet_ack`
-    pub(crate) fn commit_burn(&self, deps: DepsMut, tx_id: u64) -> Result<(), ContractError> {
-        // Load tx
-        let tx = self.pending_txs.load(deps.storage, tx_id)?;
-
-        // Verify tx is of the right type
-        ensure!(
-            matches!(tx, Tx::InFlightRemoteBurn { .. }),
-            ContractError::WrongTypeTx(tx_id, tx)
-        );
-
-        let (tx_amount, tx_user, tx_validator) = match tx {
-            Tx::InFlightRemoteBurn {
-                amount,
-                user,
-                validator,
-                ..
-            } => (amount, user, validator),
-            _ => unreachable!(),
-        };
-
-        // Load stake
-        let mut stake = self
-            .stakes
-            .stake
-            .load(deps.storage, (&tx_user, &tx_validator))?;
-
-        // Load distribution
-        let mut distribution = self
-            .distribution
-            .may_load(deps.storage, &tx_validator)?
-            .unwrap_or_default();
-
-        // Commit sub amount
-        stake.stake.commit_sub(tx_amount);
-
-        // Distribution alignment
-        stake
-            .points_alignment
-            .stake_decreased(tx_amount, distribution.points_per_stake);
-        distribution.total_stake -= tx_amount;
-
-        // Save stake
-        self.stakes
-            .stake
-            .save(deps.storage, (&tx_user, &tx_validator), &stake)?;
-
-        // Save distribution
-        self.distribution
-            .save(deps.storage, &tx_validator, &distribution)?;
-
-        // Remove tx
-        self.pending_txs.remove(deps.storage, tx_id);
-        Ok(())
-    }
-
-    /// If this failed we cannot do much, as the call is part of slashing propagation accounting /
-    /// invariants preservation. So we just call commit and assume the caller will log the failure.
-    /// In non-test code, this is called from `ibc_packet_ack` or `ibc_packet_timeout`
-    pub(crate) fn rollback_burn(&self, deps: DepsMut, tx_id: u64) -> Result<(), ContractError> {
-        // Failure should be logged by the caller
-        self.commit_burn(deps, tx_id)
-    }
-
     /// In non-test code, this is called from `ibc_packet_ack`
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn valset_update(
@@ -1356,9 +1291,9 @@ pub mod cross_staking {
                         .collect::<Result<_, _>>()?
                 }
             };
-            let num_validators = validators.len() as u128;
-            let amount = coin(amount.amount.u128() / num_validators, amount.denom);
-            let mut msgs = vec![];
+            let num_validators = Uint128::new(validators.len() as u128);
+            // FIXME? Check for zero len validators
+            let proportional_amount = amount.amount / num_validators;
             for validator in &validators {
                 let mut stake = self
                     .stakes
@@ -1366,55 +1301,59 @@ pub mod cross_staking {
                     .may_load(ctx.deps.storage, (&owner, validator))?
                     .unwrap_or_default();
 
-                // Prepare stake subtraction and save stake.
+                // Perform stake subtraction.
                 // We don't check for min here, as this call can only come from the `vault` contract, which already
                 // performed the proper check.
-                stake.stake.prepare_sub(amount.amount, None)?;
+                stake.stake.sub(proportional_amount, None)?;
+
+                // Load distribution
+                let mut distribution = self
+                    .distribution
+                    .may_load(ctx.deps.storage, validator)?
+                    .unwrap_or_default();
+
+                // Distribution alignment
+                stake
+                    .points_alignment
+                    .stake_decreased(proportional_amount, distribution.points_per_stake);
+                distribution.total_stake -= proportional_amount;
+
+                // Save stake
                 self.stakes
                     .stake
                     .save(ctx.deps.storage, (&owner, validator), &stake)?;
 
-                // Create new tx
-                let tx_id = self.next_tx_id(ctx.deps.storage)?;
-
-                // Save tx
-                let new_tx = Tx::InFlightRemoteBurn {
-                    id: tx_id,
-                    amount: amount.amount,
-                    user: owner.clone(),
-                    validator: validator.to_string(),
-                };
-                self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
-
-                let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
-                let packet = ProviderPacket::Burn {
-                    validator: validator.clone(),
-                    burn: amount.clone(),
-                    tx_id,
-                };
-                let msg = IbcMsg::SendPacket {
-                    channel_id: channel.endpoint.channel_id,
-                    data: to_binary(&packet)?,
-                    timeout: packet_timeout(&ctx.env),
-                };
-                msgs.push(msg);
+                // Save distribution
+                self.distribution
+                    .save(ctx.deps.storage, validator, &distribution)?;
             }
+
+            let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+            let packet = ProviderPacket::Burn {
+                validators: validators.clone(),
+                burn: amount,
+            };
+            let msg = IbcMsg::SendPacket {
+                channel_id: channel.endpoint.channel_id,
+                data: to_binary(&packet)?,
+                timeout: packet_timeout(&ctx.env),
+            };
             let mut resp = Response::new();
             // add ibc packet if we are ibc enabled (skip in tests)
             #[cfg(not(any(feature = "mt", test)))]
             {
-                resp = resp.add_messages(msgs);
+                resp = resp.add_message(msg);
             }
             #[cfg(any(feature = "mt", test))]
             {
-                let _ = msgs;
+                let _ = msg;
             }
 
             resp = resp
                 .add_attribute("action", "burn_virtual_stake")
                 .add_attribute("owner", owner)
                 .add_attribute("validators", validators.join(", "))
-                .add_attribute("amount", amount.amount.to_string());
+                .add_attribute("amount", proportional_amount.to_string());
 
             Ok(resp)
         }

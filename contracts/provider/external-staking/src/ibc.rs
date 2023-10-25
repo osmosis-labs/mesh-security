@@ -188,7 +188,7 @@ pub fn ibc_packet_ack(
                 .add_message(msg)
                 .add_attribute("success", "true")
                 .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "stake");
+                .add_attribute("packet_type", "stake");
         }
         (ProviderPacket::Stake { tx_id, .. }, AckWrapper::Error(e)) => {
             let msg = contract.rollback_stake(deps, tx_id)?;
@@ -196,49 +196,47 @@ pub fn ibc_packet_ack(
                 .add_message(msg)
                 .add_attribute("error", e)
                 .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "stake");
+                .add_attribute("packet_type", "stake");
         }
         (ProviderPacket::Unstake { tx_id, .. }, AckWrapper::Result(_)) => {
             contract.commit_unstake(deps, env, tx_id)?;
             resp = resp
                 .add_attribute("success", "true")
                 .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "unstake");
+                .add_attribute("packet_type", "unstake");
         }
         (ProviderPacket::Unstake { tx_id, .. }, AckWrapper::Error(e)) => {
             contract.rollback_unstake(deps, tx_id)?;
             resp = resp
                 .add_attribute("error", e)
                 .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "unstake");
+                .add_attribute("packet_type", "unstake");
         }
-        (ProviderPacket::Burn { tx_id, .. }, AckWrapper::Result(_)) => {
-            contract.commit_burn(deps, tx_id)?;
+        (ProviderPacket::Burn { .. }, AckWrapper::Result(_)) => {
             resp = resp
                 .add_attribute("success", "true")
-                .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "burn");
+                .add_attribute("packet_type", "burn");
         }
-        (ProviderPacket::Burn { tx_id, .. }, AckWrapper::Error(e)) => {
-            contract.rollback_burn(deps, tx_id)?;
+        (ProviderPacket::Burn { validators, burn }, AckWrapper::Error(e)) => {
             resp = resp
                 .add_attribute("error", e)
-                .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "burn");
+                .add_attribute("packet_type", "burn")
+                .add_attribute("validators", validators.join(","))
+                .add_attribute("amount", burn.amount.to_string());
         }
         (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Result(_)) => {
             contract.commit_withdraw_rewards(deps, tx_id)?;
             resp = resp
                 .add_attribute("success", "true")
                 .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "transfer_rewards");
+                .add_attribute("packet_type", "transfer_rewards");
         }
         (ProviderPacket::TransferRewards { tx_id, .. }, AckWrapper::Error(e)) => {
             contract.rollback_withdraw_rewards(deps, tx_id)?;
             resp = resp
                 .add_attribute("error", e)
                 .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "transfer_rewards");
+                .add_attribute("packet_type", "transfer_rewards");
         }
     }
     Ok(resp)
@@ -261,28 +259,28 @@ pub fn ibc_packet_timeout(
                 .add_message(msg)
                 .add_attribute("error", "timeout")
                 .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "stake");
+                .add_attribute("packet_type", "stake");
         }
         ProviderPacket::Unstake { tx_id, .. } => {
             contract.rollback_unstake(deps, tx_id)?;
             resp = resp
                 .add_attribute("error", "timeout")
                 .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "unstake");
+                .add_attribute("packet_type", "unstake");
         }
-        ProviderPacket::Burn { tx_id, .. } => {
-            contract.rollback_burn(deps, tx_id)?;
+        ProviderPacket::Burn { validators, burn } => {
             resp = resp
                 .add_attribute("error", "timeout")
-                .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "burn");
+                .add_attribute("packet_type", "burn")
+                .add_attribute("validators", validators.join(","))
+                .add_attribute("amount", burn.amount.to_string());
         }
         ProviderPacket::TransferRewards { tx_id, .. } => {
             contract.rollback_withdraw_rewards(deps, tx_id)?;
             resp = resp
                 .add_attribute("error", "timeout")
                 .add_attribute("tx_id", tx_id.to_string())
-                .add_attribute("tx_type", "transfer_rewards");
+                .add_attribute("packet_type", "transfer_rewards");
         }
     };
     Ok(resp)

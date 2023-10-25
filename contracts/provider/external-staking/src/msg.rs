@@ -102,7 +102,8 @@ pub struct ReceiveVirtualStake {
 
 /// Message to be sent as `msg` field on `burn_virtual_stake`
 /// If `validator` is set, burn virtual stake for that validator. This is useful when burning stake
-/// on the lien holder validator belongs, as part of the validator's slashing propagation.
+/// over the lien holder `validator` belongs, as part of the validator's slashing propagation.
+/// If `validator` is not set, burn virtual stake evenly across all validators the user has stake.
 #[cw_serde]
 pub struct BurnVirtualStake {
     pub validator: Option<String>,
