@@ -1337,60 +1337,84 @@ pub mod cross_staking {
 
             // parse and validate message
             let msg: BurnVirtualStake = from_binary(&msg)?;
-            let mut stake = self
-                .stakes
-                .stake
-                .may_load(ctx.deps.storage, (&owner, &msg.validator))?
-                .unwrap_or_default();
-
-            // Prepare stake subtraction and save stake.
-            // We don't check for min here, as this call can only come from the `vault` contract, which already
-            // performed the proper check.
-            stake.stake.prepare_sub(amount.amount, None)?;
-            self.stakes
-                .stake
-                .save(ctx.deps.storage, (&owner, &msg.validator), &stake)?;
-
-            // Create new tx
-            let tx_id = self.next_tx_id(ctx.deps.storage)?;
-
-            // Save tx
-            let new_tx = Tx::InFlightRemoteBurn {
-                id: tx_id,
-                amount: amount.amount,
-                user: owner.clone(),
-                validator: msg.validator.clone(),
+            let validators: Vec<_> = match msg.validator {
+                Some(validator) => {
+                    // Burn from validator
+                    // TODO: Preferentially, i.e. burn remaining amount, if any, from other validators
+                    vec![validator]
+                }
+                None => {
+                    // Burn proportionally from all validators associated to the user
+                    self.stakes
+                        .stake
+                        .prefix(&owner)
+                        .range(ctx.deps.storage, None, None, Order::Ascending)
+                        .map(|item| {
+                            let (validator, _) = item?;
+                            Ok::<_, Self::Error>(validator)
+                        })
+                        .collect::<Result<_, _>>()?
+                }
             };
-            self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
+            let num_validators = validators.len() as u128;
+            let amount = coin(amount.amount.u128() / num_validators, amount.denom);
+            let mut msgs = vec![];
+            for validator in &validators {
+                let mut stake = self
+                    .stakes
+                    .stake
+                    .may_load(ctx.deps.storage, (&owner, validator))?
+                    .unwrap_or_default();
 
+                // Prepare stake subtraction and save stake.
+                // We don't check for min here, as this call can only come from the `vault` contract, which already
+                // performed the proper check.
+                stake.stake.prepare_sub(amount.amount, None)?;
+                self.stakes
+                    .stake
+                    .save(ctx.deps.storage, (&owner, validator), &stake)?;
+
+                // Create new tx
+                let tx_id = self.next_tx_id(ctx.deps.storage)?;
+
+                // Save tx
+                let new_tx = Tx::InFlightRemoteBurn {
+                    id: tx_id,
+                    amount: amount.amount,
+                    user: owner.clone(),
+                    validator: validator.to_string(),
+                };
+                self.pending_txs.save(ctx.deps.storage, tx_id, &new_tx)?;
+
+                let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+                let packet = ProviderPacket::Burn {
+                    validator: validator.clone(),
+                    burn: amount.clone(),
+                    tx_id,
+                };
+                let msg = IbcMsg::SendPacket {
+                    channel_id: channel.endpoint.channel_id,
+                    data: to_binary(&packet)?,
+                    timeout: packet_timeout(&ctx.env),
+                };
+                msgs.push(msg);
+            }
             let mut resp = Response::new();
-
-            let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
-            let packet = ProviderPacket::Burn {
-                validator: msg.validator,
-                burn: amount.clone(),
-                tx_id,
-            };
-            let msg = IbcMsg::SendPacket {
-                channel_id: channel.endpoint.channel_id,
-                data: to_binary(&packet)?,
-                timeout: packet_timeout(&ctx.env),
-            };
             // add ibc packet if we are ibc enabled (skip in tests)
             #[cfg(not(any(feature = "mt", test)))]
             {
-                resp = resp.add_message(msg);
+                resp = resp.add_messages(msgs);
             }
             #[cfg(any(feature = "mt", test))]
             {
-                let _ = msg;
+                let _ = msgs;
             }
 
             resp = resp
                 .add_attribute("action", "burn_virtual_stake")
                 .add_attribute("owner", owner)
-                .add_attribute("amount", amount.amount.to_string())
-                .add_attribute("tx_id", tx_id.to_string());
+                .add_attribute("validators", validators.join(", "))
+                .add_attribute("amount", amount.amount.to_string());
 
             Ok(resp)
         }
