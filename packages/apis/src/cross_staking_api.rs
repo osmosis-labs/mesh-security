@@ -31,15 +31,14 @@ pub trait CrossStakingApi {
     /// Burns stake. This is called when the user's collateral is slashed, and as part of slashing
     /// propagation the staking contract needs to discount / burn the indicated slashing amount.
     /// Msg is custom to each implementation of the staking contract and opaque to the vault.
-    /// This is transactional for symmetry with the receive_virtual_stake call, but if the transaction
-    /// fails there's not much we can do about it, besides logging the failure.
+    /// This is internally transactional, but if the transaction fails there's not much we can do
+    /// about it besides logging the failure.
     #[msg(exec)]
     fn burn_virtual_stake(
         &self,
         ctx: ExecCtx,
         owner: String,
         amount: Coin,
-        tx_id: u64,
         msg: Binary,
     ) -> Result<Response, Self::Error>;
 
