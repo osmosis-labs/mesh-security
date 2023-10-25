@@ -28,7 +28,7 @@ impl ValidatorState {
         if self.is_empty() {
             State::Unknown {}
         } else {
-            self.0[0].state.clone()
+            self.0[0].state
         }
     }
 
@@ -66,6 +66,7 @@ pub struct ValState {
 }
 
 #[cw_serde]
+#[derive(Copy)]
 pub enum State {
     /// Validator is part of the validator set.
     Active {},
@@ -392,6 +393,14 @@ impl<'a> CrdtState<'a> {
         validator_state.drain_older(time);
         self.validators.save(storage, valoper, &validator_state)?;
         Ok(())
+    }
+
+    pub fn validator_state(&self, storage: &dyn Storage, valoper: &str) -> StdResult<State> {
+        Ok(self
+            .validators
+            .may_load(storage, valoper)?
+            .map(|state| state.get_state())
+            .unwrap_or(State::Unknown {}))
     }
 }
 

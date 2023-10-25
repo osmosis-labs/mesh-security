@@ -17,7 +17,7 @@ use mesh_apis::ibc::{AddValidator, ProviderPacket};
 use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
 use mesh_sync::{Tx, ValueRange};
 
-use crate::crdt::CrdtState;
+use crate::crdt::{CrdtState, State};
 use crate::error::ContractError;
 use crate::ibc::{packet_timeout, IBC_CHANNEL};
 use crate::msg::{
@@ -370,9 +370,18 @@ impl ExternalStakingContract<'_> {
         let amount = min(tx_amount, stake.stake.high());
         stake.stake.commit_sub(amount);
 
+        let immediate_release = matches!(
+            self.val_set.validator_state(deps.storage, &tx_validator)?,
+            State::Unbonded {} | State::Tombstoned {}
+        );
+
         // FIXME? Release period being computed after successful IBC tx
         // (Note: this is good for now, but can be revisited in v1 design)
-        let release_at = env.block.time.plus_seconds(config.unbonding_period);
+        let release_at = if immediate_release {
+            env.block.time
+        } else {
+            env.block.time.plus_seconds(config.unbonding_period)
+        };
         let unbond = PendingUnbond { amount, release_at };
         stake.pending_unbonds.push(unbond);
 

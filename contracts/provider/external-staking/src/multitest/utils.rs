@@ -64,6 +64,9 @@ pub(crate) trait ContractExt {
         validators: [&'static str; N],
     ) -> [&'static str; N];
 
+    fn remove_validator(&self, validator: &'static str);
+    fn tombstone_validator(&self, validator: &'static str);
+
     fn distribute_batch(
         &self,
         caller: impl AsRef<str>,
@@ -87,6 +90,22 @@ impl ContractExt for Contract<'_> {
         }
 
         validators
+    }
+
+    #[track_caller]
+    fn remove_validator(&self, validator: &'static str) {
+        self.test_methods_proxy()
+            .test_remove_validator(validator.to_string(), 101, 1234)
+            .call("test")
+            .unwrap();
+    }
+
+    #[track_caller]
+    fn tombstone_validator(&self, validator: &'static str) {
+        self.test_methods_proxy()
+            .test_tombstone_validator(validator.to_string(), 101, 1234)
+            .call("test")
+            .unwrap();
     }
 
     #[track_caller]

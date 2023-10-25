@@ -454,6 +454,82 @@ fn unstaking() {
 }
 
 #[test]
+fn immediate_unstake_if_unbonded_validator() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(200, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(200, OSMO))
+        .call(user)
+        .unwrap();
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+
+    contract.remove_validator(validators[0]);
+
+    contract
+        .unstake(validators[0].to_string(), coin(200, OSMO))
+        .call(user)
+        .unwrap();
+    contract
+        .test_methods_proxy()
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+    contract.withdraw_unbonded().call(user).unwrap();
+
+    let claim = vault
+        .claim(user.to_string(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 0);
+}
+
+#[test]
+fn immediate_unstake_if_tombstoned_validator() {
+    let user = "user1";
+
+    let app = App::new_with_balances(&[(user, &coins(200, OSMO))]);
+
+    let owner = "owner";
+
+    let (vault, contract) = setup(&app, owner, 100).unwrap();
+
+    let validators = contract.activate_validators(["validator1"]);
+
+    vault
+        .bond()
+        .with_funds(&coins(200, OSMO))
+        .call(user)
+        .unwrap();
+    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+
+    contract.tombstone_validator(validators[0]);
+
+    contract
+        .unstake(validators[0].to_string(), coin(200, OSMO))
+        .call(user)
+        .unwrap();
+    contract
+        .test_methods_proxy()
+        .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
+        .call("test")
+        .unwrap();
+    contract.withdraw_unbonded().call(user).unwrap();
+
+    let claim = vault
+        .claim(user.to_string(), contract.contract_addr.to_string())
+        .unwrap();
+    assert_eq!(claim.amount.val().unwrap().u128(), 0);
+}
+
+#[test]
 fn distribution() {
     let owner = "owner";
     let users = ["user1", "user2"];
