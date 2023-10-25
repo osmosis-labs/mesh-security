@@ -28,8 +28,8 @@ pub trait CrossStakingApi {
         msg: Binary,
     ) -> Result<Response, Self::Error>;
 
-    /// Burns stake. This is called when the user's collateral is slashed, and as part of slashing
-    /// propagation the staking contract needs to discount / burn the indicated slashing amount.
+    /// Burns stake. This is called when the user's collateral is slashed and, as part of slashing
+    /// propagation, the staking contract needs to discount / burn the indicated slashing amount.
     /// Msg is custom to each implementation of the staking contract and opaque to the vault.
     /// This is internally transactional, but if the transaction fails there's not much we can do
     /// about it besides logging the failure.
@@ -73,6 +73,25 @@ impl CrossStakingApiHelper {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,
             funds,
+        };
+        Ok(wasm)
+    }
+
+    pub fn burn_virtual_stake(
+        &self,
+        owner: &Addr,
+        amount: Coin,
+        msg: Binary,
+    ) -> Result<WasmMsg, StdError> {
+        let msg = CrossStakingApiExecMsg::BurnVirtualStake {
+            owner: owner.to_string(),
+            msg,
+            amount,
+        };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
         };
         Ok(wasm)
     }
