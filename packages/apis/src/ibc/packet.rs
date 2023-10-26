@@ -170,3 +170,6 @@ pub fn ack_fail<E: Error>(err: E) -> StdResult<Binary> {
     let res = AckWrapper::Error(err.to_string());
     to_binary(&res)
 }
+
+#[cw_serde]
+pub enum PriceFeedProviderPacket {}

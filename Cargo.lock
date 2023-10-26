@@ -669,6 +669,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-osmosis-price-provider"
+version = "0.8.1-alpha.1"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "mesh-apis",
+ "mesh-bindings",
+ "schemars",
+ "serde",
+ "sylvia",
+ "thiserror",
+]
+
+[[package]]
 name = "mesh-simple-price-feed"
 version = "0.8.1-alpha.1"
 dependencies = [

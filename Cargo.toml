@@ -1,5 +1,5 @@
 [workspace]
-members = ["packages/*", "contracts/provider/*", "contracts/consumer/*"]
+members = ["packages/*", "contracts/provider/*", "contracts/consumer/*", "contracts/osmosis-price-provider"]
 resolver = "2"
 
 [workspace.package]
