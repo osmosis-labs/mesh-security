@@ -1146,7 +1146,7 @@ impl ExternalStakingContract<'_> {
 }
 
 pub mod cross_staking {
-    use crate::msg::{BurnVirtualStake, ReceiveVirtualStake};
+    use crate::msg::ReceiveVirtualStake;
 
     use super::*;
     use cosmwasm_std::{from_binary, Binary};
@@ -1247,7 +1247,7 @@ pub mod cross_staking {
             ctx: ExecCtx,
             owner: String,
             amount: Coin,
-            msg: Binary,
+            validator: Option<String>,
         ) -> Result<Response, Self::Error> {
             let config = self.config.load(ctx.deps.storage)?;
             ensure_eq!(ctx.info.sender, config.vault.0, ContractError::Unauthorized);
@@ -1261,9 +1261,7 @@ pub mod cross_staking {
 
             let owner = ctx.deps.api.addr_validate(&owner)?;
 
-            // parse and validate message
-            let msg: BurnVirtualStake = from_binary(&msg)?;
-            let validators: Vec<_> = match msg.validator {
+            let validators: Vec<_> = match validator {
                 Some(validator) => {
                     // Burn from validator
                     // TODO: Preferentially, i.e. burn remaining amount, if any, from other validators

@@ -79,14 +79,15 @@ impl LocalStakingApi for NativeStakingContract<'_> {
 
     /// Burns stake. This is called when the user's collateral is slashed and, as part of slashing
     /// propagation, the native staking contract needs to burn / discount the indicated slashing amount.
-    /// Msg is custom to each implementation of the native staking contract and opaque to the vault.
+    /// If `validator` is set, undelegate preferentially from it first.
+    /// If it is not set, undelegate evenly from all validators the user has stake in.
     #[msg(exec)]
     fn burn_stake(
         &self,
         ctx: ExecCtx,
         owner: String,
         amount: Coin,
-        msg: Binary,
+        validator: Option<String>,
     ) -> Result<Response, Self::Error> {
         // Can only be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
@@ -94,7 +95,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         // Assert no funds are passed in
         nonpayable(&ctx.info)?;
 
-        let _ = (owner, amount, msg);
+        let _ = (owner, amount, validator);
 
         todo!()
     }
