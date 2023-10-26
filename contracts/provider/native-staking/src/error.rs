@@ -22,6 +22,9 @@ pub enum ContractError {
     #[error("Missing instantiate reply data")]
     NoInstantiateData {},
 
+    #[error("Missing proxy contract for {0}")]
+    NoProxy(String),
+
     #[error("You cannot use a max slashing rate over 1.0 (100%)")]
     InvalidMaxSlashing,
 }
