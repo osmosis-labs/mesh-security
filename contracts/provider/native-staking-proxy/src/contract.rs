@@ -1,4 +1,5 @@
-use cosmwasm_std::BankMsg::Burn;
+use std::cmp::min;
+
 use cosmwasm_std::WasmMsg::Execute;
 use cosmwasm_std::{
     coin, ensure_eq, to_binary, Coin, DistributionMsg, GovMsg, Response, StakingMsg, VoteOption,
@@ -6,7 +7,6 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
-use std::cmp::min;
 
 use cw_utils::{must_pay, nonpayable};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
@@ -22,6 +22,7 @@ pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct NativeStakingProxyContract<'a> {
     config: Item<'a, Config>,
+    burned: Item<'a, u128>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -31,6 +32,7 @@ impl NativeStakingProxyContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
+            burned: Item::new("burned"),
         }
     }
 
@@ -51,6 +53,9 @@ impl NativeStakingProxyContract<'_> {
         };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+        // Set burned stake to zero
+        self.burned.save(ctx.deps.storage, &0)?;
 
         // Stake info.funds on validator
         let exec_ctx = ExecCtx {
@@ -124,6 +129,14 @@ impl NativeStakingProxyContract<'_> {
             }
         };
 
+        // Error if no validators
+        if validators.is_empty() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
+
         let mut unstake_msgs = vec![];
         let mut unstaked = 0;
         let proportional_amount = amount.amount.u128() / validators.len() as u128;
@@ -161,15 +174,12 @@ impl NativeStakingProxyContract<'_> {
             ));
         }
 
-        // Burn stake
-        // FIXME? Accounting trick to avoid burning
-        let burn_msg = Burn {
-            amount: vec![amount],
-        };
+        // Accounting trick to avoid burning stake
+        self.burned.update(ctx.deps.storage, |old| {
+            Ok::<_, ContractError>(old + amount.amount.u128())
+        })?;
 
-        Ok(Response::new()
-            .add_messages(unstake_msgs)
-            .add_message(burn_msg))
+        Ok(Response::new().add_messages(unstake_msgs))
     }
 
     /// Re-stakes the given amount from the one validator to another on behalf of the calling user.
@@ -297,11 +307,14 @@ impl NativeStakingProxyContract<'_> {
 
         nonpayable(&ctx.info)?;
 
-        // Simply assume all of our liquid assets are from unbondings
+        // Simply assumes all of our liquid assets are from unbondings
         let balance = ctx
             .deps
             .querier
             .query_balance(ctx.env.contract.address, cfg.denom)?;
+        // But discount burned stake
+        let burned = self.burned.load(ctx.deps.storage)?;
+        let balance = coin(balance.amount.u128().saturating_sub(burned), &balance.denom);
 
         // Send them to the parent contract via `release_proxy_stake`
         let msg = to_binary(&native_staking_callback::ExecMsg::ReleaseProxyStake {})?;
