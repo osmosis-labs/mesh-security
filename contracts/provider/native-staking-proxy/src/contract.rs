@@ -1,3 +1,4 @@
+use cosmwasm_std::BankMsg::Burn;
 use cosmwasm_std::WasmMsg::Execute;
 use cosmwasm_std::{
     coin, ensure_eq, to_binary, Coin, DistributionMsg, GovMsg, Response, StakingMsg, VoteOption,
@@ -5,6 +6,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
+use std::cmp::min;
 
 use cw_utils::{must_pay, nonpayable};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
@@ -81,6 +83,93 @@ impl NativeStakingProxyContract<'_> {
         let msg = StakingMsg::Delegate { validator, amount };
 
         Ok(Response::new().add_message(msg))
+    }
+
+    /// Burn `amount` tokens from the given validator, if set.
+    /// If `validator` is not set, undelegate evenly from all validators the user has stake in.
+    /// Can only be called by the parent contract
+    #[msg(exec)]
+    fn burn(
+        &self,
+        ctx: ExecCtx,
+        validator: Option<String>,
+        amount: Coin,
+    ) -> Result<Response, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
+
+        let validators = match validator {
+            Some(validator) => {
+                let validator = ctx
+                    .deps
+                    .querier
+                    .query_delegation(ctx.env.contract.address.clone(), validator)?
+                    .map(|full_delegation| {
+                        (full_delegation.validator, full_delegation.amount.amount)
+                    })
+                    .unwrap();
+                vec![validator]
+            }
+            None => {
+                let validators = ctx
+                    .deps
+                    .querier
+                    .query_all_delegations(ctx.env.contract.address.clone())?
+                    .iter()
+                    .map(|delegation| (delegation.validator.clone(), delegation.amount.amount))
+                    .collect::<Vec<_>>();
+                validators
+            }
+        };
+
+        let mut unstake_msgs = vec![];
+        let mut unstaked = 0;
+        let proportional_amount = amount.amount.u128() / validators.len() as u128;
+        for (validator, delegated_amount) in &validators {
+            // Check validator has `proportional_amount` delegated. Adjust accordingly if not.
+            let unstake_amount = min(delegated_amount.u128(), proportional_amount);
+            let unstake_msg = StakingMsg::Undelegate {
+                validator: validator.to_string(),
+                amount: coin(unstake_amount, &cfg.denom),
+            };
+            unstaked += unstake_amount;
+            unstake_msgs.push(unstake_msg);
+        }
+        // Adjust possible rounding issues
+        if unstaked < amount.amount.u128() {
+            // Look for the first validator that has enough stake, and unstake it from there
+            let unstake_amount = amount.amount.u128() - unstaked;
+            for (validator, delegated_amount) in &validators {
+                if delegated_amount.u128() >= unstake_amount + proportional_amount {
+                    let unstake_msg = StakingMsg::Undelegate {
+                        validator: validator.to_string(),
+                        amount: coin(unstake_amount, &cfg.denom),
+                    };
+                    unstaked += unstake_amount;
+                    unstake_msgs.push(unstake_msg);
+                    break;
+                }
+            }
+        }
+        // Bail if we still don't have enough stake
+        if unstaked < amount.amount.u128() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
+
+        // Burn stake
+        // FIXME? Accounting trick to avoid burning
+        let burn_msg = Burn {
+            amount: vec![amount],
+        };
+
+        Ok(Response::new()
+            .add_messages(unstake_msgs)
+            .add_message(burn_msg))
     }
 
     /// Re-stakes the given amount from the one validator to another on behalf of the calling user.

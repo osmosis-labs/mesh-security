@@ -95,9 +95,28 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         // Assert no funds are passed in
         nonpayable(&ctx.info)?;
 
-        let _ = (owner, amount, validator);
+        let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 
-        todo!()
+        // Look up if there is a proxy to match. Fail or call burn on existing
+        match self
+            .proxy_by_owner
+            .may_load(ctx.deps.storage, &owner_addr)?
+        {
+            None => Err(ContractError::NoProxy(owner)),
+            Some(proxy_addr) => {
+                // Send burn message to the proxy contract
+                let msg = to_binary(&mesh_native_staking_proxy::contract::ExecMsg::Burn {
+                    validator,
+                    amount,
+                })?;
+                let wasm_msg = WasmMsg::Execute {
+                    contract_addr: proxy_addr.into(),
+                    msg,
+                    funds: ctx.info.funds,
+                };
+                Ok(Response::new().add_message(wasm_msg))
+            }
+        }
     }
 
     /// Returns the maximum percentage that can be slashed
