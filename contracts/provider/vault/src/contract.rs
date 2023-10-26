@@ -791,6 +791,7 @@ impl VaultContract<'_> {
         claimed_collateral: Uint128,
     ) -> Result<Vec<WasmMsg>, ContractError> {
         let denom = self.config.load(storage)?.denom;
+        let native_staking = self.local_staking.load(storage)?;
         let mut msgs = vec![];
         if user_info.max_lien.high() >= user_info.total_slashable.high() {
             // Liens adjustment
@@ -818,16 +819,13 @@ impl VaultContract<'_> {
                 lien.amount = ValueRange::new(new_low_amount, new_high_amount);
                 self.liens.save(storage, (user, &lien_holder), &lien)?;
                 // Remove the required amount from the user's stake
-                // TODO: Native vs cross staking support
-                let contract = CrossStakingApiHelper(lien_holder);
-                let msg = to_binary(&mesh_external_staking::msg::BurnVirtualStake {
-                    validator: None, // TODO: Add validator when burning over the originally slashed lien holder
-                })?;
-                let burn_msg = contract.burn_virtual_stake(
+                let burn_msg = self.burn_stake(
                     user,
-                    coin(adjust_amount_high.u128(), &denom), // For simplicity
-                    msg,
-                )?;
+                    &denom,
+                    &native_staking,
+                    &lien_holder,
+                    adjust_amount_high,
+                )?; // High amount For simplicity
                 msgs.push(burn_msg);
             }
         } else {
@@ -863,16 +861,40 @@ impl VaultContract<'_> {
                 lien.amount.sub(sub_amount, Uint128::zero())?;
                 self.liens.save(storage, (user, &lien_holder), &lien)?;
                 // Remove the required amount from the user's stake
-                let contract = CrossStakingApiHelper(lien_holder);
-                let msg = to_binary(&mesh_external_staking::msg::BurnVirtualStake {
-                    validator: None, // TODO: Add validator when burning over the originally slashed lien holder
-                })?;
                 let burn_msg =
-                    contract.burn_virtual_stake(user, coin(sub_amount.u128(), &denom), msg)?;
+                    self.burn_stake(user, &denom, &native_staking, &lien_holder, sub_amount)?;
                 msgs.push(burn_msg);
             }
         }
         Ok(msgs)
+    }
+
+    fn burn_stake(
+        &self,
+        user: &Addr,
+        denom: &String,
+        native_staking: &Option<LocalStaking>,
+        lien_holder: &Addr,
+        amount: Uint128,
+    ) -> Result<WasmMsg, ContractError> {
+        // Native vs cross staking
+        let msg = match &native_staking {
+            Some(local_staking) if local_staking.contract.0 == lien_holder => {
+                let contract = local_staking.contract.clone();
+                let msg = to_binary(&mesh_native_staking::msg::BurnMsg {
+                    validator: None, // TODO: Add single validator when burning over the originally slashed lien holder
+                })?;
+                contract.burn_stake(user, coin(amount.u128(), denom), msg)?
+            }
+            _ => {
+                let contract = CrossStakingApiHelper(lien_holder.clone());
+                let msg = to_binary(&mesh_external_staking::msg::BurnVirtualStake {
+                    validator: None, // TODO: Add validator when burning over the originally slashed lien holder
+                })?;
+                contract.burn_virtual_stake(user, coin(amount.u128(), denom), msg)?
+            }
+        };
+        Ok(msg)
     }
 }
 
