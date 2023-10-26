@@ -30,6 +30,18 @@ pub trait LocalStakingApi {
         msg: Binary,
     ) -> Result<Response, Self::Error>;
 
+    /// Burns stake. This is called when the user's collateral is slashed and, as part of slashing
+    /// propagation, the native staking contract needs to burn / discount the indicated slashing amount.
+    /// Msg is custom to each implementation of the staking contract and opaque to the vault.
+    #[msg(exec)]
+    fn burn_stake(
+        &self,
+        ctx: ExecCtx,
+        owner: String,
+        amount: Coin,
+        msg: Binary,
+    ) -> Result<Response, Self::Error>;
+
     /// Returns the maximum percentage that can be slashed
     #[msg(query)]
     fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error>;
@@ -57,6 +69,20 @@ impl LocalStakingApiHelper {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,
             funds,
+        };
+        Ok(wasm)
+    }
+
+    pub fn burn_stake(&self, owner: &Addr, amount: Coin, msg: Binary) -> Result<WasmMsg, StdError> {
+        let msg = LocalStakingApiExecMsg::BurnStake {
+            owner: owner.to_string(),
+            msg,
+            amount,
+        };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
         };
         Ok(wasm)
     }
