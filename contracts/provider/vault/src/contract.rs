@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, to_binary, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply,
-    Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply, Response,
+    StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -881,17 +881,12 @@ impl VaultContract<'_> {
         let msg = match &native_staking {
             Some(local_staking) if local_staking.contract.0 == lien_holder => {
                 let contract = local_staking.contract.clone();
-                let msg = to_binary(&mesh_native_staking::msg::BurnMsg {
-                    validator: None, // TODO: Add single validator when burning over the originally slashed lien holder
-                })?;
-                contract.burn_stake(user, coin(amount.u128(), denom), msg)?
+                contract.burn_stake(user, coin(amount.u128(), denom), None)? // TODO: Add validator when burning over the originally slashed lien holder
             }
             _ => {
                 let contract = CrossStakingApiHelper(lien_holder.clone());
-                let msg = to_binary(&mesh_external_staking::msg::BurnVirtualStake {
-                    validator: None, // TODO: Add validator when burning over the originally slashed lien holder
-                })?;
-                contract.burn_virtual_stake(user, coin(amount.u128(), denom), msg)?
+                contract.burn_virtual_stake(user, coin(amount.u128(), denom), None)?
+                // TODO: Add validator when burning over the originally slashed lien holder
             }
         };
         Ok(msg)

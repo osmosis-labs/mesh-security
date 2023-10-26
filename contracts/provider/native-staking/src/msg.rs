@@ -18,11 +18,3 @@ pub struct OwnerByProxyResponse {
 pub struct StakeMsg {
     pub validator: String,
 }
-
-/// Message to be sent as `msg` field on `burn_stake(..msg)`
-/// If `validator` is set, undelegate preferentially from it first.
-/// If it is not set, undelegate evenly from all validators the user has stake in.
-#[cw_serde]
-pub struct BurnMsg {
-    pub validator: Option<String>,
-}
