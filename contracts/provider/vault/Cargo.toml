@@ -21,7 +21,8 @@ mt = ["library", "sylvia/mt"]
 [dependencies]
 mesh-apis             = { workspace = true }
 mesh-sync             = { workspace = true }
-mesh-external-staking = { workspace = true }
+mesh-external-staking     = { workspace = true, features = ["library"] }
+mesh-native-staking       = { workspace = true, features = ["library"] }
 
 sylvia = { workspace = true }
 cosmwasm-schema  = { workspace = true }

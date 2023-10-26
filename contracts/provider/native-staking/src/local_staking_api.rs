@@ -1,5 +1,5 @@
-use cosmwasm_std::{ensure_eq, from_slice, to_binary, Binary, Response, SubMsg, WasmMsg};
-use cw_utils::must_pay;
+use cosmwasm_std::{ensure_eq, from_slice, to_binary, Binary, Coin, Response, SubMsg, WasmMsg};
+use cw_utils::{must_pay, nonpayable};
 use sylvia::types::QueryCtx;
 use sylvia::{contract, types::ExecCtx};
 
@@ -75,6 +75,28 @@ impl LocalStakingApi for NativeStakingContract<'_> {
                 Ok(Response::new().add_message(wasm_msg))
             }
         }
+    }
+
+    /// Burns stake. This is called when the user's collateral is slashed and, as part of slashing
+    /// propagation, the native staking contract needs to burn / discount the indicated slashing amount.
+    /// Msg is custom to each implementation of the native staking contract and opaque to the vault.
+    #[msg(exec)]
+    fn burn_stake(
+        &self,
+        ctx: ExecCtx,
+        owner: String,
+        amount: Coin,
+        msg: Binary,
+    ) -> Result<Response, Self::Error> {
+        // Can only be called by the vault
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.vault, ctx.info.sender, ContractError::Unauthorized {});
+        // Assert no funds are passed in
+        nonpayable(&ctx.info)?;
+
+        let _ = (owner, amount, msg);
+
+        todo!()
     }
 
     /// Returns the maximum percentage that can be slashed
