@@ -313,8 +313,14 @@ impl NativeStakingProxyContract<'_> {
             .querier
             .query_balance(ctx.env.contract.address, cfg.denom)?;
         // But discount burned stake
+        // FIXME: this is not accurate, as it doesn't take into account the unbonding period
         let burned = self.burned.load(ctx.deps.storage)?;
         let balance = coin(balance.amount.u128().saturating_sub(burned), &balance.denom);
+
+        // Short circuit if there are no funds to send
+        if balance.amount.is_zero() {
+            return Ok(Response::new());
+        }
 
         // Send them to the parent contract via `release_proxy_stake`
         let msg = to_binary(&native_staking_callback::ExecMsg::ReleaseProxyStake {})?;
