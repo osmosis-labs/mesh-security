@@ -725,16 +725,13 @@ impl VaultContract<'_> {
     ///
     /// This slashes the users that have funds delegated to the validator involved in the
     /// misbehaviour.
-    ///
-    /// In case of remote slashing, it makes sure to unbond native user funds from the native
-    /// staking contract, if they are needed for slashing.
-    ///
     /// It also checks that the mesh security invariants are not violated after slashing,
     /// i.e. performs slashing propagation across lien holders, for all of the slashed users.
     fn slash(
         &self,
         ctx: &mut ExecCtx,
         slashes: &[SlashInfo],
+        validator: &str,
     ) -> Result<Vec<WasmMsg>, ContractError> {
         // Process users that belong to lien_holder
         let lien_holder = ctx.info.sender.clone();
@@ -769,6 +766,8 @@ impl VaultContract<'_> {
                     &mut user_info,
                     new_collateral,
                     slash_amount - free_collateral,
+                    &lien_holder,
+                    validator,
                 )?;
                 msgs.extend_from_slice(&burn_msgs);
             }
@@ -782,6 +781,7 @@ impl VaultContract<'_> {
         Ok(msgs)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn propagate_slash(
         &self,
         storage: &mut dyn Storage,
@@ -789,6 +789,8 @@ impl VaultContract<'_> {
         user_info: &mut UserInfo,
         new_collateral: Uint128,
         claimed_collateral: Uint128,
+        slashed_lien_holder: &Addr,
+        slashed_validator: &str,
     ) -> Result<Vec<WasmMsg>, ContractError> {
         let denom = self.config.load(storage)?.denom;
         let native_staking = self.local_staking.load(storage)?;
@@ -819,13 +821,19 @@ impl VaultContract<'_> {
                 lien.amount = ValueRange::new(new_low_amount, new_high_amount);
                 self.liens.save(storage, (user, &lien_holder), &lien)?;
                 // Remove the required amount from the user's stake
+                let validator = if lien_holder == slashed_lien_holder {
+                    Some(slashed_validator.to_string())
+                } else {
+                    None
+                };
                 let burn_msg = self.burn_stake(
                     user,
                     &denom,
                     &native_staking,
                     &lien_holder,
-                    adjust_amount_high,
-                )?; // High amount For simplicity
+                    adjust_amount_high, // High amount for simplicity
+                    validator,
+                )?;
                 msgs.push(burn_msg);
             }
         } else {
@@ -861,8 +869,19 @@ impl VaultContract<'_> {
                 lien.amount.sub(sub_amount, Uint128::zero())?;
                 self.liens.save(storage, (user, &lien_holder), &lien)?;
                 // Remove the required amount from the user's stake
-                let burn_msg =
-                    self.burn_stake(user, &denom, &native_staking, &lien_holder, sub_amount)?;
+                let validator = if lien_holder == slashed_lien_holder {
+                    Some(slashed_validator.to_string())
+                } else {
+                    None
+                };
+                let burn_msg = self.burn_stake(
+                    user,
+                    &denom,
+                    &native_staking,
+                    &lien_holder,
+                    sub_amount,
+                    validator,
+                )?;
                 msgs.push(burn_msg);
             }
         }
@@ -876,17 +895,17 @@ impl VaultContract<'_> {
         native_staking: &Option<LocalStaking>,
         lien_holder: &Addr,
         amount: Uint128,
+        validator: Option<String>,
     ) -> Result<WasmMsg, ContractError> {
         // Native vs cross staking
         let msg = match &native_staking {
             Some(local_staking) if local_staking.contract.0 == lien_holder => {
                 let contract = local_staking.contract.clone();
-                contract.burn_stake(user, coin(amount.u128(), denom), None)? // TODO: Add validator when burning over the originally slashed lien holder
+                contract.burn_stake(user, coin(amount.u128(), denom), validator)?
             }
             _ => {
                 let contract = CrossStakingApiHelper(lien_holder.clone());
-                contract.burn_virtual_stake(user, coin(amount.u128(), denom), None)?
-                // TODO: Add validator when burning over the originally slashed lien holder
+                contract.burn_virtual_stake(user, coin(amount.u128(), denom), validator)?
             }
         };
         Ok(msg)
@@ -956,15 +975,17 @@ impl VaultApi for VaultContract<'_> {
         &self,
         mut ctx: ExecCtx,
         slashes: Vec<SlashInfo>,
+        validator: String,
     ) -> Result<Response, Self::Error> {
         nonpayable(&ctx.info)?;
 
-        let msgs = self.slash(&mut ctx, &slashes)?;
+        let msgs = self.slash(&mut ctx, &slashes, &validator)?;
 
         let resp = Response::new()
             .add_messages(msgs)
             .add_attribute("action", "process_cross_slashing")
             .add_attribute("lien_holder", ctx.info.sender)
+            .add_attribute("validator", validator.to_string())
             .add_attribute(
                 "users",
                 slashes

@@ -41,9 +41,16 @@ pub trait VaultApi {
     fn rollback_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
 
     /// This must be called by the external staking contract to process a slashing event
-    /// because of a misbehaviour on the Consumer chain
+    /// because of a misbehaviour on the Consumer chain.
+    /// `validator` is the misbehaving validator address. Used during slashing propagation to
+    /// preferentially burn stakes from this validator.
     #[msg(exec)]
-    fn cross_slash(&self, ctx: ExecCtx, slashes: Vec<SlashInfo>) -> Result<Response, Self::Error>;
+    fn cross_slash(
+        &self,
+        ctx: ExecCtx,
+        slashes: Vec<SlashInfo>,
+        validator: String,
+    ) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]
@@ -93,8 +100,15 @@ impl VaultApiHelper {
         Ok(wasm)
     }
 
-    pub fn process_cross_slashing(&self, slashes: Vec<SlashInfo>) -> Result<WasmMsg, StdError> {
-        let msg = VaultApiExecMsg::CrossSlash { slashes };
+    pub fn process_cross_slashing(
+        &self,
+        slashes: Vec<SlashInfo>,
+        slashed_validator: &str,
+    ) -> Result<WasmMsg, StdError> {
+        let msg = VaultApiExecMsg::CrossSlash {
+            slashes,
+            validator: slashed_validator.to_string(),
+        };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,

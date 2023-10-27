@@ -902,7 +902,9 @@ impl ExternalStakingContract<'_> {
         }
 
         // Route associated users to vault for slashing of their collateral
-        let msg = config.vault.process_cross_slashing(slash_infos)?;
+        let msg = config
+            .vault
+            .process_cross_slashing(slash_infos, validator)?;
         Ok(Some(msg))
     }
 
@@ -1579,6 +1581,7 @@ mod tests {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10),
                     }],
+                    validator: "bob".to_string(),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -1693,6 +1696,7 @@ mod tests {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10),
                     }],
+                    validator: "bob".to_string(),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -1821,6 +1825,7 @@ mod tests {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10), // Owner is slashed over the full stake, including pending
                     }],
+                    validator: "bob".to_string(),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -2199,6 +2204,7 @@ mod tests {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10),
                     }],
+                    validator: "bob".to_string(),
                 })
                 .unwrap(),
                 funds: vec![],
