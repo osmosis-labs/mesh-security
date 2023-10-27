@@ -274,6 +274,10 @@ fn unstaking() {
 
     // And that they are now held, until the unbonding period
     // First, check that the contract has no funds
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
     assert_eq!(
         app.app()
             .wrap()
@@ -285,7 +289,7 @@ fn unstaking() {
     // Advance time until the unbonding period is over
     app.update_block(|block| {
         block.height += 1234;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD + 1);
+        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
     });
     // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
     app.app_mut()
@@ -299,6 +303,86 @@ fn unstaking() {
             .query_balance(staking_proxy.contract_addr, OSMO)
             .unwrap(),
         coin(50, OSMO)
+    );
+}
+
+#[test]
+fn burning() {
+    let owner = "vault_admin";
+
+    let staking_addr = "contract1"; // Second contract (instantiated by vault on instantiation)
+    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
+
+    let user = "user1"; // One who wants to local stake (uses the proxy)
+    let validator = "validator1"; // Where to stake / unstake
+
+    let app = init_app(user, &[validator]); // Fund user, create validator
+    setup(&app, owner, user, validator).unwrap();
+
+    // Access staking proxy instance
+    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
+        Addr::unchecked(proxy_addr),
+        &app,
+    );
+
+    // Burn 10%, from validator
+    staking_proxy
+        .burn(Some(validator.to_owned()), coin(10, OSMO))
+        .call(staking_addr)
+        .unwrap();
+
+    // Check that funds have been unstaked
+    let delegation = app
+        .app()
+        .wrap()
+        .query_delegation(staking_proxy.contract_addr.clone(), validator.to_owned())
+        .unwrap()
+        .unwrap();
+    assert_eq!(delegation.amount, coin(90, OSMO));
+
+    // And that they are now held, until the unbonding period
+    // First, check that the contract has no funds
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr.clone(), OSMO)
+            .unwrap(),
+        coin(0, OSMO)
+    );
+
+    // Advance time until the unbonding period is over
+    app.update_block(|block| {
+        block.height += 1234;
+        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
+    });
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
+
+    // Check that the contract now has the funds
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr.clone(), OSMO)
+            .unwrap(),
+        coin(10, OSMO)
+    );
+
+    // But they cannot be released
+    staking_proxy.release_unbonded().call(user).unwrap();
+
+    // Check that the contract still has the funds (they are being effectively "burned")
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr, OSMO)
+            .unwrap(),
+        coin(10, OSMO)
     );
 }
 
