@@ -800,6 +800,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-remote-price-feed"
+version = "0.8.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "derivative",
+ "mesh-apis",
+ "schemars",
+ "serde",
+ "sylvia",
+ "test-case",
+ "thiserror",
+]
+
+[[package]]
 name = "mesh-simple-price-feed"
 version = "0.8.1-alpha.1"
 dependencies = [

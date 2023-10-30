@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure_eq, entry_point, DepsMut, Env, IbcChannel, Response, Timestamp};
+use cosmwasm_std::{
+    ensure_eq, entry_point, Decimal, DepsMut, Env, IbcChannel, Response, Timestamp,
+};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
@@ -120,6 +123,7 @@ pub fn sudo(
                         let twap = querier
                             .arithmetic_twap_to_now(pool_id, BASE_ASSET.to_string(), denom, None)?
                             .arithmetic_twap;
+                        let twap = Decimal::from_str(&twap)?;
                         let packet = mesh_apis::ibc::PriceFeedProviderPacket::Update { twap };
                         make_ibc_packet(&env.block.time, channel, packet)
                     })
