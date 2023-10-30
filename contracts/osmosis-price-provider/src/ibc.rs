@@ -5,14 +5,14 @@ use cosmwasm_std::{
     from_slice, to_binary, DepsMut, Env, Event, Ibc3ChannelOpenResponse, IbcBasicResponse,
     IbcChannel, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg,
     IbcChannelOpenResponse, IbcMsg, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg,
-    IbcReceiveResponse, IbcTimeout,
+    IbcReceiveResponse, IbcTimeout, Timestamp,
 };
 use cw_storage_plus::Item;
 
-use mesh_apis::ibc::{validate_channel_order, AckWrapper, ConsumerPacket, ProtocolVersion};
-use sylvia::types::ExecCtx;
-
 use crate::error::ContractError;
+use mesh_apis::ibc::{
+    validate_channel_order, AckWrapper, PriceFeedProviderPacket, ProtocolVersion,
+};
 
 const PROTOCOL_NAME: &str = "mesh-security-price-feed";
 /// This is the maximum version of the price feed protocol that we support
@@ -25,8 +25,8 @@ pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 
 const TIMEOUT: u64 = 60 * 60;
 
-pub fn packet_timeout(env: &Env) -> IbcTimeout {
-    let timeout = env.block.time.plus_seconds(TIMEOUT);
+pub fn packet_timeout(now: &Timestamp) -> IbcTimeout {
+    let timeout = now.plus_seconds(TIMEOUT);
     IbcTimeout::with_timestamp(timeout)
 }
 
@@ -157,19 +157,19 @@ pub fn ibc_packet_timeout(
     let msg = IbcMsg::SendPacket {
         channel_id: msg.packet.src.channel_id,
         data: msg.packet.data,
-        timeout: packet_timeout(&env),
+        timeout: packet_timeout(&env.block.time),
     };
     Ok(IbcBasicResponse::new().add_message(msg))
 }
 
 pub(crate) fn make_ibc_packet(
-    ctx: &mut ExecCtx,
-    packet: ConsumerPacket,
+    now: &Timestamp,
+    channel: IbcChannel,
+    packet: PriceFeedProviderPacket,
 ) -> Result<IbcMsg, ContractError> {
-    let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
     Ok(IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id,
         data: to_binary(&packet)?,
-        timeout: packet_timeout(&ctx.env),
+        timeout: packet_timeout(now),
     })
 }

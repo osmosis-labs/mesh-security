@@ -1,26 +1,36 @@
 use std::collections::HashMap;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure_eq, entry_point, DepsMut, Env, IbcChannel, Response, Timestamp, Uint64};
+use cosmwasm_std::{ensure_eq, entry_point, DepsMut, Env, IbcChannel, Response, Timestamp};
 use cw2::set_contract_version;
-use cw_storage_plus::{Item, Map};
-use cw_utils::{nonpayable, Duration};
+use cw_storage_plus::Item;
+use cw_utils::nonpayable;
 use mesh_bindings::PriceFeedProviderSudoMsg;
+use osmosis_std::types::osmosis::twap::v1beta1::TwapQuerier;
 use sylvia::types::{ExecCtx, InstantiateCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
+use crate::ibc::make_ibc_packet;
 use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+const BASE_ASSET: &str = "OSMO";
+
 const EPOCH_IN_SECS: u64 = 120;
 const LAST_EPOCH: Item<'static, Timestamp> = Item::new("last_epoch");
+const SUBSCRIPTIONS: Item<'static, HashMap<String, Subscription>> = Item::new("subscriptions");
+
+#[cw_serde]
+pub struct Subscription {
+    channel: IbcChannel,
+    pool_id: u64,
+}
 
 pub struct OsmosisPriceProvider {
     config: Item<'static, Config>,
-    subscriptions: Item<'static, HashMap<String, IbcChannel>>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -30,7 +40,6 @@ impl OsmosisPriceProvider {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
-            subscriptions: Item::new("subscriptions"),
         }
     }
 
@@ -58,17 +67,18 @@ impl OsmosisPriceProvider {
         ctx: ExecCtx,
         denom: String,
         channel: IbcChannel,
+        pool_id: u64,
     ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, cfg.admin, ContractError::Unauthorized {});
 
-        let mut subs = self.subscriptions.load(ctx.deps.storage)?;
+        let mut subs = SUBSCRIPTIONS.load(ctx.deps.storage)?;
 
         if subs.contains_key(&denom) {
             Err(ContractError::SubscriptionAlreadyExists)
         } else {
-            subs.insert(denom, channel);
-            self.subscriptions.save(ctx.deps.storage, &subs)?;
+            subs.insert(denom, Subscription { channel, pool_id });
+            SUBSCRIPTIONS.save(ctx.deps.storage, &subs)?;
             Ok(Response::new())
         }
     }
@@ -78,13 +88,13 @@ impl OsmosisPriceProvider {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, cfg.admin, ContractError::Unauthorized {});
 
-        let mut subs = self.subscriptions.load(ctx.deps.storage)?;
+        let mut subs = SUBSCRIPTIONS.load(ctx.deps.storage)?;
 
         if !subs.contains_key(&denom) {
             Err(ContractError::SubscriptionDoesNotExist)
         } else {
             subs.remove(&denom);
-            self.subscriptions.save(ctx.deps.storage, &subs)?;
+            SUBSCRIPTIONS.save(ctx.deps.storage, &subs)?;
             Ok(Response::new())
         }
     }
@@ -101,7 +111,21 @@ pub fn sudo(
             let last_epoch = LAST_EPOCH.load(deps.storage)?;
             let secs_since_last_epoch = env.block.time.seconds() - last_epoch.seconds();
             if secs_since_last_epoch >= EPOCH_IN_SECS {
-                todo!("send out updates over IBC")
+                let subs = SUBSCRIPTIONS.load(deps.storage)?;
+                let querier = TwapQuerier::new(&deps.querier);
+
+                let msgs = subs
+                    .into_iter()
+                    .map(|(denom, Subscription { channel, pool_id })| {
+                        let twap = querier
+                            .arithmetic_twap_to_now(pool_id, BASE_ASSET.to_string(), denom, None)?
+                            .arithmetic_twap;
+                        let packet = mesh_apis::ibc::PriceFeedProviderPacket::Update { twap };
+                        make_ibc_packet(&env.block.time, channel, packet)
+                    })
+                    .filter_map(Result::ok); // silently ignore failures - TODO: logging of some kind?
+
+                Ok(Response::new().add_messages(msgs))
             } else {
                 Ok(Response::new())
             }

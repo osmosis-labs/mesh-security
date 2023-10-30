@@ -172,4 +172,6 @@ pub fn ack_fail<E: Error>(err: E) -> StdResult<Binary> {
 }
 
 #[cw_serde]
-pub enum PriceFeedProviderPacket {}
+pub enum PriceFeedProviderPacket {
+    Update { twap: String },
+}

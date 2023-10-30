@@ -28,3 +28,4 @@ schemars        = { workspace = true }
 serde           = { workspace = true }
 sylvia          = { workspace = true }
 thiserror       = { workspace = true }
+osmosis-std = "0.20.1"
