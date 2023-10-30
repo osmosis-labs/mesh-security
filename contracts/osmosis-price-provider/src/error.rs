@@ -25,4 +25,10 @@ pub enum ContractError {
 
     #[error("The price provider contract does not accept packets")]
     IbcPacketRecvDisallowed,
+
+    #[error("A subscription for the provided denom does not exist")]
+    SubscriptionDoesNotExist,
+
+    #[error("There is no subscription for the provided denom")]
+    SubscriptionAlreadyExists,
 }
