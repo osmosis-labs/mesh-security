@@ -7,21 +7,18 @@ use cosmwasm_std::{
     IbcChannelOpenResponse, IbcMsg, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg,
     IbcReceiveResponse, IbcTimeout, Timestamp,
 };
-use cw_storage_plus::Item;
 
-use crate::error::ContractError;
 use mesh_apis::ibc::{
     validate_channel_order, AckWrapper, PriceFeedProviderPacket, ProtocolVersion,
 };
+
+use crate::{contract::OsmosisPriceProvider, error::ContractError};
 
 const PROTOCOL_NAME: &str = "mesh-security-price-feed";
 /// This is the maximum version of the price feed protocol that we support
 const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.1.0";
 /// This is the minimum version that we are compatible with
 const MIN_IBC_PROTOCOL_VERSION: &str = "0.1.0";
-
-// IBC specific state
-pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 
 const TIMEOUT: u64 = 60 * 60;
 
@@ -33,14 +30,10 @@ pub fn packet_timeout(now: &Timestamp) -> IbcTimeout {
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// enforces ordering and versioning constraints
 pub fn ibc_channel_open(
-    deps: DepsMut,
+    _deps: DepsMut,
     _env: Env,
     msg: IbcChannelOpenMsg,
 ) -> Result<IbcChannelOpenResponse, ContractError> {
-    // ensure we have no channel yet
-    if IBC_CHANNEL.may_load(deps.storage)?.is_some() {
-        return Err(ContractError::IbcChannelAlreadyOpen);
-    }
     // ensure we are called with OpenInit
     let channel = match msg {
         IbcChannelOpenMsg::OpenInit { channel } => channel,
@@ -73,13 +66,9 @@ pub fn ibc_channel_open(
 /// once it's established, we store data
 pub fn ibc_channel_connect(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     msg: IbcChannelConnectMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    // ensure we have no channel yet
-    if IBC_CHANNEL.may_load(deps.storage)?.is_some() {
-        return Err(ContractError::IbcChannelAlreadyOpen);
-    }
     // ensure we are called with OpenAck
     let (channel, counterparty_version) = match msg {
         IbcChannelConnectMsg::OpenAck {
@@ -96,25 +85,33 @@ pub fn ibc_channel_connect(
     let v: ProtocolVersion = from_slice(counterparty_version.as_bytes())?;
     v.verify_compatibility(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?;
 
-    todo!("store the channel in subscriptions");
+    let contract = OsmosisPriceProvider::new();
+    contract
+        .subscriptions
+        .register_channel(deps.storage, channel)?;
 
     Ok(IbcBasicResponse::new())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn ibc_channel_close(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _msg: IbcChannelCloseMsg,
+    msg: IbcChannelCloseMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    todo!("remove subscription");
+    let contract = OsmosisPriceProvider::new();
+    contract
+        .subscriptions
+        .remove_channel(deps.storage, msg.channel())?;
+
+    Ok(IbcBasicResponse::new())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn ibc_packet_receive(
-    deps: DepsMut,
+    _deps: DepsMut,
     _env: Env,
-    msg: IbcPacketReceiveMsg,
+    _msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
     // this contract only sends out update packets over IBC - it's not meant to receive any
     Err(ContractError::IbcPacketRecvDisallowed)

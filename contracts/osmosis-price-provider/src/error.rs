@@ -20,6 +20,9 @@ pub enum ContractError {
     #[error("Contract already has an open IBC channel")]
     IbcChannelAlreadyOpen,
 
+    #[error("The provided IBC channel is not open")]
+    IbcChannelNotOpen,
+
     #[error("You must start the channel handshake on this side, it doesn't support OpenTry")]
     IbcOpenTryDisallowed,
 
@@ -29,6 +32,6 @@ pub enum ContractError {
     #[error("A subscription for the provided denom does not exist")]
     SubscriptionDoesNotExist,
 
-    #[error("There is no subscription for the provided denom")]
+    #[error("A subscription already exists for the provided denom")]
     SubscriptionAlreadyExists,
 }

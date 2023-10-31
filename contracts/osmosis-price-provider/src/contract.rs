@@ -1,7 +1,5 @@
-use std::collections::HashMap;
 use std::str::FromStr;
 
-use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     ensure_eq, entry_point, Decimal, DepsMut, Env, IbcChannel, Response, Timestamp,
 };
@@ -15,7 +13,7 @@ use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
 use crate::ibc::make_ibc_packet;
-use crate::state::Config;
+use crate::state::{Config, Subscription, Subscriptions};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -24,16 +22,10 @@ const BASE_ASSET: &str = "OSMO";
 
 const EPOCH_IN_SECS: u64 = 120;
 const LAST_EPOCH: Item<'static, Timestamp> = Item::new("last_epoch");
-const SUBSCRIPTIONS: Item<'static, HashMap<String, Subscription>> = Item::new("subscriptions");
-
-#[cw_serde]
-pub struct Subscription {
-    channel: IbcChannel,
-    pool_id: u64,
-}
 
 pub struct OsmosisPriceProvider {
     config: Item<'static, Config>,
+    pub(crate) subscriptions: Subscriptions,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -43,6 +35,7 @@ impl OsmosisPriceProvider {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
+            subscriptions: Subscriptions::new(),
         }
     }
 
@@ -57,6 +50,7 @@ impl OsmosisPriceProvider {
         let admin = ctx.deps.api.addr_validate(&admin)?;
         let config = Config { admin };
         self.config.save(ctx.deps.storage, &config)?;
+        self.subscriptions.init(ctx.deps.storage)?;
         LAST_EPOCH.save(ctx.deps.storage, &Timestamp::from_seconds(0))?;
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -65,7 +59,7 @@ impl OsmosisPriceProvider {
     }
 
     #[msg(exec)]
-    pub fn subscribe(
+    pub fn bind(
         &self,
         ctx: ExecCtx,
         denom: String,
@@ -75,31 +69,10 @@ impl OsmosisPriceProvider {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, cfg.admin, ContractError::Unauthorized {});
 
-        let mut subs = SUBSCRIPTIONS.load(ctx.deps.storage)?;
+        self.subscriptions
+            .bind_channel(ctx.deps.storage, channel, denom, pool_id)?;
 
-        if subs.contains_key(&denom) {
-            Err(ContractError::SubscriptionAlreadyExists)
-        } else {
-            subs.insert(denom, Subscription { channel, pool_id });
-            SUBSCRIPTIONS.save(ctx.deps.storage, &subs)?;
-            Ok(Response::new())
-        }
-    }
-
-    #[msg(exec)]
-    pub fn unsubscribe(&self, ctx: ExecCtx, denom: String) -> Result<Response, ContractError> {
-        let cfg = self.config.load(ctx.deps.storage)?;
-        ensure_eq!(ctx.info.sender, cfg.admin, ContractError::Unauthorized {});
-
-        let mut subs = SUBSCRIPTIONS.load(ctx.deps.storage)?;
-
-        if !subs.contains_key(&denom) {
-            Err(ContractError::SubscriptionDoesNotExist)
-        } else {
-            subs.remove(&denom);
-            SUBSCRIPTIONS.save(ctx.deps.storage, &subs)?;
-            Ok(Response::new())
-        }
+        Ok(Response::new())
     }
 }
 
@@ -114,11 +87,12 @@ pub fn sudo(
             let last_epoch = LAST_EPOCH.load(deps.storage)?;
             let secs_since_last_epoch = env.block.time.seconds() - last_epoch.seconds();
             if secs_since_last_epoch >= EPOCH_IN_SECS {
-                let subs = SUBSCRIPTIONS.load(deps.storage)?;
+                let contract = OsmosisPriceProvider::new();
+
+                let subs = contract.subscriptions.subs(deps.storage)?;
                 let querier = TwapQuerier::new(&deps.querier);
 
                 let msgs = subs
-                    .into_iter()
                     .map(|(denom, Subscription { channel, pool_id })| {
                         let twap = querier
                             .arithmetic_twap_to_now(pool_id, BASE_ASSET.to_string(), denom, None)?
