@@ -1,5 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{ensure_eq, Addr, Coin, Response, StdError, StdResult, Uint128};
+use std::cmp::min;
 
 use cw_storage_plus::{Item, Map};
 use cw_utils::{nonpayable, PaymentError};
@@ -28,6 +29,12 @@ pub enum ContractError {
 
     #[error("Wrong denom. Cannot stake {0}")]
     WrongDenom(String),
+
+    #[error("Empty validators list")]
+    NoValidators {},
+
+    #[error("Virtual staking {0} has not enough delegated funds: {1}")]
+    InsufficientDelegations(String, Uint128),
 }
 
 /// This is a stub implementation of the virtual staking contract, for test purposes only.
@@ -133,7 +140,7 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
 
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
-    /// If the virtual staking contract doesn't have at least amont tokens staked to the given validator, this will return an error.
+    /// If the virtual staking contract doesn't have at least amount tokens staked to the given validator, this will return an error.
     #[msg(exec)]
     fn unbond(
         &self,
@@ -155,6 +162,74 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
             .update::<_, ContractError>(ctx.deps.storage, &validator, |old| {
                 Ok(old.unwrap_or_default() - amount.amount)
             })?;
+
+        Ok(Response::new())
+    }
+
+    /// Requests to unbond and burn tokens from a lists of validators (one or more). This will be actually handled at the next epoch.
+    /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
+    /// If the virtual staking contract doesn't have at least amount tokens staked over the given validators, this will return an error.
+    #[msg(exec)]
+    fn burn(
+        &self,
+        ctx: ExecCtx,
+        validators: Vec<String>,
+        amount: Coin,
+    ) -> Result<Response, Self::Error> {
+        nonpayable(&ctx.info)?;
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized);
+        // only the converter can call this
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::WrongDenom(cfg.denom)
+        );
+
+        // Error if no validators
+        if validators.is_empty() {
+            return Err(ContractError::NoValidators {});
+        }
+
+        let mut unstaked = 0;
+        let proportional_amount = Uint128::new(amount.amount.u128() / validators.len() as u128);
+        for validator in &validators {
+            // Checks that validator has `proportional_amount` delegated. Adjust accordingly if not.
+            self.stake
+                .update::<_, ContractError>(ctx.deps.storage, &validator, |old| {
+                    let delegated_amount = old.unwrap_or_default();
+                    let unstake_amount = min(delegated_amount, proportional_amount);
+                    unstaked += unstake_amount.u128();
+                    Ok(delegated_amount - unstake_amount)
+                })?;
+        }
+        // Adjust possible rounding issues
+        if unstaked < amount.amount.u128() {
+            // Look for the first validator that has enough stake, and unstake it from there
+            let unstake_amount = Uint128::new(amount.amount.u128() - unstaked);
+            for validator in &validators {
+                let delegated_amount = self
+                    .stake
+                    .may_load(ctx.deps.storage, &validator)?
+                    .unwrap_or_default();
+                if delegated_amount >= unstake_amount {
+                    self.stake.save(
+                        ctx.deps.storage,
+                        &validator,
+                        &(delegated_amount - unstake_amount),
+                    )?;
+                    unstaked += unstake_amount.u128();
+                    break;
+                }
+            }
+        }
+        // Bail if we still don't have enough stake
+        if unstaked < amount.amount.u128() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
 
         Ok(Response::new())
     }

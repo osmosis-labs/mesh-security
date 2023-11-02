@@ -213,6 +213,33 @@ impl ConverterContract<'_> {
         Ok(Response::new().add_message(msg).add_event(event))
     }
 
+    /// This is called by ibc_packet_receive.
+    /// It is pulled out into a method, so it can also be called by test_burn for testing
+    pub(crate) fn burn(
+        &self,
+        deps: DepsMut,
+        validators: &[String],
+        burn: Coin,
+    ) -> Result<Response, ContractError> {
+        let amount = self.normalize_price(deps.as_ref(), burn)?;
+
+        let event = Event::new("mesh-burn")
+            .add_attribute("validators", validators.join(","))
+            .add_attribute("amount", amount.amount.to_string());
+
+        let msg = virtual_staking_api::ExecMsg::Burn {
+            validators: validators.to_vec(),
+            amount,
+        };
+        let msg = WasmMsg::Execute {
+            contract_addr: self.virtual_stake.load(deps.storage)?.into(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
+        };
+
+        Ok(Response::new().add_message(msg).add_event(event))
+    }
+
     fn normalize_price(&self, deps: Deps, amount: Coin) -> Result<Coin, ContractError> {
         let config = self.config.load(deps.storage)?;
         ensure_eq!(
