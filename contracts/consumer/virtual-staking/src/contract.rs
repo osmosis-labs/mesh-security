@@ -49,6 +49,10 @@ pub struct VirtualStakingContract<'a> {
     // `inactive` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
     pub inactive: Item<'a, Vec<String>>,
+    /// Amount of tokens that have been burned from a validator.
+    /// This is just for accounting / tracking reasons, as token "burning" is being implemented as unbonding,
+    /// and there's no real need to discount the burned amount in this contract.
+    burned: Map<'a, &'a str, u128>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -65,6 +69,7 @@ impl VirtualStakingContract<'_> {
             tombstone_requests: Item::new("tombstoned"),
             jail_requests: Item::new("jailed"),
             inactive: Item::new("inactive"),
+            burned: Map::new("burned"),
         }
     }
 
@@ -591,6 +596,10 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
                     unstaked += unstake_amount.u128();
                     Ok(bonded_amount - unstake_amount)
                 })?;
+            // Accounting trick to avoid burning stake
+            self.burned.update(ctx.deps.storage, validator, |old| {
+                Ok::<_, ContractError>(old.unwrap_or_default() + proportional_amount.u128())
+            })?;
         }
         // Adjust possible rounding issues
         if unstaked < amount.amount.u128() {
@@ -607,6 +616,10 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
                         validator,
                         &(bonded_amount - unstake_amount),
                     )?;
+                    // Accounting trick to avoid burning stake
+                    self.burned.update(ctx.deps.storage, validator, |old| {
+                        Ok::<_, ContractError>(old.unwrap_or_default() + unstake_amount.u128())
+                    })?;
                     unstaked += unstake_amount.u128();
                     break;
                 }
