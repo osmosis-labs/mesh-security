@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::cmp::{min, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 
@@ -552,6 +552,73 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             .map_err(|_| ContractError::InsufficientBond(validator.clone(), amount.amount))?;
         self.bond_requests
             .save(ctx.deps.storage, &validator, &bonded)?;
+
+        Ok(Response::new())
+    }
+
+    /// Requests to unbond and burn tokens from a list of validators. Unbonding will be actually handled at the next epoch.
+    /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
+    /// If the virtual staking contract doesn't have at least amount tokens staked over the given validators, this will return an error.
+    #[msg(exec)]
+    fn burn(
+        &self,
+        ctx: ExecCtx,
+        validators: Vec<String>,
+        amount: Coin,
+    ) -> Result<Response, Self::Error> {
+        nonpayable(&ctx.info)?;
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized); // only the converter can call this
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::WrongDenom(cfg.denom)
+        );
+
+        // Error if no validators
+        if validators.is_empty() {
+            return Err(ContractError::NoValidators {});
+        }
+
+        let mut unstaked = 0;
+        let proportional_amount = Uint128::new(amount.amount.u128() / validators.len() as u128);
+        for validator in &validators {
+            // Checks that validator has `proportional_amount` bonded. Adjust accordingly if not.
+            self.bond_requests
+                .update::<_, ContractError>(ctx.deps.storage, validator, |old| {
+                    let bonded_amount = old.unwrap_or_default();
+                    let unstake_amount = min(bonded_amount, proportional_amount);
+                    unstaked += unstake_amount.u128();
+                    Ok(bonded_amount - unstake_amount)
+                })?;
+        }
+        // Adjust possible rounding issues
+        if unstaked < amount.amount.u128() {
+            // Look for the first validator that has enough stake, and unstake it from there
+            let unstake_amount = Uint128::new(amount.amount.u128() - unstaked);
+            for validator in &validators {
+                let bonded_amount = self
+                    .bond_requests
+                    .may_load(ctx.deps.storage, validator)?
+                    .unwrap_or_default();
+                if bonded_amount >= unstake_amount {
+                    self.bond_requests.save(
+                        ctx.deps.storage,
+                        validator,
+                        &(bonded_amount - unstake_amount),
+                    )?;
+                    unstaked += unstake_amount.u128();
+                    break;
+                }
+            }
+        }
+        // Bail if we still don't have enough stake
+        if unstaked < amount.amount.u128() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
 
         Ok(Response::new())
     }
