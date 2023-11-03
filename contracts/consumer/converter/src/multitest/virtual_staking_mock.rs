@@ -196,7 +196,7 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
         for validator in &validators {
             // Checks that validator has `proportional_amount` delegated. Adjust accordingly if not.
             self.stake
-                .update::<_, ContractError>(ctx.deps.storage, &validator, |old| {
+                .update::<_, ContractError>(ctx.deps.storage, validator, |old| {
                     let delegated_amount = old.unwrap_or_default();
                     let unstake_amount = min(delegated_amount, proportional_amount);
                     unstaked += unstake_amount.u128();
@@ -210,12 +210,12 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
             for validator in &validators {
                 let delegated_amount = self
                     .stake
-                    .may_load(ctx.deps.storage, &validator)?
+                    .may_load(ctx.deps.storage, validator)?
                     .unwrap_or_default();
                 if delegated_amount >= unstake_amount {
                     self.stake.save(
                         ctx.deps.storage,
-                        &validator,
+                        validator,
                         &(delegated_amount - unstake_amount),
                     )?;
                     unstaked += unstake_amount.u128();
