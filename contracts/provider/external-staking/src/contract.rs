@@ -1331,7 +1331,7 @@ pub mod cross_staking {
             let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
             let packet = ProviderPacket::Burn {
                 validators: validators.clone(),
-                burn: amount,
+                burn: amount.clone(),
             };
             let msg = IbcMsg::SendPacket {
                 channel_id: channel.endpoint.channel_id,
@@ -1353,7 +1353,7 @@ pub mod cross_staking {
                 .add_attribute("action", "burn_virtual_stake")
                 .add_attribute("owner", owner)
                 .add_attribute("validators", validators.join(", "))
-                .add_attribute("amount", proportional_amount.to_string());
+                .add_attribute("amount", amount.to_string());
 
             Ok(resp)
         }
