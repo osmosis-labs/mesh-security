@@ -1293,6 +1293,7 @@ pub mod cross_staking {
             };
             let num_validators = Uint128::new(validators.len() as u128);
             // FIXME? Check for zero len validators
+            // TODO: Deal with rounding / unbonded validators
             let proportional_amount = amount.amount / num_validators;
             for validator in &validators {
                 let mut stake = self
