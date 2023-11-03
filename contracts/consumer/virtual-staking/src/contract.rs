@@ -775,6 +775,28 @@ mod tests {
     }
 
     #[test]
+    fn burn() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(10u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom))])
+            .assert_rewards(&[]);
+
+        contract.quick_burn(deps.as_mut(), "val1", 5);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_unbond(&[("val1", (5u128, &denom))])
+            .assert_rewards(&["val1"]);
+    }
+
+    #[test]
     fn validator_jail_unjail() {
         let (mut deps, knobs) = mock_dependencies();
 
@@ -1231,6 +1253,7 @@ mod tests {
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult;
         fn quick_bond(&self, deps: DepsMut, validator: &str, amount: u128);
         fn quick_unbond(&self, deps: DepsMut, validator: &str, amount: u128);
+        fn quick_burn(&self, deps: DepsMut, validator: &str, amount: u128);
         fn jail(&self, deps: DepsMut, val: &str);
         fn unjail(&self, deps: DepsMut, val: &str);
         fn tombstone(&self, deps: DepsMut, val: &str);
@@ -1310,6 +1333,21 @@ mod tests {
                     info: mock_info("me", &[]),
                 },
                 validator.to_string(),
+                coin(amount, denom),
+            )
+            .unwrap();
+        }
+
+        fn quick_burn(&self, deps: DepsMut, validator: &str, amount: u128) {
+            let denom = self.config.load(deps.storage).unwrap().denom;
+
+            self.burn(
+                ExecCtx {
+                    deps: deps.into_empty(),
+                    env: mock_env(),
+                    info: mock_info("me", &[]),
+                },
+                vec![validator.to_string()],
                 coin(amount, denom),
             )
             .unwrap();
