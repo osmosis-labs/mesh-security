@@ -20,6 +20,7 @@ mt = ["library", "sylvia/mt"]
 
 [dependencies]
 mesh-apis        = { workspace = true }
+mesh-burn        = { workspace = true }
 mesh-bindings    = { workspace = true }
 
 sylvia = { workspace = true }

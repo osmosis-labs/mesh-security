@@ -1,4 +1,4 @@
-use std::cmp::{min, Ordering};
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 
@@ -579,54 +579,42 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             cfg.denom,
             ContractError::WrongDenom(cfg.denom)
         );
-
-        // Error if no validators
-        if validators.is_empty() {
-            return Err(ContractError::NoValidators {});
+        let mut bonds = vec![];
+        for validator in validators {
+            let stake = self
+                .bond_requests
+                .may_load(ctx.deps.storage, &validator)?
+                .unwrap_or_default()
+                .u128();
+            if stake != 0 {
+                bonds.push((validator, stake));
+            }
         }
 
-        let mut unstaked = 0;
-        let proportional_amount = Uint128::new(amount.amount.u128() / validators.len() as u128);
-        for validator in &validators {
-            // Checks that validator has `proportional_amount` bonded. Adjust accordingly if not.
+        // Error if no delegations
+        if bonds.is_empty() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
+
+        let (burned, burns) = mesh_burn::distribute_burn(bonds.as_slice(), amount.amount.u128());
+
+        for (validator, burn_amount) in burns {
+            // Update bond requests
             self.bond_requests
                 .update::<_, ContractError>(ctx.deps.storage, validator, |old| {
-                    let bonded_amount = old.unwrap_or_default();
-                    let unstake_amount = min(bonded_amount, proportional_amount);
-                    unstaked += unstake_amount.u128();
-                    Ok(bonded_amount - unstake_amount)
+                    Ok(old.unwrap_or_default() - Uint128::new(burn_amount))
                 })?;
             // Accounting trick to avoid burning stake
             self.burned.update(ctx.deps.storage, validator, |old| {
-                Ok::<_, ContractError>(old.unwrap_or_default() + proportional_amount.u128())
+                Ok::<_, ContractError>(old.unwrap_or_default() + burn_amount)
             })?;
         }
-        // Adjust possible rounding issues
-        if unstaked < amount.amount.u128() {
-            // Look for the first validator that has enough stake, and unstake it from there
-            let unstake_amount = Uint128::new(amount.amount.u128() - unstaked);
-            for validator in &validators {
-                let bonded_amount = self
-                    .bond_requests
-                    .may_load(ctx.deps.storage, validator)?
-                    .unwrap_or_default();
-                if bonded_amount >= unstake_amount {
-                    self.bond_requests.save(
-                        ctx.deps.storage,
-                        validator,
-                        &(bonded_amount - unstake_amount),
-                    )?;
-                    // Accounting trick to avoid burning stake
-                    self.burned.update(ctx.deps.storage, validator, |old| {
-                        Ok::<_, ContractError>(old.unwrap_or_default() + unstake_amount.u128())
-                    })?;
-                    unstaked += unstake_amount.u128();
-                    break;
-                }
-            }
-        }
+
         // Bail if we still don't have enough stake
-        if unstaked < amount.amount.u128() {
+        if burned < amount.amount.u128() {
             return Err(ContractError::InsufficientDelegations(
                 ctx.env.contract.address.to_string(),
                 amount.amount,
