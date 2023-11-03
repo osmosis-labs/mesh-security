@@ -789,11 +789,84 @@ mod tests {
             .assert_bond(&[("val1", (5u128, &denom))])
             .assert_rewards(&[]);
 
-        contract.quick_burn(deps.as_mut(), "val1", 5);
+        contract.quick_burn(deps.as_mut(), &["val1"], 5).unwrap();
         contract
             .hit_epoch(deps.as_mut())
             .assert_unbond(&[("val1", (5u128, &denom))])
             .assert_rewards(&["val1"]);
+    }
+
+    #[test]
+    fn multiple_validators_burn() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "val2", 20);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom)), ("val2", (20u128, &denom))])
+            .assert_rewards(&[]);
+
+        contract
+            .quick_burn(deps.as_mut(), &["val1", "val2"], 5)
+            .unwrap();
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_unbond(&[("val1", (3u128, &denom)), ("val2", (2u128, &denom))])
+            .assert_rewards(&["val1", "val2"]);
+    }
+
+    #[test]
+    fn some_unbonded_validators_burn() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "val2", 10);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom)), ("val2", (10u128, &denom))])
+            .assert_rewards(&[]);
+
+        contract
+            .quick_burn(deps.as_mut(), &["val1", "val2"], 15)
+            .unwrap();
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_unbond(&[("val1", (5u128, &denom)), ("val2", (10u128, &denom))])
+            .assert_rewards(&["val1", "val2"]);
+    }
+
+    #[test]
+    fn unbonded_validators_burn() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "val2", 10);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom)), ("val2", (10u128, &denom))])
+            .assert_rewards(&[]);
+
+        let res = contract.quick_burn(deps.as_mut(), &["val1", "val2"], 20);
+        assert!(matches!(
+            res.unwrap_err(),
+            ContractError::InsufficientDelegations { .. }
+        ));
     }
 
     #[test]
@@ -1253,7 +1326,12 @@ mod tests {
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult;
         fn quick_bond(&self, deps: DepsMut, validator: &str, amount: u128);
         fn quick_unbond(&self, deps: DepsMut, validator: &str, amount: u128);
-        fn quick_burn(&self, deps: DepsMut, validator: &str, amount: u128);
+        fn quick_burn(
+            &self,
+            deps: DepsMut,
+            validator: &[&str],
+            amount: u128,
+        ) -> Result<Response, ContractError>;
         fn jail(&self, deps: DepsMut, val: &str);
         fn unjail(&self, deps: DepsMut, val: &str);
         fn tombstone(&self, deps: DepsMut, val: &str);
@@ -1338,7 +1416,12 @@ mod tests {
             .unwrap();
         }
 
-        fn quick_burn(&self, deps: DepsMut, validator: &str, amount: u128) {
+        fn quick_burn(
+            &self,
+            deps: DepsMut,
+            validators: &[&str],
+            amount: u128,
+        ) -> Result<Response, ContractError> {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.burn(
@@ -1347,10 +1430,9 @@ mod tests {
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },
-                vec![validator.to_string()],
+                validators.iter().map(<&str>::to_string).collect(),
                 coin(amount, denom),
             )
-            .unwrap();
         }
 
         fn jail(&self, deps: DepsMut, val: &str) {
