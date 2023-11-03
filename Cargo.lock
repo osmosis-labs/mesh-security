@@ -570,6 +570,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-burn"
+version = "0.8.0-alpha.1"
+
+[[package]]
 name = "mesh-converter"
 version = "0.8.0-alpha.1"
 dependencies = [
@@ -652,6 +656,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-burn",
  "mesh-native-staking",
  "mesh-vault",
  "schemars",
