@@ -59,4 +59,7 @@ pub enum ContractError {
 
     #[error("{0}")]
     Range(#[from] RangeError),
+
+    #[error("User {0} has not enough delegated funds: {1}")]
+    InsufficientDelegations(String, Uint128),
 }
