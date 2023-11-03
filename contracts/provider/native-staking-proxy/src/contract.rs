@@ -1,5 +1,3 @@
-use std::cmp::min;
-
 use cosmwasm_std::WasmMsg::Execute;
 use cosmwasm_std::{
     coin, ensure_eq, to_binary, Coin, DistributionMsg, GovMsg, Response, StakingMsg, VoteOption,
@@ -91,7 +89,7 @@ impl NativeStakingProxyContract<'_> {
     }
 
     /// Burn `amount` tokens from the given validator, if set.
-    /// If `validator` is not set, undelegate evenly from all validators the user has stake in.
+    /// If `validator` is not set, undelegate evenly from all validators the user has stake.
     /// Can only be called by the parent contract
     #[msg(exec)]
     fn burn(
@@ -112,73 +110,64 @@ impl NativeStakingProxyContract<'_> {
             ContractError::InvalidDenom(amount.denom)
         );
 
-        let validators = match validator {
+        let delegations = match validator {
             Some(validator) => {
-                let validator = ctx
+                let delegation = ctx
                     .deps
                     .querier
                     .query_delegation(ctx.env.contract.address.clone(), validator)?
                     .map(|full_delegation| {
-                        (full_delegation.validator, full_delegation.amount.amount)
+                        (
+                            full_delegation.validator,
+                            full_delegation.amount.amount.u128(),
+                        )
                     })
                     .unwrap();
-                vec![validator]
+                vec![delegation]
             }
             None => {
-                let validators = ctx
+                let delegations = ctx
                     .deps
                     .querier
                     .query_all_delegations(ctx.env.contract.address.clone())?
                     .iter()
-                    .map(|delegation| (delegation.validator.clone(), delegation.amount.amount))
+                    .map(|delegation| {
+                        (
+                            delegation.validator.clone(),
+                            delegation.amount.amount.u128(),
+                        )
+                    })
                     .collect::<Vec<_>>();
-                validators
+                delegations
             }
         };
 
         // Error if no validators
-        if validators.is_empty() {
+        if delegations.is_empty() {
             return Err(ContractError::InsufficientDelegations(
                 ctx.env.contract.address.to_string(),
                 amount.amount,
             ));
         }
 
-        let mut unstake_msgs = vec![];
-        let mut unstaked = 0;
-        let proportional_amount = amount.amount.u128() / validators.len() as u128;
-        for (validator, delegated_amount) in &validators {
-            // Check validator has `proportional_amount` delegated. Adjust accordingly if not.
-            let unstake_amount = min(delegated_amount.u128(), proportional_amount);
-            let unstake_msg = StakingMsg::Undelegate {
-                validator: validator.to_string(),
-                amount: coin(unstake_amount, &cfg.denom),
-            };
-            unstaked += unstake_amount;
-            unstake_msgs.push(unstake_msg);
-        }
-        // Adjust possible rounding issues
-        if unstaked < amount.amount.u128() {
-            // Look for the first validator that has enough stake, and unstake it from there
-            let unstake_amount = amount.amount.u128() - unstaked;
-            for (validator, delegated_amount) in &validators {
-                if delegated_amount.u128() >= unstake_amount + proportional_amount {
-                    let unstake_msg = StakingMsg::Undelegate {
-                        validator: validator.to_string(),
-                        amount: coin(unstake_amount, &cfg.denom),
-                    };
-                    unstaked += unstake_amount;
-                    unstake_msgs.push(unstake_msg);
-                    break;
-                }
-            }
-        }
-        // Bail if we still don't have enough stake
-        if unstaked < amount.amount.u128() {
+        let (burned, burns) = mesh_burn::distribute_burn(&delegations, amount.amount.u128());
+
+        // Bail if we don't have enough delegations
+        if burned < amount.amount.u128() {
             return Err(ContractError::InsufficientDelegations(
                 ctx.env.contract.address.to_string(),
                 amount.amount,
             ));
+        }
+
+        // Build undelegate messages
+        let mut undelegate_msgs = vec![];
+        for (validator, burn_amount) in burns {
+            let undelegate_msg = StakingMsg::Undelegate {
+                validator: validator.to_string(),
+                amount: coin(burn_amount, &cfg.denom),
+            };
+            undelegate_msgs.push(undelegate_msg);
         }
 
         // Accounting trick to avoid burning stake
@@ -186,7 +175,7 @@ impl NativeStakingProxyContract<'_> {
             Ok::<_, ContractError>(old + amount.amount.u128())
         })?;
 
-        Ok(Response::new().add_messages(unstake_msgs))
+        Ok(Response::new().add_messages(undelegate_msgs))
     }
 
     /// Re-stakes the given amount from the one validator to another on behalf of the calling user.
