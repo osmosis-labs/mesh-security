@@ -743,6 +743,7 @@ dependencies = [
  "itertools 0.11.0",
  "mesh-apis",
  "mesh-bindings",
+ "mesh-burn",
  "mesh-converter",
  "mesh-simple-price-feed",
  "schemars",
