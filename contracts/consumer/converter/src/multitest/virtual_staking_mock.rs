@@ -1,6 +1,5 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{ensure_eq, Addr, Coin, Response, StdError, StdResult, Uint128};
-use std::cmp::min;
 
 use cw_storage_plus::{Item, Map};
 use cw_utils::{nonpayable, PaymentError};
@@ -29,9 +28,6 @@ pub enum ContractError {
 
     #[error("Wrong denom. Cannot stake {0}")]
     WrongDenom(String),
-
-    #[error("Empty validators list")]
-    NoValidators {},
 
     #[error("Virtual staking {0} has not enough delegated funds: {1}")]
     InsufficientDelegations(String, Uint128),
@@ -186,49 +182,42 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
             ContractError::WrongDenom(cfg.denom)
         );
 
-        // Error if no validators
-        if validators.is_empty() {
-            return Err(ContractError::NoValidators {});
-        }
-
-        let mut unstaked = 0;
-        let proportional_amount = Uint128::new(amount.amount.u128() / validators.len() as u128);
-        for validator in &validators {
-            // Checks that validator has `proportional_amount` delegated. Adjust accordingly if not.
-            self.stake
-                .update::<_, ContractError>(ctx.deps.storage, validator, |old| {
-                    let delegated_amount = old.unwrap_or_default();
-                    let unstake_amount = min(delegated_amount, proportional_amount);
-                    unstaked += unstake_amount.u128();
-                    Ok(delegated_amount - unstake_amount)
-                })?;
-        }
-        // Adjust possible rounding issues
-        if unstaked < amount.amount.u128() {
-            // Look for the first validator that has enough stake, and unstake it from there
-            let unstake_amount = Uint128::new(amount.amount.u128() - unstaked);
-            for validator in &validators {
-                let delegated_amount = self
-                    .stake
-                    .may_load(ctx.deps.storage, validator)?
-                    .unwrap_or_default();
-                if delegated_amount >= unstake_amount {
-                    self.stake.save(
-                        ctx.deps.storage,
-                        validator,
-                        &(delegated_amount - unstake_amount),
-                    )?;
-                    unstaked += unstake_amount.u128();
-                    break;
-                }
+        let mut stakes = vec![];
+        for validator in validators {
+            let stake = self
+                .stake
+                .may_load(ctx.deps.storage, &validator)?
+                .unwrap_or_default()
+                .u128();
+            if stake != 0 {
+                stakes.push((validator, stake));
             }
         }
-        // Bail if we still don't have enough stake
-        if unstaked < amount.amount.u128() {
+
+        // Error if no delegations
+        if stakes.is_empty() {
             return Err(ContractError::InsufficientDelegations(
                 ctx.env.contract.address.to_string(),
                 amount.amount,
             ));
+        }
+
+        let (burned, burns) = mesh_burn::distribute_burn(stakes.as_slice(), amount.amount.u128());
+
+        // Bail if we still don't have enough stake
+        if burned < amount.amount.u128() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
+
+        // Update stake
+        for (validator, burn_amount) in burns {
+            self.stake
+                .update::<_, ContractError>(ctx.deps.storage, validator, |old| {
+                    Ok(old.unwrap_or_default() - Uint128::new(burn_amount))
+                })?;
         }
 
         Ok(Response::new())
