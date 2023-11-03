@@ -105,6 +105,13 @@ impl NativeStakingProxyContract<'_> {
 
         nonpayable(&ctx.info)?;
 
+        // Check denom
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::InvalidDenom(amount.denom)
+        );
+
         let validators = match validator {
             Some(validator) => {
                 let validator = ctx
