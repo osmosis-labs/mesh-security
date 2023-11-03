@@ -608,6 +608,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "mesh-apis",
+ "mesh-burn",
  "mesh-native-staking",
  "mesh-native-staking-proxy",
  "mesh-sync",
