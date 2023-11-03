@@ -214,8 +214,14 @@ pub fn ibc_packet_receive(
                 .add_events(response.events)
                 .add_attributes(response.attributes)
         }
-        ProviderPacket::Burn { .. } => {
-            todo!()
+        ProviderPacket::Burn { validators, burn } => {
+            let response = contract.burn(deps, &validators, burn)?;
+            let ack = ack_success(&UnstakeAck {})?;
+            IbcReceiveResponse::new()
+                .set_ack(ack)
+                .add_submessages(response.messages)
+                .add_events(response.events)
+                .add_attributes(response.attributes)
         }
         ProviderPacket::TransferRewards {
             rewards, recipient, ..

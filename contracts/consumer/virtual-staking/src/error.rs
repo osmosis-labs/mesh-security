@@ -21,4 +21,10 @@ pub enum ContractError {
 
     #[error("Invalid Reply ID. Don't recognize {0}")]
     InvalidReplyId(u64),
+
+    #[error("Empty validators list")]
+    NoValidators {},
+
+    #[error("Virtual staking {0} has not enough delegated funds: {1}")]
+    InsufficientDelegations(String, Uint128),
 }

@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::cmp::{min, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 
@@ -49,6 +49,10 @@ pub struct VirtualStakingContract<'a> {
     // `inactive` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
     pub inactive: Item<'a, Vec<String>>,
+    /// Amount of tokens that have been burned from a validator.
+    /// This is just for accounting / tracking reasons, as token "burning" is being implemented as unbonding,
+    /// and there's no real need to discount the burned amount in this contract.
+    burned: Map<'a, &'a str, u128>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -65,6 +69,7 @@ impl VirtualStakingContract<'_> {
             tombstone_requests: Item::new("tombstoned"),
             jail_requests: Item::new("jailed"),
             inactive: Item::new("inactive"),
+            burned: Map::new("burned"),
         }
     }
 
@@ -555,6 +560,81 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
 
         Ok(Response::new())
     }
+
+    /// Requests to unbond and burn tokens from a list of validators. Unbonding will be actually handled at the next epoch.
+    /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
+    /// If the virtual staking contract doesn't have at least amount tokens staked over the given validators, this will return an error.
+    #[msg(exec)]
+    fn burn(
+        &self,
+        ctx: ExecCtx,
+        validators: Vec<String>,
+        amount: Coin,
+    ) -> Result<Response, Self::Error> {
+        nonpayable(&ctx.info)?;
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized); // only the converter can call this
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::WrongDenom(cfg.denom)
+        );
+
+        // Error if no validators
+        if validators.is_empty() {
+            return Err(ContractError::NoValidators {});
+        }
+
+        let mut unstaked = 0;
+        let proportional_amount = Uint128::new(amount.amount.u128() / validators.len() as u128);
+        for validator in &validators {
+            // Checks that validator has `proportional_amount` bonded. Adjust accordingly if not.
+            self.bond_requests
+                .update::<_, ContractError>(ctx.deps.storage, validator, |old| {
+                    let bonded_amount = old.unwrap_or_default();
+                    let unstake_amount = min(bonded_amount, proportional_amount);
+                    unstaked += unstake_amount.u128();
+                    Ok(bonded_amount - unstake_amount)
+                })?;
+            // Accounting trick to avoid burning stake
+            self.burned.update(ctx.deps.storage, validator, |old| {
+                Ok::<_, ContractError>(old.unwrap_or_default() + proportional_amount.u128())
+            })?;
+        }
+        // Adjust possible rounding issues
+        if unstaked < amount.amount.u128() {
+            // Look for the first validator that has enough stake, and unstake it from there
+            let unstake_amount = Uint128::new(amount.amount.u128() - unstaked);
+            for validator in &validators {
+                let bonded_amount = self
+                    .bond_requests
+                    .may_load(ctx.deps.storage, validator)?
+                    .unwrap_or_default();
+                if bonded_amount >= unstake_amount {
+                    self.bond_requests.save(
+                        ctx.deps.storage,
+                        validator,
+                        &(bonded_amount - unstake_amount),
+                    )?;
+                    // Accounting trick to avoid burning stake
+                    self.burned.update(ctx.deps.storage, validator, |old| {
+                        Ok::<_, ContractError>(old.unwrap_or_default() + unstake_amount.u128())
+                    })?;
+                    unstaked += unstake_amount.u128();
+                    break;
+                }
+            }
+        }
+        // Bail if we still don't have enough stake
+        if unstaked < amount.amount.u128() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
+
+        Ok(Response::new())
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -692,6 +772,101 @@ mod tests {
             .hit_epoch(deps.as_mut())
             .assert_unbond(&[("val1", (5u128, &denom))])
             .assert_rewards(&["val1"]);
+    }
+
+    #[test]
+    fn burn() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(10u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom))])
+            .assert_rewards(&[]);
+
+        contract.quick_burn(deps.as_mut(), &["val1"], 5).unwrap();
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_unbond(&[("val1", (5u128, &denom))])
+            .assert_rewards(&["val1"]);
+    }
+
+    #[test]
+    fn multiple_validators_burn() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "val2", 20);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom)), ("val2", (20u128, &denom))])
+            .assert_rewards(&[]);
+
+        contract
+            .quick_burn(deps.as_mut(), &["val1", "val2"], 5)
+            .unwrap();
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_unbond(&[("val1", (3u128, &denom)), ("val2", (2u128, &denom))])
+            .assert_rewards(&["val1", "val2"]);
+    }
+
+    #[test]
+    fn some_unbonded_validators_burn() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "val2", 10);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom)), ("val2", (10u128, &denom))])
+            .assert_rewards(&[]);
+
+        contract
+            .quick_burn(deps.as_mut(), &["val1", "val2"], 15)
+            .unwrap();
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_unbond(&[("val1", (5u128, &denom)), ("val2", (10u128, &denom))])
+            .assert_rewards(&["val1", "val2"]);
+    }
+
+    #[test]
+    fn unbonded_validators_burn() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "val2", 10);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (5u128, &denom)), ("val2", (10u128, &denom))])
+            .assert_rewards(&[]);
+
+        let res = contract.quick_burn(deps.as_mut(), &["val1", "val2"], 20);
+        assert!(matches!(
+            res.unwrap_err(),
+            ContractError::InsufficientDelegations { .. }
+        ));
     }
 
     #[test]
@@ -1151,6 +1326,12 @@ mod tests {
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult;
         fn quick_bond(&self, deps: DepsMut, validator: &str, amount: u128);
         fn quick_unbond(&self, deps: DepsMut, validator: &str, amount: u128);
+        fn quick_burn(
+            &self,
+            deps: DepsMut,
+            validator: &[&str],
+            amount: u128,
+        ) -> Result<Response, ContractError>;
         fn jail(&self, deps: DepsMut, val: &str);
         fn unjail(&self, deps: DepsMut, val: &str);
         fn tombstone(&self, deps: DepsMut, val: &str);
@@ -1233,6 +1414,25 @@ mod tests {
                 coin(amount, denom),
             )
             .unwrap();
+        }
+
+        fn quick_burn(
+            &self,
+            deps: DepsMut,
+            validators: &[&str],
+            amount: u128,
+        ) -> Result<Response, ContractError> {
+            let denom = self.config.load(deps.storage).unwrap().denom;
+
+            self.burn(
+                ExecCtx {
+                    deps: deps.into_empty(),
+                    env: mock_env(),
+                    info: mock_info("me", &[]),
+                },
+                validators.iter().map(<&str>::to_string).collect(),
+                coin(amount, denom),
+            )
         }
 
         fn jail(&self, deps: DepsMut, val: &str) {

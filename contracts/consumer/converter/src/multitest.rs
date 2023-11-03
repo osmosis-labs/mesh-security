@@ -201,6 +201,92 @@ fn ibc_stake_and_unstake() {
 }
 
 #[test]
+fn ibc_stake_and_burn() {
+    let app = App::default();
+
+    let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
+    let admin = "theman";
+    let discount = Decimal::percent(40); // 1 OSMO worth of JUNO should give 0.6 OSMO of stake
+    let native_per_foreign = Decimal::percent(50); // 1 JUNO is worth 0.5 OSMO
+
+    let SetupResponse {
+        price_feed: _,
+        converter,
+        virtual_staking,
+    } = setup(
+        &app,
+        SetupArgs {
+            owner,
+            admin,
+            discount,
+            native_per_foreign,
+        },
+    );
+
+    // no one is staked
+    let val1 = "Val Kilmer";
+    let val2 = "Valley Girl";
+    assert!(virtual_staking.all_stake().unwrap().stakes.is_empty());
+    assert_eq!(
+        virtual_staking
+            .stake(val1.to_string())
+            .unwrap()
+            .stake
+            .u128(),
+        0
+    );
+    assert_eq!(
+        virtual_staking
+            .stake(val2.to_string())
+            .unwrap()
+            .stake
+            .u128(),
+        0
+    );
+
+    // let's stake some
+    converter
+        .test_stake(val1.to_string(), coin(1000, JUNO))
+        .call(owner)
+        .unwrap();
+    converter
+        .test_stake(val2.to_string(), coin(4000, JUNO))
+        .call(owner)
+        .unwrap();
+
+    // and burn some
+    converter
+        .test_burn(vec![val2.to_string()], coin(2000, JUNO))
+        .call(owner)
+        .unwrap();
+
+    // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
+    assert_eq!(
+        virtual_staking
+            .stake(val1.to_string())
+            .unwrap()
+            .stake
+            .u128(),
+        300
+    );
+    assert_eq!(
+        virtual_staking
+            .stake(val2.to_string())
+            .unwrap()
+            .stake
+            .u128(),
+        600
+    );
+    assert_eq!(
+        virtual_staking.all_stake().unwrap().stakes,
+        vec![
+            (val1.to_string(), Uint128::new(300)),
+            (val2.to_string(), Uint128::new(600)),
+        ]
+    );
+}
+
+#[test]
 fn valset_update_works() {
     let app = App::default();
 

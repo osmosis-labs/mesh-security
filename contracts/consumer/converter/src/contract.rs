@@ -154,6 +154,27 @@ impl ConverterContract<'_> {
         }
     }
 
+    /// This is only used for tests.
+    /// Ideally we want conditional compilation of these whole methods and the enum variants
+    #[msg(exec)]
+    fn test_burn(
+        &self,
+        ctx: ExecCtx,
+        validators: Vec<String>,
+        burn: Coin,
+    ) -> Result<Response, ContractError> {
+        #[cfg(any(test, feature = "mt"))]
+        {
+            // This can only ever be called in tests
+            self.burn(ctx.deps, &validators, burn)
+        }
+        #[cfg(not(any(test, feature = "mt")))]
+        {
+            let _ = (ctx, validators, burn);
+            Err(ContractError::Unauthorized)
+        }
+    }
+
     #[msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
@@ -204,6 +225,33 @@ impl ConverterContract<'_> {
             .add_attribute("amount", amount.amount.to_string());
 
         let msg = virtual_staking_api::ExecMsg::Unbond { validator, amount };
+        let msg = WasmMsg::Execute {
+            contract_addr: self.virtual_stake.load(deps.storage)?.into(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
+        };
+
+        Ok(Response::new().add_message(msg).add_event(event))
+    }
+
+    /// This is called by ibc_packet_receive.
+    /// It is pulled out into a method, so it can also be called by test_burn for testing
+    pub(crate) fn burn(
+        &self,
+        deps: DepsMut,
+        validators: &[String],
+        burn: Coin,
+    ) -> Result<Response, ContractError> {
+        let amount = self.normalize_price(deps.as_ref(), burn)?;
+
+        let event = Event::new("mesh-burn")
+            .add_attribute("validators", validators.join(","))
+            .add_attribute("amount", amount.amount.to_string());
+
+        let msg = virtual_staking_api::ExecMsg::Burn {
+            validators: validators.to_vec(),
+            amount,
+        };
         let msg = WasmMsg::Execute {
             contract_addr: self.virtual_stake.load(deps.storage)?.into(),
             msg: to_binary(&msg)?,
