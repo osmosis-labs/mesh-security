@@ -178,8 +178,8 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     ) -> Result<Response, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
-        ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized);
         // only the converter can call this
+        ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized);
         ensure_eq!(
             amount.denom,
             cfg.denom,

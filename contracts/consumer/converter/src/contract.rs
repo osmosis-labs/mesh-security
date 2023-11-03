@@ -154,6 +154,27 @@ impl ConverterContract<'_> {
         }
     }
 
+    /// This is only used for tests.
+    /// Ideally we want conditional compilation of these whole methods and the enum variants
+    #[msg(exec)]
+    fn test_burn(
+        &self,
+        ctx: ExecCtx,
+        validators: Vec<String>,
+        burn: Coin,
+    ) -> Result<Response, ContractError> {
+        #[cfg(any(test, feature = "mt"))]
+        {
+            // This can only ever be called in tests
+            self.burn(ctx.deps, &validators, burn)
+        }
+        #[cfg(not(any(test, feature = "mt")))]
+        {
+            let _ = (ctx, validators, burn);
+            Err(ContractError::Unauthorized)
+        }
+    }
+
     #[msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
