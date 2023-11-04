@@ -1272,11 +1272,16 @@ pub mod cross_staking {
 
             let owner = ctx.deps.api.addr_validate(&owner)?;
 
-            let validators: Vec<_> = match validator {
+            let stakes: Vec<_> = match validator {
                 Some(validator) => {
                     // Burn from validator
                     // TODO: Preferentially, i.e. burn remaining amount, if any, from other validators
-                    vec![validator]
+                    let stake = self
+                        .stakes
+                        .stake
+                        .may_load(ctx.deps.storage, (&owner, &validator))?
+                        .unwrap_or_default();
+                    vec![(validator, stake.stake.high().u128())] // Burn takes precedence over any pending txs
                 }
                 None => {
                     // Burn proportionally from all validators associated to the user
@@ -1285,27 +1290,42 @@ pub mod cross_staking {
                         .prefix(&owner)
                         .range(ctx.deps.storage, None, None, Order::Ascending)
                         .map(|item| {
-                            let (validator, _) = item?;
-                            Ok::<_, Self::Error>(validator)
+                            let (validator, stake) = item?;
+                            Ok::<_, Self::Error>((validator, stake.stake.high().u128()))
+                            // Burn takes precedence over any pending txs
                         })
                         .collect::<Result<_, _>>()?
                 }
             };
-            let num_validators = Uint128::new(validators.len() as u128);
-            // FIXME? Check for zero len validators
-            // TODO: Deal with rounding / unbonded validators
-            let proportional_amount = amount.amount / num_validators;
-            for validator in &validators {
+
+            // Error if no stakes
+            if stakes.is_empty() {
+                return Err(ContractError::InsufficientDelegations(
+                    owner.to_string(),
+                    amount.amount,
+                ));
+            }
+
+            let (burned, burns) = mesh_burn::distribute_burn(&stakes, amount.amount.u128());
+
+            // Bail if we don't have enough stake
+            if burned < amount.amount.u128() {
+                return Err(ContractError::InsufficientDelegations(
+                    owner.to_string(),
+                    amount.amount,
+                ));
+            }
+
+            for (validator, burn_amount) in &burns {
+                let burn_amount = Uint128::new(*burn_amount);
+                // Perform stake subtraction
                 let mut stake = self
                     .stakes
                     .stake
-                    .may_load(ctx.deps.storage, (&owner, validator))?
-                    .unwrap_or_default();
-
-                // Perform stake subtraction.
+                    .load(ctx.deps.storage, (&owner, validator))?;
                 // We don't check for min here, as this call can only come from the `vault` contract, which already
                 // performed the proper check.
-                stake.stake.sub(proportional_amount, None)?;
+                stake.stake.sub(burn_amount, None)?;
 
                 // Load distribution
                 let mut distribution = self
@@ -1316,8 +1336,8 @@ pub mod cross_staking {
                 // Distribution alignment
                 stake
                     .points_alignment
-                    .stake_decreased(proportional_amount, distribution.points_per_stake);
-                distribution.total_stake -= proportional_amount;
+                    .stake_decreased(burn_amount, distribution.points_per_stake);
+                distribution.total_stake -= burn_amount;
 
                 // Save stake
                 self.stakes
@@ -1331,7 +1351,7 @@ pub mod cross_staking {
 
             let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
             let packet = ProviderPacket::Burn {
-                validators: validators.clone(),
+                validators: burns.iter().map(|v| v.0.to_string()).collect(),
                 burn: amount.clone(),
             };
             let msg = IbcMsg::SendPacket {
@@ -1353,7 +1373,14 @@ pub mod cross_staking {
             resp = resp
                 .add_attribute("action", "burn_virtual_stake")
                 .add_attribute("owner", owner)
-                .add_attribute("validators", validators.join(", "))
+                .add_attribute(
+                    "validators",
+                    stakes
+                        .into_iter()
+                        .map(|s| s.0)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                )
                 .add_attribute("amount", amount.to_string());
 
             Ok(resp)
