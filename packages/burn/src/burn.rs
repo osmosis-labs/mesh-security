@@ -38,3 +38,109 @@ pub fn distribute_burn(
     }
     (burned, burns)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn distribute_burn_works() {
+        let delegations = vec![
+            ("validator1".to_string(), 100),
+            ("validator2".to_string(), 200),
+            ("validator3".to_string(), 300),
+        ];
+        let (burned, burns) = distribute_burn(&delegations, 100);
+        assert_eq!(burned, 100);
+        assert_eq!(burns.len(), 4);
+        assert_eq!(burns[0].0, "validator1");
+        assert_eq!(burns[0].1, 33);
+        assert_eq!(burns[1].0, "validator2");
+        assert_eq!(burns[1].1, 33);
+        assert_eq!(burns[2].0, "validator3");
+        assert_eq!(burns[2].1, 33);
+        // And the remainder
+        assert_eq!(burns[3].0, "validator1");
+        assert_eq!(burns[3].1, 1);
+    }
+
+    /// Panics on empty delegations
+    #[test]
+    #[should_panic]
+    fn distribute_burn_empty_distributions() {
+        let delegations = vec![];
+        distribute_burn(&delegations, 100);
+    }
+
+    #[test]
+    fn distribute_burn_one_validator() {
+        let delegations = vec![("validator1".to_string(), 100)];
+        let (burned, burns) = distribute_burn(&delegations, 100);
+        assert_eq!(burned, 100);
+        assert_eq!(burns.len(), 1);
+        assert_eq!(burns[0].0, "validator1");
+        assert_eq!(burns[0].1, 100);
+    }
+
+    /// Some validators do not have enough funds, so the remainder is burned from the first validator
+    /// that has enough funds
+    #[test]
+    fn distribute_burn_unfunded_validator() {
+        let delegations = vec![
+            ("validator1".to_string(), 100),
+            ("validator2".to_string(), 1),
+        ];
+        let (burned, burns) = distribute_burn(&delegations, 101);
+        assert_eq!(burned, 101);
+        assert_eq!(burns.len(), 3);
+        assert_eq!(burns[0].0, "validator1");
+        assert_eq!(burns[0].1, 50);
+        assert_eq!(burns[1].0, "validator2");
+        assert_eq!(burns[1].1, 1);
+        assert_eq!(burns[2].0, "validator1");
+        assert_eq!(burns[2].1, 50);
+    }
+
+    /// There are not enough funds to burn, so the returned burned amount is less that the requested amount
+    #[test]
+    fn distribute_burn_insufficient_delegations() {
+        let delegations = vec![
+            ("validator1".to_string(), 100),
+            ("validator2".to_string(), 1),
+        ];
+        let (burned, burns) = distribute_burn(&delegations, 102);
+        assert_eq!(burned, 52);
+        assert_eq!(burns.len(), 2);
+        assert_eq!(burns[0].0, "validator1");
+        assert_eq!(burns[0].1, 51);
+        assert_eq!(burns[1].0, "validator2");
+        assert_eq!(burns[1].1, 1);
+    }
+
+    /// There are enough funds to burn, but they are not consolidated enough in a single delegation.
+    /// This is a limitation of the current impl.
+    #[test]
+    fn distribute_burn_insufficient_whole_delegation() {
+        let delegations = vec![
+            ("validator1".to_string(), 29),
+            ("validator2".to_string(), 30),
+            ("validator3".to_string(), 31),
+            ("validator4".to_string(), 1),
+        ];
+        assert_eq!(
+            delegations.iter().map(|(_, amount)| amount).sum::<u128>(),
+            91
+        );
+        let (burned, burns) = distribute_burn(&delegations, 91);
+        assert_eq!(burned, 67);
+        assert_eq!(burns.len(), 4);
+        assert_eq!(burns[0].0, "validator1");
+        assert_eq!(burns[0].1, 22);
+        assert_eq!(burns[1].0, "validator2");
+        assert_eq!(burns[1].1, 22);
+        assert_eq!(burns[2].0, "validator3");
+        assert_eq!(burns[2].1, 22);
+        assert_eq!(burns[3].0, "validator4");
+        assert_eq!(burns[3].1, 1);
+    }
+}
