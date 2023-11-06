@@ -2,7 +2,26 @@
 
 ## [Unreleased](https://github.com/osmosis-labs/mesh-security/tree/HEAD)
 
-[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.8.0-alpha.1...HEAD)
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.8.1-alpha.1...HEAD)
+
+## [v0.8.1-alpha.1](https://github.com/osmosis-labs/mesh-security/tree/v0.8.1-alpha.1) (2023-11-06)
+
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.8.0-alpha.1...v0.8.1-alpha.1)
+
+**Closed issues:**
+
+- Slashing propagation accounting [\#139](https://github.com/osmosis-labs/mesh-security/issues/139)
+- Slashing-related messages [\#128](https://github.com/osmosis-labs/mesh-security/issues/128)
+- Improve cross-bond/unbond process [\#124](https://github.com/osmosis-labs/mesh-security/issues/124)
+- MVP slashing [\#112](https://github.com/osmosis-labs/mesh-security/issues/112)
+
+**Merged pull requests:**
+
+- 139/slashing proportional burn [\#159](https://github.com/osmosis-labs/mesh-security/pull/159) ([maurolacy](https://github.com/maurolacy))
+- Slashing propagation Consumer accounting [\#158](https://github.com/osmosis-labs/mesh-security/pull/158) ([maurolacy](https://github.com/maurolacy))
+- Slashing propagation acct [\#156](https://github.com/osmosis-labs/mesh-security/pull/156) ([maurolacy](https://github.com/maurolacy))
+- Virtual staking valset updates [\#153](https://github.com/osmosis-labs/mesh-security/pull/153) ([maurolacy](https://github.com/maurolacy))
+- Immediately release stake when possible [\#152](https://github.com/osmosis-labs/mesh-security/pull/152) ([uint](https://github.com/uint))
 
 ## [v0.8.0-alpha.1](https://github.com/osmosis-labs/mesh-security/tree/v0.8.0-alpha.1) (2023-10-19)
 

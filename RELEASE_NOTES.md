@@ -1,3 +1,8 @@
+# 0.8.1-alpha.1
+
+- Slashing propagation accounting.
+- Improve cross-bond/unbond process.
+
 # 0.8.0-alpha.1
 
 - Add code coverage.
