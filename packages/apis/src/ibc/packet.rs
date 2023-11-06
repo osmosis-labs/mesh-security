@@ -30,6 +30,17 @@ pub enum ProviderPacket {
         /// This is local to the sending side to track the transaction, should be passed through opaquely on the consumer
         tx_id: u64,
     },
+    /// This should be called when we burn tokens from the given validators, because of slashing
+    /// propagation / vault invariants keeping.
+    /// If there is more than one validator, the burn amount will be split evenly between them.
+    /// This is non-transactional, as if it fails we cannot do much about it, besides logging the failure.
+    Burn {
+        validators: Vec<String>,
+        /// This is the local (provider-side) denom that is being burned in the vault.
+        /// It will be converted to the consumer-side staking token in the converter with help
+        /// of the price feed.
+        burn: Coin,
+    },
     /// This is part of the rewards protocol
     TransferRewards {
         /// Amount previously received by ConsumerPacket::Distribute

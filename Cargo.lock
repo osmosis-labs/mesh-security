@@ -570,6 +570,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-burn"
+version = "0.8.0-alpha.1"
+
+[[package]]
 name = "mesh-converter"
 version = "0.8.0-alpha.1"
 dependencies = [
@@ -583,6 +587,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-burn",
  "mesh-simple-price-feed",
  "schemars",
  "serde",
@@ -604,6 +609,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "mesh-apis",
+ "mesh-burn",
  "mesh-native-staking",
  "mesh-native-staking-proxy",
  "mesh-sync",
@@ -652,6 +658,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-burn",
  "mesh-native-staking",
  "mesh-vault",
  "schemars",
@@ -736,6 +743,7 @@ dependencies = [
  "itertools 0.11.0",
  "mesh-apis",
  "mesh-bindings",
+ "mesh-burn",
  "mesh-converter",
  "mesh-simple-price-feed",
  "schemars",

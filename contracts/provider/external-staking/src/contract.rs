@@ -902,7 +902,9 @@ impl ExternalStakingContract<'_> {
         }
 
         // Route associated users to vault for slashing of their collateral
-        let msg = config.vault.process_cross_slashing(slash_infos)?;
+        let msg = config
+            .vault
+            .process_cross_slashing(slash_infos, validator)?;
         Ok(Some(msg))
     }
 
@@ -1250,6 +1252,140 @@ pub mod cross_staking {
             Ok(resp)
         }
 
+        #[msg(exec)]
+        fn burn_virtual_stake(
+            &self,
+            ctx: ExecCtx,
+            owner: String,
+            amount: Coin,
+            validator: Option<String>,
+        ) -> Result<Response, Self::Error> {
+            let config = self.config.load(ctx.deps.storage)?;
+            ensure_eq!(ctx.info.sender, config.vault.0, ContractError::Unauthorized);
+
+            // sending proper denom
+            ensure_eq!(
+                amount.denom,
+                config.denom,
+                ContractError::InvalidDenom(config.denom)
+            );
+
+            let owner = ctx.deps.api.addr_validate(&owner)?;
+
+            let stakes: Vec<_> = match validator {
+                Some(validator) => {
+                    // Burn from validator
+                    // TODO: Preferentially, i.e. burn remaining amount, if any, from other validators
+                    let stake = self
+                        .stakes
+                        .stake
+                        .may_load(ctx.deps.storage, (&owner, &validator))?
+                        .unwrap_or_default();
+                    vec![(validator, stake.stake.high().u128())] // Burn takes precedence over any pending txs
+                }
+                None => {
+                    // Burn proportionally from all validators associated to the user
+                    self.stakes
+                        .stake
+                        .prefix(&owner)
+                        .range(ctx.deps.storage, None, None, Order::Ascending)
+                        .map(|item| {
+                            let (validator, stake) = item?;
+                            Ok::<_, Self::Error>((validator, stake.stake.high().u128()))
+                            // Burn takes precedence over any pending txs
+                        })
+                        .collect::<Result<_, _>>()?
+                }
+            };
+
+            // Error if no stakes
+            if stakes.is_empty() {
+                return Err(ContractError::InsufficientDelegations(
+                    owner.to_string(),
+                    amount.amount,
+                ));
+            }
+
+            let (burned, burns) = mesh_burn::distribute_burn(&stakes, amount.amount.u128());
+
+            // Bail if we don't have enough stake
+            if burned < amount.amount.u128() {
+                return Err(ContractError::InsufficientDelegations(
+                    owner.to_string(),
+                    amount.amount,
+                ));
+            }
+
+            for (validator, burn_amount) in &burns {
+                let burn_amount = Uint128::new(*burn_amount);
+                // Perform stake subtraction
+                let mut stake = self
+                    .stakes
+                    .stake
+                    .load(ctx.deps.storage, (&owner, validator))?;
+                // We don't check for min here, as this call can only come from the `vault` contract, which already
+                // performed the proper check.
+                stake.stake.sub(burn_amount, None)?;
+
+                // Load distribution
+                let mut distribution = self
+                    .distribution
+                    .may_load(ctx.deps.storage, validator)?
+                    .unwrap_or_default();
+
+                // Distribution alignment
+                stake
+                    .points_alignment
+                    .stake_decreased(burn_amount, distribution.points_per_stake);
+                distribution.total_stake -= burn_amount;
+
+                // Save stake
+                self.stakes
+                    .stake
+                    .save(ctx.deps.storage, (&owner, validator), &stake)?;
+
+                // Save distribution
+                self.distribution
+                    .save(ctx.deps.storage, validator, &distribution)?;
+            }
+
+            let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+            let packet = ProviderPacket::Burn {
+                validators: burns.iter().map(|v| v.0.to_string()).collect(),
+                burn: amount.clone(),
+            };
+            let msg = IbcMsg::SendPacket {
+                channel_id: channel.endpoint.channel_id,
+                data: to_binary(&packet)?,
+                timeout: packet_timeout(&ctx.env),
+            };
+            let mut resp = Response::new();
+            // add ibc packet if we are ibc enabled (skip in tests)
+            #[cfg(not(any(feature = "mt", test)))]
+            {
+                resp = resp.add_message(msg);
+            }
+            #[cfg(any(feature = "mt", test))]
+            {
+                let _ = msg;
+            }
+
+            resp = resp
+                .add_attribute("action", "burn_virtual_stake")
+                .add_attribute("owner", owner)
+                .add_attribute(
+                    "validators",
+                    stakes
+                        .into_iter()
+                        .map(|s| s.0)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                )
+                .add_attribute("amount", amount.to_string());
+
+            Ok(resp)
+        }
+
         #[msg(query)]
         fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
             let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
@@ -1473,6 +1609,7 @@ mod tests {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10),
                     }],
+                    validator: "bob".to_string(),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -1587,6 +1724,7 @@ mod tests {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10),
                     }],
+                    validator: "bob".to_string(),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -1715,6 +1853,7 @@ mod tests {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10), // Owner is slashed over the full stake, including pending
                     }],
+                    validator: "bob".to_string(),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -2093,6 +2232,7 @@ mod tests {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10),
                     }],
+                    validator: "bob".to_string(),
                 })
                 .unwrap(),
                 funds: vec![],

@@ -28,6 +28,9 @@ pub enum ContractError {
 
     #[error("Wrong denom. Cannot stake {0}")]
     WrongDenom(String),
+
+    #[error("Virtual staking {0} has not enough delegated funds: {1}")]
+    InsufficientDelegations(String, Uint128),
 }
 
 /// This is a stub implementation of the virtual staking contract, for test purposes only.
@@ -133,7 +136,7 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
 
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
-    /// If the virtual staking contract doesn't have at least amont tokens staked to the given validator, this will return an error.
+    /// If the virtual staking contract doesn't have at least amount tokens staked to the given validator, this will return an error.
     #[msg(exec)]
     fn unbond(
         &self,
@@ -155,6 +158,67 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
             .update::<_, ContractError>(ctx.deps.storage, &validator, |old| {
                 Ok(old.unwrap_or_default() - amount.amount)
             })?;
+
+        Ok(Response::new())
+    }
+
+    /// Requests to unbond and burn tokens from a lists of validators (one or more). This will be actually handled at the next epoch.
+    /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
+    /// If the virtual staking contract doesn't have at least amount tokens staked over the given validators, this will return an error.
+    #[msg(exec)]
+    fn burn(
+        &self,
+        ctx: ExecCtx,
+        validators: Vec<String>,
+        amount: Coin,
+    ) -> Result<Response, Self::Error> {
+        nonpayable(&ctx.info)?;
+        let cfg = self.config.load(ctx.deps.storage)?;
+        // only the converter can call this
+        ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized);
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::WrongDenom(cfg.denom)
+        );
+
+        let mut stakes = vec![];
+        for validator in validators {
+            let stake = self
+                .stake
+                .may_load(ctx.deps.storage, &validator)?
+                .unwrap_or_default()
+                .u128();
+            if stake != 0 {
+                stakes.push((validator, stake));
+            }
+        }
+
+        // Error if no delegations
+        if stakes.is_empty() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
+
+        let (burned, burns) = mesh_burn::distribute_burn(stakes.as_slice(), amount.amount.u128());
+
+        // Bail if we still don't have enough stake
+        if burned < amount.amount.u128() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
+
+        // Update stake
+        for (validator, burn_amount) in burns {
+            self.stake
+                .update::<_, ContractError>(ctx.deps.storage, validator, |old| {
+                    Ok(old.unwrap_or_default() - Uint128::new(burn_amount))
+                })?;
+        }
 
         Ok(Response::new())
     }

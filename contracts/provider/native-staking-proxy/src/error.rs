@@ -18,4 +18,7 @@ pub enum ContractError {
 
     #[error("Validator {0} has not enough delegated funds: {1}")]
     InsufficientDelegation(String, Uint128),
+
+    #[error("Native proxy {0} has not enough delegated funds: {1}")]
+    InsufficientDelegations(String, Uint128),
 }

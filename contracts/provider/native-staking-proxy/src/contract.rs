@@ -20,6 +20,7 @@ pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct NativeStakingProxyContract<'a> {
     config: Item<'a, Config>,
+    burned: Item<'a, u128>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -29,6 +30,7 @@ impl NativeStakingProxyContract<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
+            burned: Item::new("burned"),
         }
     }
 
@@ -49,6 +51,9 @@ impl NativeStakingProxyContract<'_> {
         };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+        // Set burned stake to zero
+        self.burned.save(ctx.deps.storage, &0)?;
 
         // Stake info.funds on validator
         let exec_ctx = ExecCtx {
@@ -81,6 +86,96 @@ impl NativeStakingProxyContract<'_> {
         let msg = StakingMsg::Delegate { validator, amount };
 
         Ok(Response::new().add_message(msg))
+    }
+
+    /// Burn `amount` tokens from the given validator, if set.
+    /// If `validator` is not set, undelegate evenly from all validators the user has stake.
+    /// Can only be called by the parent contract
+    #[msg(exec)]
+    fn burn(
+        &self,
+        ctx: ExecCtx,
+        validator: Option<String>,
+        amount: Coin,
+    ) -> Result<Response, ContractError> {
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
+
+        nonpayable(&ctx.info)?;
+
+        // Check denom
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::InvalidDenom(amount.denom)
+        );
+
+        let delegations = match validator {
+            Some(validator) => {
+                let delegation = ctx
+                    .deps
+                    .querier
+                    .query_delegation(ctx.env.contract.address.clone(), validator)?
+                    .map(|full_delegation| {
+                        (
+                            full_delegation.validator,
+                            full_delegation.amount.amount.u128(),
+                        )
+                    })
+                    .unwrap();
+                vec![delegation]
+            }
+            None => {
+                let delegations = ctx
+                    .deps
+                    .querier
+                    .query_all_delegations(ctx.env.contract.address.clone())?
+                    .iter()
+                    .map(|delegation| {
+                        (
+                            delegation.validator.clone(),
+                            delegation.amount.amount.u128(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                delegations
+            }
+        };
+
+        // Error if no validators
+        if delegations.is_empty() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
+
+        let (burned, burns) = mesh_burn::distribute_burn(&delegations, amount.amount.u128());
+
+        // Bail if we don't have enough delegations
+        if burned < amount.amount.u128() {
+            return Err(ContractError::InsufficientDelegations(
+                ctx.env.contract.address.to_string(),
+                amount.amount,
+            ));
+        }
+
+        // Build undelegate messages
+        let mut undelegate_msgs = vec![];
+        for (validator, burn_amount) in burns {
+            let undelegate_msg = StakingMsg::Undelegate {
+                validator: validator.to_string(),
+                amount: coin(burn_amount, &cfg.denom),
+            };
+            undelegate_msgs.push(undelegate_msg);
+        }
+
+        // Accounting trick to avoid burning stake
+        self.burned.update(ctx.deps.storage, |old| {
+            Ok::<_, ContractError>(old + amount.amount.u128())
+        })?;
+
+        Ok(Response::new().add_messages(undelegate_msgs))
     }
 
     /// Re-stakes the given amount from the one validator to another on behalf of the calling user.
@@ -208,11 +303,20 @@ impl NativeStakingProxyContract<'_> {
 
         nonpayable(&ctx.info)?;
 
-        // Simply assume all of our liquid assets are from unbondings
+        // Simply assumes all of our liquid assets are from unbondings
         let balance = ctx
             .deps
             .querier
             .query_balance(ctx.env.contract.address, cfg.denom)?;
+        // But discount burned stake
+        // FIXME: this is not accurate, as it doesn't take into account the unbonding period
+        let burned = self.burned.load(ctx.deps.storage)?;
+        let balance = coin(balance.amount.u128().saturating_sub(burned), &balance.denom);
+
+        // Short circuit if there are no funds to send
+        if balance.amount.is_zero() {
+            return Ok(Response::new());
+        }
 
         // Send them to the parent contract via `release_proxy_stake`
         let msg = to_binary(&native_staking_callback::ExecMsg::ReleaseProxyStake {})?;

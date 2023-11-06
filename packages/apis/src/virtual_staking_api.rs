@@ -26,6 +26,17 @@ pub trait VirtualStakingApi {
         validator: String,
         amount: Coin,
     ) -> Result<Response, Self::Error>;
+
+    /// Burns stake. This is called when the user's collateral is slashed and, as part of slashing
+    /// propagation, the native staking contract needs to burn / discount the indicated slashing amount.
+    /// Undelegates evenly from all `validators`.
+    #[msg(exec)]
+    fn burn(
+        &self,
+        ctx: ExecCtx,
+        validators: Vec<String>,
+        amount: Coin,
+    ) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]

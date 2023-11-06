@@ -94,7 +94,7 @@ pub struct StakesResponse {
     pub stakes: Vec<StakeInfo>,
 }
 
-/// Message to be sent as `msg` field on `receive_virtual_staking`
+/// Message to be sent as `msg` field on `receive_virtual_stake`
 #[cw_serde]
 pub struct ReceiveVirtualStake {
     pub validator: String,

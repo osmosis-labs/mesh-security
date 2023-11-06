@@ -55,7 +55,7 @@ fn setup<'app>(
     app: &'app App<MtApp>,
     owner: &str,
     user: &str,
-    validator: &str,
+    validators: &[&str],
 ) -> AnyResult<VaultContractProxy<'app, MtApp>> {
     let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(app);
     let staking_code = mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
@@ -89,16 +89,18 @@ fn setup<'app>(
         .unwrap();
 
     // Stakes some of it locally. This instantiates the staking proxy contract for user
-    vault
-        .stake_local(
-            coin(100, OSMO),
-            to_binary(&mesh_native_staking::msg::StakeMsg {
-                validator: validator.to_owned(),
-            })
-            .unwrap(),
-        )
-        .call(user)
-        .unwrap();
+    for &validator in validators {
+        vault
+            .stake_local(
+                coin(100, OSMO),
+                to_binary(&mesh_native_staking::msg::StakeMsg {
+                    validator: validator.to_owned(),
+                })
+                .unwrap(),
+            )
+            .call(user)
+            .unwrap();
+    }
 
     Ok(vault)
 }
@@ -114,7 +116,7 @@ fn instantiation() {
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    setup(&app, owner, user, validator).unwrap();
+    setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
     let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
@@ -160,7 +162,7 @@ fn staking() {
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    let vault = setup(&app, owner, user, validator).unwrap();
+    let vault = setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
     let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
@@ -208,7 +210,7 @@ fn restaking() {
     let validator2 = "validator2"; // Where to re-stake
 
     let app = init_app(user, &[validator, validator2]); // Fund user, create validator
-    setup(&app, owner, user, validator).unwrap();
+    setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
     let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
@@ -249,7 +251,7 @@ fn unstaking() {
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    setup(&app, owner, user, validator).unwrap();
+    setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
     let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
@@ -274,6 +276,10 @@ fn unstaking() {
 
     // And that they are now held, until the unbonding period
     // First, check that the contract has no funds
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
     assert_eq!(
         app.app()
             .wrap()
@@ -285,7 +291,7 @@ fn unstaking() {
     // Advance time until the unbonding period is over
     app.update_block(|block| {
         block.height += 1234;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD + 1);
+        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
     });
     // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
     app.app_mut()
@@ -303,6 +309,181 @@ fn unstaking() {
 }
 
 #[test]
+fn burning() {
+    let owner = "vault_admin";
+
+    let staking_addr = "contract1"; // Second contract (instantiated by vault on instantiation)
+    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
+
+    let user = "user1"; // One who wants to local stake (uses the proxy)
+    let validator = "validator1"; // Where to stake / unstake
+
+    let app = init_app(user, &[validator]); // Fund user, create validator
+    setup(&app, owner, user, &[validator]).unwrap();
+
+    // Access staking proxy instance
+    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
+        Addr::unchecked(proxy_addr),
+        &app,
+    );
+
+    // Burn 10%, from validator
+    staking_proxy
+        .burn(Some(validator.to_owned()), coin(10, OSMO))
+        .call(staking_addr)
+        .unwrap();
+
+    // Check that funds have been unstaked
+    let delegation = app
+        .app()
+        .wrap()
+        .query_delegation(staking_proxy.contract_addr.clone(), validator.to_owned())
+        .unwrap()
+        .unwrap();
+    assert_eq!(delegation.amount, coin(90, OSMO));
+
+    // And that they are now held, until the unbonding period
+    // First, check that the contract has no funds
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr.clone(), OSMO)
+            .unwrap(),
+        coin(0, OSMO)
+    );
+
+    // Advance time until the unbonding period is over
+    app.update_block(|block| {
+        block.height += 1234;
+        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
+    });
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
+
+    // Check that the contract now has the funds
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr.clone(), OSMO)
+            .unwrap(),
+        coin(10, OSMO)
+    );
+
+    // But they cannot be released
+    staking_proxy.release_unbonded().call(user).unwrap();
+
+    // Check that the contract still has the funds (they are being effectively "burned")
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr, OSMO)
+            .unwrap(),
+        coin(10, OSMO)
+    );
+}
+
+#[test]
+fn burning_multiple_delegations() {
+    let owner = "vault_admin";
+
+    let staking_addr = "contract1"; // Second contract (instantiated by vault on instantiation)
+    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
+
+    let user = "user1"; // One who wants to local stake (uses the proxy)
+    let validators = ["validator1", "validator2"]; // Where to stake / unstake
+
+    let app = init_app(user, &validators); // Fund user, create validator
+    setup(&app, owner, user, &validators).unwrap();
+
+    // Access staking proxy instance
+    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
+        Addr::unchecked(proxy_addr),
+        &app,
+    );
+
+    // Burn 15%, no validator specified
+    let burn_amount = 15;
+    staking_proxy
+        .burn(None, coin(burn_amount, OSMO))
+        .call(staking_addr)
+        .unwrap();
+
+    // Check that funds have been unstaked (15 / 2 = 7.5, rounded down to 7, rounded up to 8)
+    // First validator gets the round up
+    let delegation1 = app
+        .app()
+        .wrap()
+        .query_delegation(
+            staking_proxy.contract_addr.clone(),
+            validators[0].to_owned(),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(delegation1.amount, coin(100 - (burn_amount / 2 + 1), OSMO));
+    let delegation2 = app
+        .app()
+        .wrap()
+        .query_delegation(
+            staking_proxy.contract_addr.clone(),
+            validators[1].to_owned(),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(delegation2.amount, coin(100 - burn_amount / 2, OSMO));
+
+    // And that they are now held, until the unbonding period
+    // First, check that the contract has no funds
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr.clone(), OSMO)
+            .unwrap(),
+        coin(0, OSMO)
+    );
+
+    // Advance time until the unbonding period is over
+    app.update_block(|block| {
+        block.height += 1234;
+        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
+    });
+    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
+    app.app_mut()
+        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
+        .unwrap();
+
+    // Check that the contract now has the funds
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr.clone(), OSMO)
+            .unwrap(),
+        coin(15, OSMO)
+    );
+
+    // But they cannot be released
+    staking_proxy.release_unbonded().call(user).unwrap();
+
+    // Check that the contract still has the funds (they are being effectively "burned")
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_balance(staking_proxy.contract_addr, OSMO)
+            .unwrap(),
+        coin(15, OSMO)
+    );
+}
+
+#[test]
 fn releasing_unbonded() {
     let owner = "vault_admin";
 
@@ -312,7 +493,7 @@ fn releasing_unbonded() {
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    let vault = setup(&app, owner, user, validator).unwrap();
+    let vault = setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
     let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
@@ -368,7 +549,7 @@ fn withdrawing_rewards() {
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    let vault = setup(&app, owner, user, validator).unwrap();
+    let vault = setup(&app, owner, user, &[validator]).unwrap();
 
     // Record current vault, staking and user funds
     let original_vault_funds = app

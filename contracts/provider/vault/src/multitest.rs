@@ -2152,15 +2152,15 @@ fn cross_slash_scenario_4() {
         ]
     );
 
-    // TODO: external-staking slashing propagation
+    // Considering external-staking slashing propagation
     let cross_stake2 = cross_staking_2
         .stakes(user.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake2.stakes,
         [
-            StakeInfo::new(user, validators_2[0], &Stake::from_amount(100u128.into())),
-            StakeInfo::new(user, validators_2[1], &Stake::from_amount(88u128.into()))
+            StakeInfo::new(user, validators_2[0], &Stake::from_amount(99u128.into())),
+            StakeInfo::new(user, validators_2[1], &Stake::from_amount(87u128.into()))
         ]
     );
 }
@@ -2322,7 +2322,7 @@ fn cross_slash_scenario_5() {
     assert_eq!(acc_details.free, ValueRange::new_val(Uint128::zero()));
 
     // Cross stake
-    // TODO: external-staking slashing propagation
+    // Considering external-staking slashing propagation
     let cross_stake1 = cross_staking_1
         .stakes(user.to_string(), None, None)
         .unwrap();
@@ -2331,7 +2331,7 @@ fn cross_slash_scenario_5() {
         [StakeInfo::new(
             user,
             validators[0],
-            &Stake::from_amount(90u128.into())
+            &Stake::from_amount(68u128.into())
         ),]
     );
 
@@ -2343,7 +2343,7 @@ fn cross_slash_scenario_5() {
         [StakeInfo::new(
             user,
             validators[1],
-            &Stake::from_amount(80u128.into())
+            &Stake::from_amount(58u128.into())
         ),]
     );
 
@@ -2355,7 +2355,7 @@ fn cross_slash_scenario_5() {
         [StakeInfo::new(
             user,
             validators[2],
-            &Stake::from_amount(100u128.into())
+            &Stake::from_amount(78u128.into())
         ),]
     );
 }
