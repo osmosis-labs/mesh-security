@@ -2,16 +2,20 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_slice, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
-    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse,
+    from_slice, to_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
+    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcMsg,
     IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
+    Timestamp,
 };
 use cw_storage_plus::Item;
-use mesh_apis::ibc::{validate_channel_order, PriceFeedProviderPacket, ProtocolVersion};
+use mesh_apis::ibc::{
+    validate_channel_order, PriceFeedProviderAck, ProtocolVersion, RemotePriceFeedPacket,
+};
 
 use crate::contract::RemotePriceFeedContract;
 use crate::error::ContractError;
 use crate::msg::AuthorizedEndpoint;
+use crate::state::PriceInfo;
 
 /// This is the maximum version of the Mesh Security protocol that we support
 const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.11.0";
@@ -20,16 +24,11 @@ const MIN_IBC_PROTOCOL_VERSION: &str = "0.11.0";
 
 // IBC specific state
 pub const AUTH_ENDPOINT: Item<AuthorizedEndpoint> = Item::new("auth_endpoint");
-pub const IBC_CHANNEL: Item<IbcChannel> = Item::new("ibc_channel");
 
-// If we don't hear anything within 10 minutes, let's abort, for better UX
-// This is long enough to allow some clock drift between chains
-const DEFAULT_TIMEOUT: u64 = 10 * 60;
+const TIMEOUT: u64 = 10 * 60;
 
-pub fn packet_timeout(env: &Env) -> IbcTimeout {
-    // No idea about their block time, but 24 hours ahead of our view of the clock
-    // should be decently in the future.
-    let timeout = env.block.time.plus_seconds(DEFAULT_TIMEOUT);
+pub fn packet_timeout(now: &Timestamp) -> IbcTimeout {
+    let timeout = now.plus_seconds(TIMEOUT);
     IbcTimeout::with_timestamp(timeout)
 }
 
@@ -41,7 +40,8 @@ pub fn ibc_channel_open(
     msg: IbcChannelOpenMsg,
 ) -> Result<IbcChannelOpenResponse, ContractError> {
     // ensure we have no channel yet
-    if IBC_CHANNEL.may_load(deps.storage)?.is_some() {
+    let contract = RemotePriceFeedContract::new();
+    if contract.channel.may_load(deps.storage)?.is_some() {
         return Err(ContractError::IbcChannelAlreadyOpen);
     }
     // ensure we are called with OpenInit
@@ -83,8 +83,10 @@ pub fn ibc_channel_connect(
     _env: Env,
     msg: IbcChannelConnectMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
+    let contract = RemotePriceFeedContract::new();
+
     // ensure we have no channel yet
-    if IBC_CHANNEL.may_load(deps.storage)?.is_some() {
+    if contract.channel.may_load(deps.storage)?.is_some() {
         return Err(ContractError::IbcChannelAlreadyOpen);
     }
     // ensure we are called with OpenConfirm
@@ -94,7 +96,8 @@ pub fn ibc_channel_connect(
     };
 
     // Version negotiation over, we can only store the channel
-    IBC_CHANNEL.save(deps.storage, &channel)?;
+    let contract = RemotePriceFeedContract::new();
+    contract.channel.save(deps.storage, &channel)?;
 
     Ok(IbcBasicResponse::default())
 }
@@ -110,29 +113,30 @@ pub fn ibc_channel_close(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn ibc_packet_receive(
-    deps: DepsMut,
+    _deps: DepsMut,
     _env: Env,
-    msg: IbcPacketReceiveMsg,
+    _msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
-    let packet: PriceFeedProviderPacket = from_slice(&msg.packet.data)?;
-    let resp = match packet {
-        PriceFeedProviderPacket::Update { twap } => {
-            let contract = RemotePriceFeedContract::new();
-            contract.native_per_foreign.save(deps.storage, &twap)?;
-            IbcReceiveResponse::new()
-        }
-    };
-
-    Ok(resp)
+    Err(ContractError::IbcReceiveNotAccepted)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn ibc_packet_ack(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _msg: IbcPacketAckMsg,
+    msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    Err(ContractError::IbcAckNotAccepted)
+    let ack: PriceFeedProviderAck = from_slice(&msg.acknowledgement.data)?;
+    let PriceFeedProviderAck::Update { twap } = ack;
+    let contract = RemotePriceFeedContract::new();
+    contract.price_info.save(
+        deps.storage,
+        &PriceInfo {
+            native_per_foreign: twap,
+        },
+    )?;
+
+    Ok(IbcBasicResponse::new())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -141,5 +145,17 @@ pub fn ibc_packet_timeout(
     _env: Env,
     _msg: IbcPacketTimeoutMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    Err(ContractError::IbcAckNotAccepted)
+    Err(ContractError::IbcReceiveNotAccepted)
+}
+
+pub(crate) fn make_ibc_packet(
+    now: &Timestamp,
+    channel: IbcChannel,
+    packet: RemotePriceFeedPacket,
+) -> Result<IbcMsg, ContractError> {
+    Ok(IbcMsg::SendPacket {
+        channel_id: channel.endpoint.channel_id,
+        data: to_binary(&packet)?,
+        timeout: packet_timeout(now),
+    })
 }

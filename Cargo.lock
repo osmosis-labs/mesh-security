@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-remote-price-feed"
-version = "0.8.0-alpha.1"
+version = "0.8.1-alpha.1"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -813,6 +813,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-bindings",
  "schemars",
  "serde",
  "sylvia",

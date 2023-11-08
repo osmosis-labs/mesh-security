@@ -6,6 +6,6 @@ pub enum SudoMsg {
 }
 
 #[cw_serde]
-pub enum PriceFeedProviderSudoMsg {
+pub enum RemotePriceFeedSudoMsg {
     EndBlock {},
 }

@@ -2,14 +2,14 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_slice, to_binary, DepsMut, Env, Event, Ibc3ChannelOpenResponse, IbcBasicResponse,
-    IbcChannel, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg,
-    IbcChannelOpenResponse, IbcMsg, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg,
-    IbcReceiveResponse, IbcTimeout, Timestamp,
+    from_slice, to_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse,
+    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcMsg,
+    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
+    StdError, Timestamp,
 };
 
 use mesh_apis::ibc::{
-    validate_channel_order, AckWrapper, PriceFeedProviderPacket, ProtocolVersion,
+    validate_channel_order, PriceFeedProviderAck, ProtocolVersion, RemotePriceFeedPacket,
 };
 
 use crate::{contract::OsmosisPriceProvider, error::ContractError};
@@ -87,8 +87,11 @@ pub fn ibc_channel_connect(
 
     let contract = OsmosisPriceProvider::new();
     contract
-        .subscriptions
-        .register_channel(deps.storage, channel)?;
+        .channels
+        .update(deps.storage, |mut v| -> Result<_, StdError> {
+            v.push(channel);
+            Ok(v)
+        })?;
 
     Ok(IbcBasicResponse::new())
 }
@@ -101,20 +104,36 @@ pub fn ibc_channel_close(
 ) -> Result<IbcBasicResponse, ContractError> {
     let contract = OsmosisPriceProvider::new();
     contract
-        .subscriptions
-        .remove_channel(deps.storage, msg.channel())?;
+        .channels
+        .update(deps.storage, |mut v| -> Result<_, ContractError> {
+            let ix = v
+                .iter()
+                .enumerate()
+                .find(|(_, c)| c == &msg.channel())
+                .ok_or(ContractError::IbcChannelNotOpen)?
+                .0;
+            v.remove(ix);
+            Ok(v)
+        })?;
 
     Ok(IbcBasicResponse::new())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn ibc_packet_receive(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _msg: IbcPacketReceiveMsg,
+    msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
-    // this contract only sends out update packets over IBC - it's not meant to receive any
-    Err(ContractError::IbcPacketRecvDisallowed)
+    let RemotePriceFeedPacket::QueryTwap {
+        pool_id,
+        base_asset,
+        quote_asset,
+    } = from_slice(&msg.packet.data)?;
+    let contract = OsmosisPriceProvider::new();
+
+    let twap = contract.query_twap(deps, pool_id, base_asset, quote_asset)?;
+    Ok(IbcReceiveResponse::new().set_ack(to_binary(&PriceFeedProviderAck::Update { twap })?))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -124,23 +143,9 @@ pub fn ibc_packet_receive(
 pub fn ibc_packet_ack(
     _deps: DepsMut,
     _env: Env,
-    msg: IbcPacketAckMsg,
+    _msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let ack: AckWrapper = from_slice(&msg.acknowledgement.data)?;
-    let mut res = IbcBasicResponse::new();
-    match ack {
-        AckWrapper::Result(_) => {}
-        AckWrapper::Error(e) => {
-            // The wasmd framework will label this with the contract_addr, which helps us find the port and issue.
-            // Provide info to find the actual packet.
-            let event = Event::new("mesh_price_feed_ibc_error")
-                .add_attribute("error", e)
-                .add_attribute("channel", msg.original_packet.src.channel_id)
-                .add_attribute("sequence", msg.original_packet.sequence.to_string());
-            res = res.add_event(event);
-        }
-    }
-    Ok(res)
+    Err(ContractError::IbcPacketAckDisallowed)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -157,16 +162,4 @@ pub fn ibc_packet_timeout(
         timeout: packet_timeout(&env.block.time),
     };
     Ok(IbcBasicResponse::new().add_message(msg))
-}
-
-pub(crate) fn make_ibc_packet(
-    now: &Timestamp,
-    channel: IbcChannel,
-    packet: PriceFeedProviderPacket,
-) -> Result<IbcMsg, ContractError> {
-    Ok(IbcMsg::SendPacket {
-        channel_id: channel.endpoint.channel_id,
-        data: to_binary(&packet)?,
-        timeout: packet_timeout(now),
-    })
 }

@@ -172,6 +172,15 @@ pub fn ack_fail<E: Error>(err: E) -> StdResult<Binary> {
 }
 
 #[cw_serde]
-pub enum PriceFeedProviderPacket {
+pub enum PriceFeedProviderAck {
     Update { twap: Decimal },
+}
+
+#[cw_serde]
+pub enum RemotePriceFeedPacket {
+    QueryTwap {
+        pool_id: u64,
+        base_asset: String,
+        quote_asset: String,
+    },
 }
