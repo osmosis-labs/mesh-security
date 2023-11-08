@@ -16,14 +16,13 @@ use crate::state::{PriceInfo, TradingPair};
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub const EPOCH_IN_SECS: u64 = 120;
-pub const PRICE_INFO_TTL_IN_SECS: u64 = 600;
-
 pub struct RemotePriceFeedContract {
     pub channel: Item<'static, IbcChannel>,
     pub trading_pair: Item<'static, TradingPair>,
     pub price_info: Item<'static, PriceInfo>,
     pub last_epoch: Item<'static, Timestamp>,
+    pub epoch_in_secs: Item<'static, u64>,
+    pub price_info_ttl_in_secs: Item<'static, u64>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -37,6 +36,8 @@ impl RemotePriceFeedContract {
             trading_pair: Item::new("tpair"),
             price_info: Item::new("price"),
             last_epoch: Item::new("last_epoch"),
+            epoch_in_secs: Item::new("epoch"),
+            price_info_ttl_in_secs: Item::new("price_ttl"),
         }
     }
 
@@ -46,6 +47,8 @@ impl RemotePriceFeedContract {
         ctx: InstantiateCtx,
         trading_pair: TradingPair,
         auth_endpoint: AuthorizedEndpoint,
+        epoch_in_secs: u64,
+        price_info_ttl_in_secs: u64,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
@@ -53,6 +56,9 @@ impl RemotePriceFeedContract {
         self.last_epoch
             .save(ctx.deps.storage, &Timestamp::from_seconds(0))?;
         self.trading_pair.save(ctx.deps.storage, &trading_pair)?;
+        self.epoch_in_secs.save(ctx.deps.storage, &epoch_in_secs)?;
+        self.price_info_ttl_in_secs
+            .save(ctx.deps.storage, &price_info_ttl_in_secs)?;
 
         AUTH_ENDPOINT.save(ctx.deps.storage, &auth_endpoint)?;
 
@@ -69,12 +75,13 @@ impl PriceFeedApi for RemotePriceFeedContract {
     /// are needed to buy one foreign token.
     #[msg(query)]
     fn price(&self, ctx: QueryCtx) -> Result<PriceResponse, Self::Error> {
+        let price_info_ttl = self.price_info_ttl_in_secs.load(ctx.deps.storage)?;
         let price_info = self
             .price_info
             .may_load(ctx.deps.storage)?
             .ok_or(ContractError::NoPriceData)?;
 
-        if ctx.env.block.time.minus_seconds(PRICE_INFO_TTL_IN_SECS) < price_info.time {
+        if ctx.env.block.time.minus_seconds(price_info_ttl) < price_info.time {
             Ok(PriceResponse {
                 native_per_foreign: price_info.native_per_foreign,
             })
@@ -104,8 +111,9 @@ pub fn sudo(
                 .ok_or(ContractError::IbcChannelNotOpen)?;
 
             let last_epoch = contract.last_epoch.load(deps.storage)?;
+            let epoch_duration = contract.epoch_in_secs.load(deps.storage)?;
             let secs_since_last_epoch = env.block.time.seconds() - last_epoch.seconds();
-            if secs_since_last_epoch >= EPOCH_IN_SECS {
+            if secs_since_last_epoch >= epoch_duration {
                 let packet = mesh_apis::ibc::RemotePriceFeedPacket::QueryTwap {
                     pool_id,
                     base_asset,
