@@ -1,12 +1,11 @@
 [package]
 name = "mesh-remote-price-feed"
-description = "Returns a fixed price for assets to the converter contract - for tests or gov-defined prices"
+description = "Returns exchange rates of assets synchronized with an Osmosis price provider"
 version = { workspace = true }
 edition = { workspace = true }
-license       = { workspace = true }
-repository       = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 crate-type = ["cdylib", "rlib"]
 

@@ -26,12 +26,6 @@ pub enum ContractError {
     #[error("You must start the channel handshake on this side, it doesn't support OpenTry")]
     IbcOpenTryDisallowed,
 
-    #[error("The price provider contract does not accept acks")]
+    #[error("The price provider contract does not accept acks or timeouts")]
     IbcPacketAckDisallowed,
-
-    #[error("A subscription for the provided denom does not exist")]
-    SubscriptionDoesNotExist,
-
-    #[error("A subscription already exists for the provided denom")]
-    SubscriptionAlreadyExists,
 }

@@ -40,8 +40,6 @@ impl RemotePriceFeedContract {
         }
     }
 
-    /// Sets up the contract with an initial price.
-    /// If the owner is not set in the message, it defaults to info.sender.
     #[msg(instantiate)]
     pub fn instantiate(
         &self,

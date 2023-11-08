@@ -3,14 +3,12 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     from_slice, to_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse,
-    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcMsg,
+    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse,
     IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
     StdError, Timestamp,
 };
 
-use mesh_apis::ibc::{
-    validate_channel_order, PriceFeedProviderAck, ProtocolVersion, RemotePriceFeedPacket,
-};
+use mesh_apis::ibc::{PriceFeedProviderAck, ProtocolVersion, RemotePriceFeedPacket};
 
 use crate::{contract::OsmosisPriceProvider, error::ContractError};
 
@@ -20,10 +18,10 @@ const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.1.0";
 /// This is the minimum version that we are compatible with
 const MIN_IBC_PROTOCOL_VERSION: &str = "0.1.0";
 
-const TIMEOUT: u64 = 60 * 60;
+const TIMEOUT_IN_SECS: u64 = 600;
 
 pub fn packet_timeout(now: &Timestamp) -> IbcTimeout {
-    let timeout = now.plus_seconds(TIMEOUT);
+    let timeout = now.plus_seconds(TIMEOUT_IN_SECS);
     IbcTimeout::with_timestamp(timeout)
 }
 
@@ -39,9 +37,6 @@ pub fn ibc_channel_open(
         IbcChannelOpenMsg::OpenInit { channel } => channel,
         IbcChannelOpenMsg::OpenTry { .. } => return Err(ContractError::IbcOpenTryDisallowed),
     };
-
-    // verify the ordering is correct
-    validate_channel_order(&channel.order)?;
 
     // Check the version. If provided, ensure it is compatible.
     // If not provided, use our most recent version.
@@ -138,9 +133,6 @@ pub fn ibc_packet_receive(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// We get ACKs on sync state without much to do.
-/// If it succeeded, take no action. If it errored, we can't do anything else and let it go.
-/// We just log the error cases so they can be detected.
 pub fn ibc_packet_ack(
     _deps: DepsMut,
     _env: Env,
@@ -150,17 +142,10 @@ pub fn ibc_packet_ack(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// The most we can do here is retry the packet, hoping it will eventually arrive.
 pub fn ibc_packet_timeout(
     _deps: DepsMut,
-    env: Env,
-    msg: IbcPacketTimeoutMsg,
+    _env: Env,
+    _msg: IbcPacketTimeoutMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    // Play it again, Sam.
-    let msg = IbcMsg::SendPacket {
-        channel_id: msg.packet.src.channel_id,
-        data: msg.packet.data,
-        timeout: packet_timeout(&env.block.time),
-    };
-    Ok(IbcBasicResponse::new().add_message(msg))
+    Err(ContractError::IbcPacketAckDisallowed)
 }
