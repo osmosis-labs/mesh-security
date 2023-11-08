@@ -34,4 +34,7 @@ pub enum ContractError {
 
     #[error("The oracle hasn't received any price data")]
     NoPriceData,
+
+    #[error("The oracle's price data is outdated")]
+    OutdatedPriceData,
 }

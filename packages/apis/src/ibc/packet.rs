@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_binary, Binary, Coin, Decimal, StdResult};
+use cosmwasm_std::{to_binary, Binary, Coin, Decimal, StdResult, Timestamp};
 
 use crate::converter_api::RewardInfo;
 
@@ -173,7 +173,7 @@ pub fn ack_fail<E: Error>(err: E) -> StdResult<Binary> {
 
 #[cw_serde]
 pub enum PriceFeedProviderAck {
-    Update { twap: Decimal },
+    Update { time: Timestamp, twap: Decimal },
 }
 
 #[cw_serde]

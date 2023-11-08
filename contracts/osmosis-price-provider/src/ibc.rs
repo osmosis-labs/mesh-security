@@ -122,7 +122,7 @@ pub fn ibc_channel_close(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn ibc_packet_receive(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
     let RemotePriceFeedPacket::QueryTwap {
@@ -132,8 +132,9 @@ pub fn ibc_packet_receive(
     } = from_slice(&msg.packet.data)?;
     let contract = OsmosisPriceProvider::new();
 
+    let time = env.block.time;
     let twap = contract.query_twap(deps, pool_id, base_asset, quote_asset)?;
-    Ok(IbcReceiveResponse::new().set_ack(to_binary(&PriceFeedProviderAck::Update { twap })?))
+    Ok(IbcReceiveResponse::new().set_ack(to_binary(&PriceFeedProviderAck::Update { time, twap })?))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

@@ -127,14 +127,22 @@ pub fn ibc_packet_ack(
     msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
     let ack: PriceFeedProviderAck = from_slice(&msg.acknowledgement.data)?;
-    let PriceFeedProviderAck::Update { twap } = ack;
+    let PriceFeedProviderAck::Update { time, twap } = ack;
     let contract = RemotePriceFeedContract::new();
-    contract.price_info.save(
-        deps.storage,
-        &PriceInfo {
-            native_per_foreign: twap,
-        },
-    )?;
+
+    let old = contract.price_info.may_load(deps.storage)?;
+    match old {
+        Some(old) if old.time > time => {
+            // don't update if we have newer price info stored
+        }
+        _ => contract.price_info.save(
+            deps.storage,
+            &PriceInfo {
+                time,
+                native_per_foreign: twap,
+            },
+        )?,
+    }
 
     Ok(IbcBasicResponse::new())
 }

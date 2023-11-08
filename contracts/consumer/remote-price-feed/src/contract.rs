@@ -17,6 +17,7 @@ pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const EPOCH_IN_SECS: u64 = 120;
+pub const PRICE_INFO_TTL_IN_SECS: u64 = 600;
 
 pub struct RemotePriceFeedContract {
     pub channel: Item<'static, IbcChannel>,
@@ -70,12 +71,18 @@ impl PriceFeedApi for RemotePriceFeedContract {
     /// are needed to buy one foreign token.
     #[msg(query)]
     fn price(&self, ctx: QueryCtx) -> Result<PriceResponse, Self::Error> {
-        let price_info = self.price_info.may_load(ctx.deps.storage)?;
-        price_info
-            .map(|info| PriceResponse {
-                native_per_foreign: info.native_per_foreign,
+        let price_info = self
+            .price_info
+            .may_load(ctx.deps.storage)?
+            .ok_or(ContractError::NoPriceData)?;
+
+        if ctx.env.block.time.minus_seconds(PRICE_INFO_TTL_IN_SECS) < price_info.time {
+            Ok(PriceResponse {
+                native_per_foreign: price_info.native_per_foreign,
             })
-            .ok_or(ContractError::NoPriceData)
+        } else {
+            Err(ContractError::OutdatedPriceData)
+        }
     }
 }
 
