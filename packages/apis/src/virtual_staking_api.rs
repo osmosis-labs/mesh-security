@@ -41,12 +41,12 @@ pub trait VirtualStakingApi {
 
 #[cw_serde]
 pub enum SudoMsg {
-    /// SudoMsg::Rebalance{} should be called once per epoch by the sdk (in EndBlock).
+    /// SudoMsg::HandleEpoch{} should be called once per epoch by the sdk (in EndBlock).
     /// It allows the virtual staking contract to bond or unbond any pending requests, as well
     /// as to perform a rebalance if needed (over the max cap).
     ///
     /// It should also withdraw all pending rewards here, and send them to the converter contract.
-    Rebalance {},
+    HandleEpoch {},
     /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update:
     ///  - Addition of a new validator to the active validator set.
     ///  - Temporary removal of a validator from the active set. (i.e. `unbonded` state).

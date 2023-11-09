@@ -632,7 +632,7 @@ pub fn sudo(
     msg: SudoMsg,
 ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
     match msg {
-        SudoMsg::Rebalance {} => VirtualStakingContract::new().handle_epoch(deps, env),
+        SudoMsg::HandleEpoch {} => VirtualStakingContract::new().handle_epoch(deps, env),
         SudoMsg::ValsetUpdate {
             additions,
             removals,
