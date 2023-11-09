@@ -1,4 +1,7 @@
-use cosmwasm_std::{from_slice, Addr, Decimal, DepsMut, Reply, Response, SubMsgResponse};
+#[cfg(not(feature = "library"))]
+use cosmwasm_std::entry_point;
+
+use cosmwasm_std::{from_slice, Addr, Decimal, DepsMut, Env, Reply, Response, SubMsgResponse};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
@@ -6,6 +9,7 @@ use sylvia::types::{InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
+use mesh_apis::local_staking_api::SudoMsg;
 use mesh_native_staking_proxy::msg::OwnerMsg;
 use mesh_native_staking_proxy::native_staking_callback;
 
@@ -62,6 +66,20 @@ impl NativeStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         Ok(Response::new())
+    }
+
+    /**
+     * This is called every time there's a change of the active validator set that implies slashing.
+     *
+     */
+    fn handle_jailing(
+        &self,
+        deps: DepsMut,
+        jailed: &[String],
+        tombstoned: &[String],
+    ) -> Result<Response, ContractError> {
+        let _ = (deps, jailed, tombstoned);
+        todo!()
     }
 
     #[msg(query)]
@@ -121,5 +139,16 @@ impl NativeStakingContract<'_> {
         Ok(OwnerByProxyResponse {
             owner: owner_addr.to_string(),
         })
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+    match msg {
+        SudoMsg::Jailing { jailed, tombstoned } => NativeStakingContract::new().handle_jailing(
+            deps,
+            &jailed.unwrap_or_default(),
+            &tombstoned.unwrap_or_default(),
+        ),
     }
 }

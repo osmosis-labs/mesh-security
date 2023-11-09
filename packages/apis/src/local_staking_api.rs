@@ -98,3 +98,15 @@ impl LocalStakingApiHelper {
         deps.querier.query_wasm_smart(&self.0, &query)
     }
 }
+
+#[cw_serde]
+pub enum SudoMsg {
+    /// `SudoMsg::Jailing` should be called every time there's a validator set update that implies
+    /// slashing.
+    ///  - Temporary removal of a validator from the active set due to jailing.
+    ///  - Permanent removal (i.e. tombstoning) of a validator from the active set.
+    Jailing {
+        jailed: Option<Vec<String>>,
+        tombstoned: Option<Vec<String>>,
+    },
+}
