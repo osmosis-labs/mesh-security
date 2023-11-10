@@ -28,6 +28,9 @@ pub struct NativeStakingContract<'a> {
     pub proxy_by_owner: Map<'a, &'a Addr, Addr>,
     /// Reverse map of owner address by proxy contract address
     pub owner_by_proxy: Map<'a, &'a Addr, Addr>,
+    /// Map of delegators per validator
+    // This is used for prefixing and ranging during slashing
+    pub delegators: Map<'a, (&'a str, &'a Addr), bool>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -41,6 +44,7 @@ impl NativeStakingContract<'_> {
             config: Item::new("config"),
             proxy_by_owner: Map::new("proxies"),
             owner_by_proxy: Map::new("owners"),
+            delegators: Map::new("delegators"),
         }
     }
 
