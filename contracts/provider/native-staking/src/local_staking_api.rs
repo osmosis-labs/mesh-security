@@ -41,6 +41,10 @@ impl LocalStakingApi for NativeStakingContract<'_> {
 
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 
+        // Add it to the delegators map
+        self.delegators
+            .save(ctx.deps.storage, (&validator, &owner_addr), &true)?;
+
         // Look up if there is a proxy to match. Instantiate or call stake on existing
         match self
             .proxy_by_owner
