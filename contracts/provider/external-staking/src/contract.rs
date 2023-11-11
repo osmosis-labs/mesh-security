@@ -1437,7 +1437,7 @@ mod tests {
     use mesh_apis::vault_api::VaultApiExecMsg::CrossSlash;
 
     static OSMO: &str = "uosmo";
-    static CREATOR: &str = "staking"; // The creator of the proxy contract(s) is the staking contract
+    static CREATOR: &str = "creator";
     static OWNER: &str = "user";
 
     fn do_instantiate(deps: DepsMut) -> (ExecCtx, ExternalStakingContract) {
@@ -1445,7 +1445,7 @@ mod tests {
         let mut ctx = InstantiateCtx {
             deps,
             env: mock_env(),
-            info: mock_info(CREATOR, &[coin(100, OSMO)]),
+            info: mock_info(CREATOR, &[]),
         };
         contract
             .instantiate(
