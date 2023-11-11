@@ -10,6 +10,7 @@ use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
 use mesh_apis::local_staking_api::SudoMsg;
+use mesh_apis::vault_api::VaultApiHelper;
 use mesh_native_staking_proxy::msg::OwnerMsg;
 use mesh_native_staking_proxy::native_staking_callback;
 
@@ -65,7 +66,7 @@ impl NativeStakingContract<'_> {
         let config = Config {
             denom,
             proxy_code_id,
-            vault: ctx.info.sender,
+            vault: VaultApiHelper(ctx.info.sender),
             slash_ratio_dsign,
             slash_ratio_offline,
         };

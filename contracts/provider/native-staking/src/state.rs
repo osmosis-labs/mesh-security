@@ -1,5 +1,6 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal};
+use cosmwasm_std::Decimal;
+use mesh_apis::vault_api::VaultApiHelper;
 
 #[cw_serde]
 pub struct Config {
@@ -10,7 +11,7 @@ pub struct Config {
     pub proxy_code_id: u64,
 
     /// The address of the vault contract (where we get and return stake)
-    pub vault: Addr,
+    pub vault: VaultApiHelper,
 
     /// The slash ratio for double signing
     pub slash_ratio_dsign: Decimal,
