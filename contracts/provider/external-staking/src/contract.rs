@@ -872,6 +872,9 @@ impl ExternalStakingContract<'_> {
             // Calculating slashing with always the `high` value of the range goes against the user
             // in some scenario (pending stakes while slashing); but the scenario is relatively
             // unlikely.
+            if stake_high.is_zero() {
+                continue;
+            }
             let stake_slash = stake_high * config.max_slashing;
             // Requires proper saturating methods in commit/rollback_stake/unstake
             stake.stake = ValueRange::new(
@@ -899,6 +902,9 @@ impl ExternalStakingContract<'_> {
                 user: user.to_string(),
                 slash: stake_slash + pending_slashed,
             });
+        }
+        if slash_infos.is_empty() {
+            return Ok(None);
         }
 
         // Route associated users to vault for slashing of their collateral
