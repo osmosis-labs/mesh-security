@@ -82,7 +82,7 @@ impl NativeStakingContract<'_> {
      */
     fn handle_jailing(
         &self,
-        deps: DepsMut,
+        mut deps: DepsMut,
         jailed: &[String],
         tombstoned: &[String],
     ) -> Result<Response, ContractError> {
@@ -90,7 +90,7 @@ impl NativeStakingContract<'_> {
         let mut msgs = vec![];
         for validator in tombstoned {
             // Slash the validator (if bonded)
-            let slash_msg = self.handle_slashing(&deps, &cfg, validator)?;
+            let slash_msg = self.handle_slashing(&mut deps, &cfg, validator)?;
             if let Some(msg) = slash_msg {
                 msgs.push(msg)
             }
@@ -98,7 +98,7 @@ impl NativeStakingContract<'_> {
         for validator in jailed {
             // Slash the validator (if bonded)
             // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-            let slash_msg = self.handle_slashing(&deps, &cfg, validator)?;
+            let slash_msg = self.handle_slashing(&mut deps, &cfg, validator)?;
             if let Some(msg) = slash_msg {
                 msgs.push(msg)
             }
@@ -108,7 +108,7 @@ impl NativeStakingContract<'_> {
 
     fn handle_slashing(
         &self,
-        deps: &DepsMut,
+        deps: &mut DepsMut,
         config: &Config,
         validator: &str,
     ) -> Result<Option<WasmMsg>, ContractError> {
@@ -123,9 +123,9 @@ impl NativeStakingContract<'_> {
         }
 
         let mut slash_infos = vec![];
-        for (owner, _) in owners {
+        for (owner, _) in &owners {
             // Get owner proxy address
-            let proxy = self.proxy_by_owner.load(deps.storage, &owner)?;
+            let proxy = self.proxy_by_owner.load(deps.storage, owner)?;
             // Get proxy's delegation (pre-slashing?) amount over validator
             // TODO: Confirm queried delegation amounts are pre- or post-slashing
             let delegation = deps
@@ -134,12 +134,22 @@ impl NativeStakingContract<'_> {
                 .map(|full_delegation| full_delegation.amount.amount)
                 .unwrap_or_default();
 
+            if delegation.is_zero() {
+                // Maintenance: Remove delegator from map in passing
+                // TODO: Remove zero amount delegations from delegators map periodically
+                self.delegators.remove(deps.storage, (validator, owner));
+                continue;
+            }
+
             let slash_amount = delegation * config.max_slashing;
 
             slash_infos.push(SlashInfo {
                 user: owner.to_string(),
                 slash: slash_amount,
             });
+        }
+        if slash_infos.is_empty() {
+            return Ok(None);
         }
         // Route associated users to vault for slashing of their collateral
         let msg = config
