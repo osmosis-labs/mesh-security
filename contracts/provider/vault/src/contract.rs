@@ -969,6 +969,35 @@ impl VaultApi for VaultContract<'_> {
         Ok(resp)
     }
 
+    /// This must be called by the native staking contract to process a misbehaviour
+    #[msg(exec)]
+    fn local_slash(
+        &self,
+        mut ctx: ExecCtx,
+        slashes: Vec<SlashInfo>,
+        validator: String,
+    ) -> Result<Response, Self::Error> {
+        nonpayable(&ctx.info)?;
+
+        let msgs = self.slash(&mut ctx, &slashes, &validator)?;
+
+        let resp = Response::new()
+            .add_messages(msgs)
+            .add_attribute("action", "local_slash")
+            .add_attribute("lien_holder", ctx.info.sender)
+            .add_attribute("validator", validator.to_string())
+            .add_attribute(
+                "users",
+                slashes
+                    .iter()
+                    .map(|s| s.user.clone())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+
+        Ok(resp)
+    }
+
     /// This must be called by the external staking contract to process a misbehaviour
     #[msg(exec)]
     fn cross_slash(
@@ -983,7 +1012,7 @@ impl VaultApi for VaultContract<'_> {
 
         let resp = Response::new()
             .add_messages(msgs)
-            .add_attribute("action", "process_cross_slashing")
+            .add_attribute("action", "cross_slash")
             .add_attribute("lien_holder", ctx.info.sender)
             .add_attribute("validator", validator.to_string())
             .add_attribute(
