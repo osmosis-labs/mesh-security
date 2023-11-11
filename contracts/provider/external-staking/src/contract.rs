@@ -465,6 +465,7 @@ impl ExternalStakingContract<'_> {
         unjailed: &[String],
         tombstoned: &[String],
     ) -> Result<(Event, Vec<WasmMsg>), ContractError> {
+        let cfg = self.config.load(deps.storage)?;
         let mut msgs = vec![];
         let mut valopers: HashSet<String> = HashSet::new();
         // Process tombstoning events first. Once tombstoned, a validator cannot be changed anymore.
@@ -476,9 +477,14 @@ impl ExternalStakingContract<'_> {
             self.val_set
                 .tombstone_validator(deps.storage, valoper, height, time)?;
             if active {
-                // Slash the validator (if bonded)
-                let slash_msg =
-                    self.handle_slashing(&env, deps.storage, valoper, SlashingReason::DoubleSign)?;
+                // Slash the validator, if bonded
+                let slash_msg = self.handle_slashing(
+                    &env,
+                    deps.storage,
+                    &cfg,
+                    valoper,
+                    SlashingReason::DoubleSign,
+                )?;
                 if let Some(msg) = slash_msg {
                     msgs.push(msg)
                 }
@@ -511,9 +517,13 @@ impl ExternalStakingContract<'_> {
                 .jail_validator(deps.storage, valoper, height, time)?;
             if active {
                 // Slash the validator, if bonded
-                // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-                let slash_msg =
-                    self.handle_slashing(&env, deps.storage, valoper, SlashingReason::Offline)?;
+                let slash_msg = self.handle_slashing(
+                    &env,
+                    deps.storage,
+                    &cfg,
+                    valoper,
+                    SlashingReason::Offline,
+                )?;
                 if let Some(msg) = slash_msg {
                     msgs.push(msg)
                 }
@@ -532,7 +542,6 @@ impl ExternalStakingContract<'_> {
             valopers.insert(valoper.clone());
         }
         // Maintenance. Drain events that are older than unbonding period from now
-        let cfg = self.config.load(deps.storage)?;
         // Assumes time keeping is the same in both chains
         let max_time = env
             .block
@@ -851,10 +860,10 @@ impl ExternalStakingContract<'_> {
         &self,
         env: &Env,
         storage: &mut dyn Storage,
+        config: &Config,
         validator: &str,
         reason: SlashingReason,
     ) -> Result<Option<WasmMsg>, ContractError> {
-        let config = self.config.load(storage)?;
         let slash_ratio = match reason {
             SlashingReason::Offline => config.slash_ratio.offline,
             SlashingReason::DoubleSign => config.slash_ratio.double_sign,
