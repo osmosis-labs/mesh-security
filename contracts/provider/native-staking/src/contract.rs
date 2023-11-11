@@ -1,7 +1,10 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
-use cosmwasm_std::{from_slice, Addr, Decimal, DepsMut, Env, Reply, Response, SubMsgResponse};
+use cosmwasm_std::Order::Ascending;
+use cosmwasm_std::{
+    from_slice, Addr, Decimal, DepsMut, Env, Reply, Response, StdResult, SubMsgResponse, WasmMsg,
+};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
@@ -10,7 +13,7 @@ use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
 use mesh_apis::local_staking_api::SudoMsg;
-use mesh_apis::vault_api::VaultApiHelper;
+use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
 use mesh_native_staking_proxy::msg::OwnerMsg;
 use mesh_native_staking_proxy::native_staking_callback;
 
@@ -83,8 +86,66 @@ impl NativeStakingContract<'_> {
         jailed: &[String],
         tombstoned: &[String],
     ) -> Result<Response, ContractError> {
-        let _ = (deps, jailed, tombstoned);
-        todo!()
+        let cfg = self.config.load(deps.storage)?;
+        let mut msgs = vec![];
+        for validator in tombstoned {
+            // Slash the validator (if bonded)
+            let slash_msg = self.handle_slashing(&deps, &cfg, validator)?;
+            if let Some(msg) = slash_msg {
+                msgs.push(msg)
+            }
+        }
+        for validator in jailed {
+            // Slash the validator (if bonded)
+            // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
+            let slash_msg = self.handle_slashing(&deps, &cfg, validator)?;
+            if let Some(msg) = slash_msg {
+                msgs.push(msg)
+            }
+        }
+        Ok(Response::new().add_messages(msgs))
+    }
+
+    fn handle_slashing(
+        &self,
+        deps: &DepsMut,
+        config: &Config,
+        validator: &str,
+    ) -> Result<Option<WasmMsg>, ContractError> {
+        // Get all mesh delegators to this validator
+        let owners = self
+            .delegators
+            .prefix(validator)
+            .range(deps.storage, None, None, Ascending)
+            .collect::<StdResult<Vec<_>>>()?;
+        if owners.is_empty() {
+            return Ok(None);
+        }
+
+        let mut slash_infos = vec![];
+        for (owner, _) in owners {
+            // Get owner proxy address
+            let proxy = self.proxy_by_owner.load(deps.storage, &owner)?;
+            // Get proxy's delegation (pre-slashing?) amount over validator
+            // TODO: Confirm queried delegation amounts are pre- or post-slashing
+            let delegation = deps
+                .querier
+                .query_delegation(proxy, validator)?
+                .map(|full_delegation| full_delegation.amount.amount)
+                .unwrap_or_default();
+
+            let slash_amount = delegation * config.max_slashing;
+
+            slash_infos.push(SlashInfo {
+                user: owner.to_string(),
+                slash: slash_amount,
+            });
+        }
+        // Route associated users to vault for slashing of their collateral
+        let msg = config
+            .vault
+            .process_local_slashing(slash_infos, validator)?;
+        Ok(Some(msg))
     }
 
     #[msg(query)]
