@@ -9,7 +9,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
-use sylvia::types::{InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
@@ -79,10 +79,9 @@ impl NativeStakingContract<'_> {
         Ok(Response::new())
     }
 
-    /**
-     * This is called every time there's a change of the active validator set that implies slashing.
-     *
-     */
+    /// This is called every time there's a change of the active validator set that implies slashing.
+    /// In test code, this is called from `test_handle_jailing`.
+    /// In non-test code, this is called from `sudo`.
     fn handle_jailing(
         &self,
         mut deps: DepsMut,
@@ -225,6 +224,26 @@ impl NativeStakingContract<'_> {
         Ok(OwnerByProxyResponse {
             owner: owner_addr.to_string(),
         })
+    }
+
+    /// Jails validators temporarily or permanently.
+    /// Method used for test only.
+    #[msg(exec)]
+    fn test_handle_jailing(
+        &self,
+        ctx: ExecCtx,
+        jailed: Vec<String>,
+        tombstoned: Vec<String>,
+    ) -> Result<Response, ContractError> {
+        #[cfg(any(feature = "mt", test))]
+        {
+            NativeStakingContract::new().handle_jailing(ctx.deps, &jailed, &tombstoned)
+        }
+        #[cfg(not(any(feature = "mt", test)))]
+        {
+            let _ = (ctx, jailed, tombstoned);
+            Err(ContractError::Unauthorized {})
+        }
     }
 }
 
