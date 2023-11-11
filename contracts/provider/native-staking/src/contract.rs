@@ -3,7 +3,8 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::Order::Ascending;
 use cosmwasm_std::{
-    from_slice, Addr, Decimal, DepsMut, Env, Reply, Response, StdResult, SubMsgResponse, WasmMsg,
+    from_slice, Addr, Decimal, DepsMut, Env, Event, Reply, Response, StdResult, SubMsgResponse,
+    WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -103,7 +104,14 @@ impl NativeStakingContract<'_> {
                 msgs.push(msg)
             }
         }
-        Ok(Response::new().add_messages(msgs))
+        let mut evt = Event::new("jailing");
+        if !jailed.is_empty() {
+            evt = evt.add_attribute("jailed", jailed.join(","));
+        }
+        if !tombstoned.is_empty() {
+            evt = evt.add_attribute("tombstoned", tombstoned.join(","));
+        }
+        Ok(Response::new().add_event(evt).add_messages(msgs))
     }
 
     fn handle_slashing(
