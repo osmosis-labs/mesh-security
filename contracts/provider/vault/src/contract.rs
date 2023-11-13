@@ -193,7 +193,7 @@ impl VaultContract<'_> {
             &mut ctx,
             &config,
             &contract.0,
-            slashable.max_slash,
+            slashable.max_slash_dsign,
             amount.clone(),
             true,
         )?;
@@ -461,12 +461,13 @@ impl VaultContract<'_> {
         // As we control the local staking contract it might be better to just raw-query it
         // on demand instead of duplicating the data.
         let query = LocalStakingApiQueryMsg::MaxSlash {};
-        let MaxSlashResponse { max_slash } =
-            deps.querier.query_wasm_smart(&local_staking, &query)?;
+        let MaxSlashResponse {
+            max_slash_dsign, ..
+        } = deps.querier.query_wasm_smart(&local_staking, &query)?;
 
         let local_staking = LocalStaking {
             contract: LocalStakingApiHelper(local_staking),
-            max_slash,
+            max_slash: max_slash_dsign,
         };
 
         self.local_staking

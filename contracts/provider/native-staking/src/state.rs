@@ -12,6 +12,9 @@ pub struct Config {
     /// The address of the vault contract (where we get and return stake)
     pub vault: Addr,
 
-    /// Max slash percentage (from InstantiateMsg, maybe later from the chain)
-    pub max_slashing: Decimal,
+    /// Max slash percentage for double signing
+    pub max_slashing_dsign: Decimal,
+
+    /// max slash percentage for being offline
+    pub max_slashing_offline: Decimal,
 }

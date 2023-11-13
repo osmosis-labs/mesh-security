@@ -60,6 +60,11 @@ impl Default for ExternalStakingContract<'_> {
     }
 }
 
+enum SlashingReason {
+    Offline,
+    DoubleSign,
+}
+
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
@@ -95,12 +100,13 @@ impl ExternalStakingContract<'_> {
         vault: String,
         unbonding_period: u64,
         remote_contact: crate::msg::AuthorizedEndpoint,
-        max_slashing: Decimal,
+        max_slashing_dsign: Decimal,
+        max_slashing_offline: Decimal,
     ) -> Result<Response, ContractError> {
         let vault = ctx.deps.api.addr_validate(&vault)?;
         let vault = VaultApiHelper(vault);
 
-        if max_slashing > Decimal::one() {
+        if max_slashing_dsign > Decimal::one() {
             return Err(ContractError::InvalidMaxSlashing);
         }
 
@@ -109,7 +115,8 @@ impl ExternalStakingContract<'_> {
             rewards_denom,
             vault,
             unbonding_period,
-            max_slashing,
+            max_slashing_dsign,
+            max_slashing_offline,
         };
 
         self.config.save(ctx.deps.storage, &config)?;
@@ -472,7 +479,8 @@ impl ExternalStakingContract<'_> {
                 .tombstone_validator(deps.storage, valoper, height, time)?;
             if active {
                 // Slash the validator (if bonded)
-                let slash_msg = self.handle_slashing(&env, deps.storage, valoper)?;
+                let slash_msg =
+                    self.handle_slashing(&env, deps.storage, valoper, SlashingReason::DoubleSign)?;
                 if let Some(msg) = slash_msg {
                     msgs.push(msg)
                 }
@@ -506,7 +514,8 @@ impl ExternalStakingContract<'_> {
             if active {
                 // Slash the validator, if bonded
                 // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-                let slash_msg = self.handle_slashing(&env, deps.storage, valoper)?;
+                let slash_msg =
+                    self.handle_slashing(&env, deps.storage, valoper, SlashingReason::Offline)?;
                 if let Some(msg) = slash_msg {
                     msgs.push(msg)
                 }
@@ -845,8 +854,13 @@ impl ExternalStakingContract<'_> {
         env: &Env,
         storage: &mut dyn Storage,
         validator: &str,
+        reason: SlashingReason,
     ) -> Result<Option<WasmMsg>, ContractError> {
         let config = self.config.load(storage)?;
+        let max_slashing = match reason {
+            SlashingReason::Offline => config.max_slashing_offline,
+            SlashingReason::DoubleSign => config.max_slashing_dsign,
+        };
         // Get the list of users staking via this validator
         let users = self
             .stakes
@@ -872,7 +886,7 @@ impl ExternalStakingContract<'_> {
             // Calculating slashing with always the `high` value of the range goes against the user
             // in some scenario (pending stakes while slashing); but the scenario is relatively
             // unlikely.
-            let stake_slash = stake_high * config.max_slashing;
+            let stake_slash = stake_high * max_slashing;
             // Requires proper saturating methods in commit/rollback_stake/unstake
             stake.stake = ValueRange::new(
                 stake_low.saturating_sub(stake_slash),
@@ -891,7 +905,7 @@ impl ExternalStakingContract<'_> {
             self.distribution.save(storage, validator, &distribution)?;
 
             // Slash the unbondings
-            let pending_slashed = stake.slash_pending(&env.block, config.max_slashing);
+            let pending_slashed = stake.slash_pending(&env.block, max_slashing);
 
             self.stakes.stake.save(storage, (&user, validator), stake)?;
 
@@ -1388,9 +1402,14 @@ pub mod cross_staking {
 
         #[msg(query)]
         fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
-            let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
+            let Config {
+                max_slashing_dsign,
+                max_slashing_offline,
+                ..
+            } = self.config.load(ctx.deps.storage)?;
             Ok(MaxSlashResponse {
-                max_slash: max_slashing,
+                max_slash_dsign: max_slashing_dsign,
+                max_slash_offline: max_slashing_offline,
             })
         }
     }

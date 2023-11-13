@@ -95,7 +95,10 @@ fn instantiate() {
     assert_eq!(stakes.stakes, []);
 
     let max_slash = contract.cross_staking_api_proxy().max_slash().unwrap();
-    assert_eq!(max_slash.max_slash, Decimal::percent(SLASHING_PERCENTAGE));
+    assert_eq!(
+        max_slash.max_slash_dsign,
+        Decimal::percent(SLASHING_PERCENTAGE)
+    );
 }
 
 #[test]

@@ -122,9 +122,14 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     /// Returns the maximum percentage that can be slashed
     #[msg(query)]
     fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
-        let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
+        let Config {
+            max_slashing_dsign,
+            max_slashing_offline,
+            ..
+        } = self.config.load(ctx.deps.storage)?;
         Ok(MaxSlashResponse {
-            max_slash: max_slashing,
+            max_slash_dsign: max_slashing_dsign,
+            max_slash_offline: max_slashing_offline,
         })
     }
 }

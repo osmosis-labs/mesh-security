@@ -5,7 +5,8 @@ use sylvia::{interface, schemars};
 
 #[cw_serde]
 pub struct MaxSlashResponse {
-    pub max_slash: Decimal,
+    pub max_slash_dsign: Decimal,
+    pub max_slash_offline: Decimal,
 }
 
 /// This is the interface to any local staking contract needed by the vault contract.

@@ -19,10 +19,15 @@ use crate::msg::{OwnerByProxyResponse, ProxyByOwnerResponse};
 
 const OSMO: &str = "OSMO";
 
-const SLASHING_PERCENTAGE: u64 = 15;
+const SLASHING_PERCENTAGE_DSIGN: u64 = 15;
+const SLASHING_PERCENTAGE_OFFLINE: u64 = 10;
 
-fn slashing_rate() -> Decimal {
-    Decimal::percent(SLASHING_PERCENTAGE)
+fn slashing_rate_dsign() -> Decimal {
+    Decimal::percent(SLASHING_PERCENTAGE_DSIGN)
+}
+
+fn slashing_rate_offline() -> Decimal {
+    Decimal::percent(SLASHING_PERCENTAGE_OFFLINE)
 }
 
 fn app(balances: &[(&str, (u128, &str))], validators: &[&str]) -> App<MtApp> {
@@ -108,7 +113,8 @@ fn instantiation() {
         .instantiate(
             OSMO.to_owned(),
             staking_proxy_code.code_id(),
-            slashing_rate(),
+            slashing_rate_dsign(),
+            slashing_rate_offline(),
         )
         .with_label("Staking")
         .call(owner)
@@ -118,7 +124,7 @@ fn instantiation() {
     assert_eq!(config.denom, OSMO);
 
     let res = staking.local_staking_api_proxy().max_slash().unwrap();
-    assert_eq!(res.max_slash, slashing_rate());
+    assert_eq!(res.max_slash_dsign, slashing_rate_dsign());
 }
 
 #[test]
@@ -141,7 +147,8 @@ fn receiving_stake() {
         .instantiate(
             OSMO.to_owned(),
             staking_proxy_code.code_id(),
-            slashing_rate(),
+            slashing_rate_dsign(),
+            slashing_rate_offline(),
         )
         .with_label("Staking")
         .call(owner)
@@ -260,7 +267,8 @@ fn releasing_proxy_stake() {
         msg: to_binary(&crate::contract::InstantiateMsg {
             denom: OSMO.to_owned(),
             proxy_code_id: staking_proxy_code.code_id(),
-            max_slashing: slashing_rate(),
+            max_slashing_dsign: slashing_rate_dsign(),
+            max_slashing_offline: slashing_rate_offline(),
         })
         .unwrap(),
         label: None,
