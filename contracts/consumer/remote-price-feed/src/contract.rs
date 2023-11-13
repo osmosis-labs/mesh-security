@@ -2,7 +2,7 @@ use cosmwasm_std::{entry_point, DepsMut, Env, IbcChannel, Response, Timestamp};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
-use mesh_bindings::RemotePriceFeedSudoMsg;
+use mesh_bindings::SudoMsg;
 use sylvia::types::{InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -92,13 +92,9 @@ impl PriceFeedApi for RemotePriceFeedContract {
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(
-    deps: DepsMut,
-    env: Env,
-    msg: RemotePriceFeedSudoMsg,
-) -> Result<Response, ContractError> {
+pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
     match msg {
-        RemotePriceFeedSudoMsg::EndBlock {} => {
+        SudoMsg::EndBlock {} => {
             let contract = RemotePriceFeedContract::new();
             let TradingPair {
                 pool_id,
