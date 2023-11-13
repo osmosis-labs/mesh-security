@@ -26,7 +26,7 @@ use crate::msg::{
     StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
 };
 use crate::stakes::Stakes;
-use crate::state::{Config, Distribution, Stake};
+use crate::state::{Config, Distribution, MaxSlashing, Stake};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -100,13 +100,12 @@ impl ExternalStakingContract<'_> {
         vault: String,
         unbonding_period: u64,
         remote_contact: crate::msg::AuthorizedEndpoint,
-        max_slashing_dsign: Decimal,
-        max_slashing_offline: Decimal,
+        max_slashing: MaxSlashing,
     ) -> Result<Response, ContractError> {
         let vault = ctx.deps.api.addr_validate(&vault)?;
         let vault = VaultApiHelper(vault);
 
-        if max_slashing_dsign > Decimal::one() {
+        if max_slashing.double_sign > Decimal::one() || max_slashing.offline > Decimal::one() {
             return Err(ContractError::InvalidMaxSlashing);
         }
 
@@ -115,8 +114,7 @@ impl ExternalStakingContract<'_> {
             rewards_denom,
             vault,
             unbonding_period,
-            max_slashing_dsign,
-            max_slashing_offline,
+            max_slashing,
         };
 
         self.config.save(ctx.deps.storage, &config)?;
@@ -858,8 +856,8 @@ impl ExternalStakingContract<'_> {
     ) -> Result<Option<WasmMsg>, ContractError> {
         let config = self.config.load(storage)?;
         let max_slashing = match reason {
-            SlashingReason::Offline => config.max_slashing_offline,
-            SlashingReason::DoubleSign => config.max_slashing_dsign,
+            SlashingReason::Offline => config.max_slashing.offline,
+            SlashingReason::DoubleSign => config.max_slashing.double_sign,
         };
         // Get the list of users staking via this validator
         let users = self
@@ -1402,14 +1400,10 @@ pub mod cross_staking {
 
         #[msg(query)]
         fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
-            let Config {
-                max_slashing_dsign,
-                max_slashing_offline,
-                ..
-            } = self.config.load(ctx.deps.storage)?;
+            let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
             Ok(MaxSlashResponse {
-                max_slash_dsign: max_slashing_dsign,
-                max_slash_offline: max_slashing_offline,
+                max_slash_dsign: max_slashing.double_sign,
+                max_slash_offline: max_slashing.offline,
             })
         }
     }
@@ -1449,8 +1443,10 @@ mod tests {
                     connection_id: "connection_id_1".to_string(),
                     port_id: "port_id_1".to_string(),
                 },
-                Decimal::percent(10),
-                Decimal::percent(10),
+                MaxSlashing {
+                    double_sign: Decimal::percent(10),
+                    offline: Decimal::percent(10),
+                },
             )
             .unwrap();
         let exec_ctx = ExecCtx {

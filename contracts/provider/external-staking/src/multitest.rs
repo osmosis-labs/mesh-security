@@ -18,7 +18,7 @@ use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
 use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo, ValidatorPendingRewards};
-use crate::state::Stake;
+use crate::state::{MaxSlashing, Stake};
 use crate::test_methods_impl::test_utils::TestMethods;
 use utils::{
     assert_rewards, get_last_external_staking_pending_tx_id, AppExt as _, ContractExt as _,
@@ -77,8 +77,10 @@ fn setup<'app>(
             vault.contract_addr.to_string(),
             unbond_period,
             remote_contact,
-            Decimal::percent(SLASHING_PERCENTAGE),
-            Decimal::percent(SLASHING_PERCENTAGE),
+            MaxSlashing {
+                double_sign: Decimal::percent(SLASHING_PERCENTAGE),
+                offline: Decimal::percent(SLASHING_PERCENTAGE),
+            },
         )
         .call(owner)?;
 

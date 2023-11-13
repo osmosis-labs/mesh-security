@@ -16,10 +16,14 @@ pub struct Config {
     pub vault: VaultApiHelper,
     /// Unbonding period for claims in seconds
     pub unbonding_period: u64,
-    /// Max slash percentage for double signing
-    pub max_slashing_dsign: Decimal,
-    /// Max slash percentage for being offline
-    pub max_slashing_offline: Decimal,
+    /// Max slash percentage
+    pub max_slashing: MaxSlashing,
+}
+
+#[cw_serde]
+pub struct MaxSlashing {
+    pub double_sign: Decimal,
+    pub offline: Decimal,
 }
 
 /// All single stake related information - entry per `(user, validator)` pair, including
