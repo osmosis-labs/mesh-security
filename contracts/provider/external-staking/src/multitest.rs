@@ -31,7 +31,8 @@ const STAR: &str = "star";
 /// 10% slashing on the remote chain
 const SLASHING_PERCENTAGE: u64 = 10;
 /// 5% slashing on the local chain (so we can differentiate in future tests)
-const LOCAL_SLASHING_PERCENTAGE: u64 = 5;
+const LOCAL_SLASHING_PERCENTAGE_DSIGN: u64 = 5;
+const LOCAL_SLASHING_PERCENTAGE_OFFLINE: u64 = 5;
 
 // Shortcut setuping all needed contracts
 //
@@ -52,7 +53,8 @@ fn setup<'app>(
     let native_staking_instantiate = NativeStakingInstantiateMsg {
         denom: OSMO.to_owned(),
         proxy_code_id: native_staking_proxy_code.code_id(),
-        max_slashing: Decimal::percent(LOCAL_SLASHING_PERCENTAGE),
+        max_slashing_dsign: Decimal::percent(LOCAL_SLASHING_PERCENTAGE_DSIGN),
+        max_slashing_offline: Decimal::percent(LOCAL_SLASHING_PERCENTAGE_OFFLINE),
     };
 
     let staking_init = StakingInitInfo {
@@ -75,6 +77,7 @@ fn setup<'app>(
             vault.contract_addr.to_string(),
             unbond_period,
             remote_contact,
+            Decimal::percent(SLASHING_PERCENTAGE),
             Decimal::percent(SLASHING_PERCENTAGE),
         )
         .call(owner)?;

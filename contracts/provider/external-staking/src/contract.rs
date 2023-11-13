@@ -60,7 +60,7 @@ impl Default for ExternalStakingContract<'_> {
     }
 }
 
-enum SlashingReason {
+pub(crate) enum SlashingReason {
     Offline,
     DoubleSign,
 }
@@ -1449,6 +1449,7 @@ mod tests {
                     connection_id: "connection_id_1".to_string(),
                     port_id: "port_id_1".to_string(),
                 },
+                Decimal::percent(10),
                 Decimal::percent(10),
             )
             .unwrap();

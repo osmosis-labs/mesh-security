@@ -228,7 +228,12 @@ impl TestMethods for ExternalStakingContract<'_> {
     ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
-            let slash_msg = self.handle_slashing(&ctx.env, ctx.deps.storage, &validator)?;
+            let slash_msg = self.handle_slashing(
+                &ctx.env,
+                ctx.deps.storage,
+                &validator,
+                crate::contract::SlashingReason::DoubleSign,
+            )?;
             match slash_msg {
                 Some(msg) => Ok(Response::new().add_message(msg)),
                 None => Ok(Response::new()),
