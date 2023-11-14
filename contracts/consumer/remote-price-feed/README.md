@@ -9,4 +9,4 @@ A single trading pair has to be configured on instantiation, along with the IBC 
 For this contract to work correctly:
 
 - An IBC connection to [Osmosis Price Provider](../osmosis-price-provider) must be opened.
-- A`SudoMsg::EndBlock {}` must be sent to the contract regularly. This will allow the contract to request regular updates of locally stored data.
+- A `SudoMsg::EndBlock {}` must be sent to the contract regularly. This will allow the contract to request regular updates of locally stored data.
