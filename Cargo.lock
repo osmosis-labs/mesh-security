@@ -813,7 +813,6 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
- "mesh-bindings",
  "schemars",
  "serde",
  "sylvia",

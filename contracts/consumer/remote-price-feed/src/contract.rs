@@ -2,7 +2,7 @@ use cosmwasm_std::{entry_point, DepsMut, Env, IbcChannel, Response, Timestamp};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
-use mesh_bindings::SudoMsg;
+use mesh_apis::price_feed_api::SudoMsg;
 use sylvia::types::{InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -94,33 +94,35 @@ impl PriceFeedApi for RemotePriceFeedContract {
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
     match msg {
-        SudoMsg::EndBlock {} => {
-            let contract = RemotePriceFeedContract::new();
-            let TradingPair {
-                pool_id,
-                base_asset,
-                quote_asset,
-            } = contract.trading_pair.load(deps.storage)?;
-            let channel = contract
-                .channel
-                .may_load(deps.storage)?
-                .ok_or(ContractError::IbcChannelNotOpen)?;
+        SudoMsg::HandleEpoch {} => handle_epoch(deps, env),
+    }
+}
 
-            let last_epoch = contract.last_epoch.load(deps.storage)?;
-            let epoch_duration = contract.epoch_in_secs.load(deps.storage)?;
-            let secs_since_last_epoch = env.block.time.seconds() - last_epoch.seconds();
-            if secs_since_last_epoch >= epoch_duration {
-                let packet = mesh_apis::ibc::RemotePriceFeedPacket::QueryTwap {
-                    pool_id,
-                    base_asset,
-                    quote_asset,
-                };
-                let msg = make_ibc_packet(&env.block.time, channel, packet)?;
+pub fn handle_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
+    let contract = RemotePriceFeedContract::new();
+    let TradingPair {
+        pool_id,
+        base_asset,
+        quote_asset,
+    } = contract.trading_pair.load(deps.storage)?;
+    let last_epoch = contract.last_epoch.load(deps.storage)?;
+    let epoch_duration = contract.epoch_in_secs.load(deps.storage)?;
+    let secs_since_last_epoch = env.block.time.seconds() - last_epoch.seconds();
+    if secs_since_last_epoch >= epoch_duration {
+        let channel = contract
+            .channel
+            .may_load(deps.storage)?
+            .ok_or(ContractError::IbcChannelNotOpen)?;
 
-                Ok(Response::new().add_message(msg))
-            } else {
-                Ok(Response::new())
-            }
-        }
+        let packet = mesh_apis::ibc::RemotePriceFeedPacket::QueryTwap {
+            pool_id,
+            base_asset,
+            quote_asset,
+        };
+        let msg = make_ibc_packet(&env.block.time, channel, packet)?;
+
+        Ok(Response::new().add_message(msg))
+    } else {
+        Ok(Response::new())
     }
 }

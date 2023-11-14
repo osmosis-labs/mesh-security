@@ -23,3 +23,8 @@ pub trait PriceFeedApi {
 pub struct PriceResponse {
     pub native_per_foreign: Decimal,
 }
+
+#[cw_serde]
+pub enum SudoMsg {
+    HandleEpoch {},
+}

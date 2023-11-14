@@ -14,12 +14,6 @@ pub enum ContractError {
     #[error("{0}")]
     IbcVersion(#[from] VersionError),
 
-    #[error("Unauthorized")]
-    Unauthorized,
-
-    #[error("Contract already has an open IBC channel")]
-    IbcChannelAlreadyOpen,
-
     #[error("The provided IBC channel is not open")]
     IbcChannelNotOpen,
 
