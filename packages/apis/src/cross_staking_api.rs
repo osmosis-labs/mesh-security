@@ -3,7 +3,7 @@ use cosmwasm_std::{to_binary, Addr, Binary, Coin, Deps, Response, StdError, Wasm
 use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
-pub use crate::local_staking_api::MaxSlashResponse;
+pub use crate::local_staking_api::SlashRatioResponse;
 
 /// This is the interface to any cross staking contract needed by the vault contract.
 /// That is, using the vault collateral to stake on a system that doesn't use the collateral
@@ -45,7 +45,7 @@ pub trait CrossStakingApi {
 
     /// Returns the maximum percentage that can be slashed
     #[msg(query)]
-    fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error>;
+    fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, Self::Error>;
 }
 
 #[cw_serde]
@@ -97,7 +97,7 @@ impl CrossStakingApiHelper {
         Ok(wasm)
     }
 
-    pub fn max_slash(&self, deps: Deps) -> Result<MaxSlashResponse, StdError> {
+    pub fn max_slash(&self, deps: Deps) -> Result<SlashRatioResponse, StdError> {
         let query = CrossStakingApiQueryMsg::MaxSlash {};
         deps.querier.query_wasm_smart(&self.0, &query)
     }

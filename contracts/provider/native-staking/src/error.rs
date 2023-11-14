@@ -25,6 +25,6 @@ pub enum ContractError {
     #[error("Missing proxy contract for {0}")]
     NoProxy(String),
 
-    #[error("You cannot use a max slashing rate over 1.0 (100%)")]
-    InvalidMaxSlashing,
+    #[error("You cannot specify a slash ratio over 1.0 (100%)")]
+    InvalidSlashRatio,
 }

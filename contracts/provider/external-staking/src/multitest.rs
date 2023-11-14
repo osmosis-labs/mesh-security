@@ -18,7 +18,7 @@ use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
 use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo, ValidatorPendingRewards};
-use crate::state::Stake;
+use crate::state::{SlashRatio, Stake};
 use crate::test_methods_impl::test_utils::TestMethods;
 use utils::{
     assert_rewards, get_last_external_staking_pending_tx_id, AppExt as _, ContractExt as _,
@@ -31,7 +31,8 @@ const STAR: &str = "star";
 /// 10% slashing on the remote chain
 const SLASHING_PERCENTAGE: u64 = 10;
 /// 5% slashing on the local chain (so we can differentiate in future tests)
-const LOCAL_SLASHING_PERCENTAGE: u64 = 5;
+const LOCAL_SLASHING_PERCENTAGE_DSIGN: u64 = 5;
+const LOCAL_SLASHING_PERCENTAGE_OFFLINE: u64 = 5;
 
 // Shortcut setuping all needed contracts
 //
@@ -52,7 +53,8 @@ fn setup<'app>(
     let native_staking_instantiate = NativeStakingInstantiateMsg {
         denom: OSMO.to_owned(),
         proxy_code_id: native_staking_proxy_code.code_id(),
-        max_slashing: Decimal::percent(LOCAL_SLASHING_PERCENTAGE),
+        slash_ratio_dsign: Decimal::percent(LOCAL_SLASHING_PERCENTAGE_DSIGN),
+        slash_ratio_offline: Decimal::percent(LOCAL_SLASHING_PERCENTAGE_OFFLINE),
     };
 
     let staking_init = StakingInitInfo {
@@ -75,7 +77,10 @@ fn setup<'app>(
             vault.contract_addr.to_string(),
             unbond_period,
             remote_contact,
-            Decimal::percent(SLASHING_PERCENTAGE),
+            SlashRatio {
+                double_sign: Decimal::percent(SLASHING_PERCENTAGE),
+                offline: Decimal::percent(SLASHING_PERCENTAGE),
+            },
         )
         .call(owner)?;
 
@@ -95,7 +100,10 @@ fn instantiate() {
     assert_eq!(stakes.stakes, []);
 
     let max_slash = contract.cross_staking_api_proxy().max_slash().unwrap();
-    assert_eq!(max_slash.max_slash, Decimal::percent(SLASHING_PERCENTAGE));
+    assert_eq!(
+        max_slash.slash_ratio_dsign,
+        Decimal::percent(SLASHING_PERCENTAGE)
+    );
 }
 
 #[test]
