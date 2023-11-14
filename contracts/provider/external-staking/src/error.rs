@@ -24,8 +24,8 @@ pub enum ContractError {
     #[error("Invalid denom, {0} expected")]
     InvalidDenom(String),
 
-    #[error("You cannot use a max slashing rate over 1.0 (100%)")]
-    InvalidMaxSlashing,
+    #[error("You cannot specify a slash ratio over 1.0 (100%)")]
+    InvalidSlashRatio,
 
     #[error("Not enough tokens staked, up to {0} can be unbond")]
     NotEnoughStake(Uint128),

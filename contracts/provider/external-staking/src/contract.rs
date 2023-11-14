@@ -26,7 +26,7 @@ use crate::msg::{
     StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
 };
 use crate::stakes::Stakes;
-use crate::state::{Config, Distribution, MaxSlashing, Stake};
+use crate::state::{Config, Distribution, SlashRatio, Stake};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -100,13 +100,13 @@ impl ExternalStakingContract<'_> {
         vault: String,
         unbonding_period: u64,
         remote_contact: crate::msg::AuthorizedEndpoint,
-        max_slashing: MaxSlashing,
+        slash_ratio: SlashRatio,
     ) -> Result<Response, ContractError> {
         let vault = ctx.deps.api.addr_validate(&vault)?;
         let vault = VaultApiHelper(vault);
 
-        if max_slashing.double_sign > Decimal::one() || max_slashing.offline > Decimal::one() {
-            return Err(ContractError::InvalidMaxSlashing);
+        if slash_ratio.double_sign > Decimal::one() || slash_ratio.offline > Decimal::one() {
+            return Err(ContractError::InvalidSlashRatio);
         }
 
         let config = Config {
@@ -114,7 +114,7 @@ impl ExternalStakingContract<'_> {
             rewards_denom,
             vault,
             unbonding_period,
-            max_slashing,
+            slash_ratio,
         };
 
         self.config.save(ctx.deps.storage, &config)?;
@@ -855,9 +855,9 @@ impl ExternalStakingContract<'_> {
         reason: SlashingReason,
     ) -> Result<Option<WasmMsg>, ContractError> {
         let config = self.config.load(storage)?;
-        let max_slashing = match reason {
-            SlashingReason::Offline => config.max_slashing.offline,
-            SlashingReason::DoubleSign => config.max_slashing.double_sign,
+        let slash_ratio = match reason {
+            SlashingReason::Offline => config.slash_ratio.offline,
+            SlashingReason::DoubleSign => config.slash_ratio.double_sign,
         };
         // Get the list of users staking via this validator
         let users = self
@@ -884,7 +884,7 @@ impl ExternalStakingContract<'_> {
             // Calculating slashing with always the `high` value of the range goes against the user
             // in some scenario (pending stakes while slashing); but the scenario is relatively
             // unlikely.
-            let stake_slash = stake_high * max_slashing;
+            let stake_slash = stake_high * slash_ratio;
             // Requires proper saturating methods in commit/rollback_stake/unstake
             stake.stake = ValueRange::new(
                 stake_low.saturating_sub(stake_slash),
@@ -903,7 +903,7 @@ impl ExternalStakingContract<'_> {
             self.distribution.save(storage, validator, &distribution)?;
 
             // Slash the unbondings
-            let pending_slashed = stake.slash_pending(&env.block, max_slashing);
+            let pending_slashed = stake.slash_pending(&env.block, slash_ratio);
 
             self.stakes.stake.save(storage, (&user, validator), stake)?;
 
@@ -1173,7 +1173,7 @@ pub mod cross_staking {
 
     use super::*;
     use cosmwasm_std::{from_binary, Binary};
-    use mesh_apis::{cross_staking_api::CrossStakingApi, local_staking_api::MaxSlashResponse};
+    use mesh_apis::{cross_staking_api::CrossStakingApi, local_staking_api::SlashRatioResponse};
 
     #[contract(module=crate::contract)]
     #[messages(mesh_apis::cross_staking_api as CrossStakingApi)]
@@ -1399,11 +1399,11 @@ pub mod cross_staking {
         }
 
         #[msg(query)]
-        fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
-            let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
-            Ok(MaxSlashResponse {
-                max_slash_dsign: max_slashing.double_sign,
-                max_slash_offline: max_slashing.offline,
+        fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, ContractError> {
+            let Config { slash_ratio, .. } = self.config.load(ctx.deps.storage)?;
+            Ok(SlashRatioResponse {
+                slash_ratio_dsign: slash_ratio.double_sign,
+                slash_ratio_offline: slash_ratio.offline,
             })
         }
     }
@@ -1443,7 +1443,7 @@ mod tests {
                     connection_id: "connection_id_1".to_string(),
                     port_id: "port_id_1".to_string(),
                 },
-                MaxSlashing {
+                SlashRatio {
                     double_sign: Decimal::percent(10),
                     offline: Decimal::percent(10),
                 },

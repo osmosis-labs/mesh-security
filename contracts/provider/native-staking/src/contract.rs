@@ -47,19 +47,19 @@ impl NativeStakingContract<'_> {
         ctx: InstantiateCtx,
         denom: String,
         proxy_code_id: u64,
-        max_slashing_dsign: Decimal,
-        max_slashing_offline: Decimal,
+        slash_ratio_dsign: Decimal,
+        slash_ratio_offline: Decimal,
     ) -> Result<Response, ContractError> {
-        if max_slashing_dsign > Decimal::one() || max_slashing_offline > Decimal::one() {
-            return Err(ContractError::InvalidMaxSlashing);
+        if slash_ratio_dsign > Decimal::one() || slash_ratio_offline > Decimal::one() {
+            return Err(ContractError::InvalidSlashRatio);
         }
 
         let config = Config {
             denom,
             proxy_code_id,
             vault: ctx.info.sender,
-            max_slashing_dsign,
-            max_slashing_offline,
+            slash_ratio_dsign,
+            slash_ratio_offline,
         };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;

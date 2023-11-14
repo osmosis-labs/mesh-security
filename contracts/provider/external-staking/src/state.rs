@@ -16,12 +16,12 @@ pub struct Config {
     pub vault: VaultApiHelper,
     /// Unbonding period for claims in seconds
     pub unbonding_period: u64,
-    /// Max slash percentage
-    pub max_slashing: MaxSlashing,
+    /// The slash ratio
+    pub slash_ratio: SlashRatio,
 }
 
 #[cw_serde]
-pub struct MaxSlashing {
+pub struct SlashRatio {
     pub double_sign: Decimal,
     pub offline: Decimal,
 }

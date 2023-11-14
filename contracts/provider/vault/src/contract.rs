@@ -9,7 +9,7 @@ use std::cmp::min;
 
 use mesh_apis::cross_staking_api::CrossStakingApiHelper;
 use mesh_apis::local_staking_api::{
-    LocalStakingApiHelper, LocalStakingApiQueryMsg, MaxSlashResponse,
+    LocalStakingApiHelper, LocalStakingApiQueryMsg, SlashRatioResponse,
 };
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
 use mesh_sync::Tx::InFlightStaking;
@@ -193,7 +193,7 @@ impl VaultContract<'_> {
             &mut ctx,
             &config,
             &contract.0,
-            slashable.max_slash_dsign,
+            slashable.slash_ratio_dsign,
             amount.clone(),
             true,
         )?;
@@ -461,13 +461,13 @@ impl VaultContract<'_> {
         // As we control the local staking contract it might be better to just raw-query it
         // on demand instead of duplicating the data.
         let query = LocalStakingApiQueryMsg::MaxSlash {};
-        let MaxSlashResponse {
-            max_slash_dsign, ..
+        let SlashRatioResponse {
+            slash_ratio_dsign, ..
         } = deps.querier.query_wasm_smart(&local_staking, &query)?;
 
         let local_staking = LocalStaking {
             contract: LocalStakingApiHelper(local_staking),
-            max_slash: max_slash_dsign,
+            max_slash: slash_ratio_dsign,
         };
 
         self.local_staking

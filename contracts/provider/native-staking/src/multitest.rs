@@ -124,7 +124,7 @@ fn instantiation() {
     assert_eq!(config.denom, OSMO);
 
     let res = staking.local_staking_api_proxy().max_slash().unwrap();
-    assert_eq!(res.max_slash_dsign, slashing_rate_dsign());
+    assert_eq!(res.slash_ratio_dsign, slashing_rate_dsign());
 }
 
 #[test]
@@ -267,8 +267,8 @@ fn releasing_proxy_stake() {
         msg: to_binary(&crate::contract::InstantiateMsg {
             denom: OSMO.to_owned(),
             proxy_code_id: staking_proxy_code.code_id(),
-            max_slashing_dsign: slashing_rate_dsign(),
-            max_slashing_offline: slashing_rate_offline(),
+            slash_ratio_dsign: slashing_rate_dsign(),
+            slash_ratio_offline: slashing_rate_offline(),
         })
         .unwrap(),
         label: None,

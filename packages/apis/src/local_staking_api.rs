@@ -4,9 +4,9 @@ use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
 #[cw_serde]
-pub struct MaxSlashResponse {
-    pub max_slash_dsign: Decimal,
-    pub max_slash_offline: Decimal,
+pub struct SlashRatioResponse {
+    pub slash_ratio_dsign: Decimal,
+    pub slash_ratio_offline: Decimal,
 }
 
 /// This is the interface to any local staking contract needed by the vault contract.
@@ -46,7 +46,7 @@ pub trait LocalStakingApi {
 
     /// Returns the maximum percentage that can be slashed
     #[msg(query)]
-    fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error>;
+    fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, Self::Error>;
 }
 
 #[cw_serde]
@@ -94,7 +94,7 @@ impl LocalStakingApiHelper {
         Ok(wasm)
     }
 
-    pub fn max_slash(&self, deps: Deps) -> Result<MaxSlashResponse, StdError> {
+    pub fn max_slash(&self, deps: Deps) -> Result<SlashRatioResponse, StdError> {
         let query = LocalStakingApiQueryMsg::MaxSlash {};
         deps.querier.query_wasm_smart(&self.0, &query)
     }

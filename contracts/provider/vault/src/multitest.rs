@@ -3,7 +3,7 @@ use cw_multi_test::{App as MtApp, StakingInfo};
 use mesh_apis::ibc::AddValidator;
 use mesh_external_staking::contract::multitest_utils::ExternalStakingContractProxy;
 use mesh_external_staking::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo};
-use mesh_external_staking::state::MaxSlashing;
+use mesh_external_staking::state::SlashRatio;
 use mesh_external_staking::state::Stake;
 use mesh_external_staking::test_methods_impl::test_utils::TestMethods;
 use mesh_native_staking::contract::multitest_utils::NativeStakingContractProxy;
@@ -124,8 +124,8 @@ fn setup_inner<'app>(
 
         let native_staking_inst_msg = mesh_native_staking::contract::InstantiateMsg {
             denom: OSMO.to_string(),
-            max_slashing_dsign: Decimal::percent(10),
-            max_slashing_offline: Decimal::percent(10),
+            slash_ratio_dsign: Decimal::percent(10),
+            slash_ratio_offline: Decimal::percent(10),
             proxy_code_id: native_staking_proxy_code.code_id(),
         };
 
@@ -172,7 +172,7 @@ fn setup_cross_stake<'app>(
             vault.contract_addr.to_string(),
             unbond_period,
             remote_contact,
-            MaxSlashing {
+            SlashRatio {
                 double_sign: Decimal::percent(slash_percent),
                 offline: Decimal::percent(slash_percent),
             },

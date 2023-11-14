@@ -18,7 +18,7 @@ use crate::contract::cross_staking::test_utils::CrossStakingApi;
 use crate::contract::multitest_utils::{CodeId, ExternalStakingContractProxy};
 use crate::error::ContractError;
 use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo, ValidatorPendingRewards};
-use crate::state::{MaxSlashing, Stake};
+use crate::state::{SlashRatio, Stake};
 use crate::test_methods_impl::test_utils::TestMethods;
 use utils::{
     assert_rewards, get_last_external_staking_pending_tx_id, AppExt as _, ContractExt as _,
@@ -53,8 +53,8 @@ fn setup<'app>(
     let native_staking_instantiate = NativeStakingInstantiateMsg {
         denom: OSMO.to_owned(),
         proxy_code_id: native_staking_proxy_code.code_id(),
-        max_slashing_dsign: Decimal::percent(LOCAL_SLASHING_PERCENTAGE_DSIGN),
-        max_slashing_offline: Decimal::percent(LOCAL_SLASHING_PERCENTAGE_OFFLINE),
+        slash_ratio_dsign: Decimal::percent(LOCAL_SLASHING_PERCENTAGE_DSIGN),
+        slash_ratio_offline: Decimal::percent(LOCAL_SLASHING_PERCENTAGE_OFFLINE),
     };
 
     let staking_init = StakingInitInfo {
@@ -77,7 +77,7 @@ fn setup<'app>(
             vault.contract_addr.to_string(),
             unbond_period,
             remote_contact,
-            MaxSlashing {
+            SlashRatio {
                 double_sign: Decimal::percent(SLASHING_PERCENTAGE),
                 offline: Decimal::percent(SLASHING_PERCENTAGE),
             },
@@ -101,7 +101,7 @@ fn instantiate() {
 
     let max_slash = contract.cross_staking_api_proxy().max_slash().unwrap();
     assert_eq!(
-        max_slash.max_slash_dsign,
+        max_slash.slash_ratio_dsign,
         Decimal::percent(SLASHING_PERCENTAGE)
     );
 }
