@@ -16,8 +16,14 @@ pub struct Config {
     pub vault: VaultApiHelper,
     /// Unbonding period for claims in seconds
     pub unbonding_period: u64,
-    /// Max slash percentage (from InstantiateMsg, maybe later from the chain)
-    pub max_slashing: Decimal,
+    /// The slash ratio
+    pub slash_ratio: SlashRatio,
+}
+
+#[cw_serde]
+pub struct SlashRatio {
+    pub double_sign: Decimal,
+    pub offline: Decimal,
 }
 
 /// All single stake related information - entry per `(user, validator)` pair, including

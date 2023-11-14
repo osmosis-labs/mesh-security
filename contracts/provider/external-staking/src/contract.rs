@@ -26,7 +26,7 @@ use crate::msg::{
     StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
 };
 use crate::stakes::Stakes;
-use crate::state::{Config, Distribution, Stake};
+use crate::state::{Config, Distribution, SlashRatio, Stake};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -58,6 +58,11 @@ impl Default for ExternalStakingContract<'_> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+pub(crate) enum SlashingReason {
+    Offline,
+    DoubleSign,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -95,13 +100,13 @@ impl ExternalStakingContract<'_> {
         vault: String,
         unbonding_period: u64,
         remote_contact: crate::msg::AuthorizedEndpoint,
-        max_slashing: Decimal,
+        slash_ratio: SlashRatio,
     ) -> Result<Response, ContractError> {
         let vault = ctx.deps.api.addr_validate(&vault)?;
         let vault = VaultApiHelper(vault);
 
-        if max_slashing > Decimal::one() {
-            return Err(ContractError::InvalidMaxSlashing);
+        if slash_ratio.double_sign > Decimal::one() || slash_ratio.offline > Decimal::one() {
+            return Err(ContractError::InvalidSlashRatio);
         }
 
         let config = Config {
@@ -109,7 +114,7 @@ impl ExternalStakingContract<'_> {
             rewards_denom,
             vault,
             unbonding_period,
-            max_slashing,
+            slash_ratio,
         };
 
         self.config.save(ctx.deps.storage, &config)?;
@@ -472,7 +477,8 @@ impl ExternalStakingContract<'_> {
                 .tombstone_validator(deps.storage, valoper, height, time)?;
             if active {
                 // Slash the validator (if bonded)
-                let slash_msg = self.handle_slashing(&env, deps.storage, valoper)?;
+                let slash_msg =
+                    self.handle_slashing(&env, deps.storage, valoper, SlashingReason::DoubleSign)?;
                 if let Some(msg) = slash_msg {
                     msgs.push(msg)
                 }
@@ -506,7 +512,8 @@ impl ExternalStakingContract<'_> {
             if active {
                 // Slash the validator, if bonded
                 // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-                let slash_msg = self.handle_slashing(&env, deps.storage, valoper)?;
+                let slash_msg =
+                    self.handle_slashing(&env, deps.storage, valoper, SlashingReason::Offline)?;
                 if let Some(msg) = slash_msg {
                     msgs.push(msg)
                 }
@@ -845,8 +852,13 @@ impl ExternalStakingContract<'_> {
         env: &Env,
         storage: &mut dyn Storage,
         validator: &str,
+        reason: SlashingReason,
     ) -> Result<Option<WasmMsg>, ContractError> {
         let config = self.config.load(storage)?;
+        let slash_ratio = match reason {
+            SlashingReason::Offline => config.slash_ratio.offline,
+            SlashingReason::DoubleSign => config.slash_ratio.double_sign,
+        };
         // Get the list of users staking via this validator
         let users = self
             .stakes
@@ -872,7 +884,7 @@ impl ExternalStakingContract<'_> {
             // Calculating slashing with always the `high` value of the range goes against the user
             // in some scenario (pending stakes while slashing); but the scenario is relatively
             // unlikely.
-            let stake_slash = stake_high * config.max_slashing;
+            let stake_slash = stake_high * slash_ratio;
             // Requires proper saturating methods in commit/rollback_stake/unstake
             stake.stake = ValueRange::new(
                 stake_low.saturating_sub(stake_slash),
@@ -891,7 +903,7 @@ impl ExternalStakingContract<'_> {
             self.distribution.save(storage, validator, &distribution)?;
 
             // Slash the unbondings
-            let pending_slashed = stake.slash_pending(&env.block, config.max_slashing);
+            let pending_slashed = stake.slash_pending(&env.block, slash_ratio);
 
             self.stakes.stake.save(storage, (&user, validator), stake)?;
 
@@ -1161,7 +1173,7 @@ pub mod cross_staking {
 
     use super::*;
     use cosmwasm_std::{from_binary, Binary};
-    use mesh_apis::{cross_staking_api::CrossStakingApi, local_staking_api::MaxSlashResponse};
+    use mesh_apis::{cross_staking_api::CrossStakingApi, local_staking_api::SlashRatioResponse};
 
     #[contract(module=crate::contract)]
     #[messages(mesh_apis::cross_staking_api as CrossStakingApi)]
@@ -1387,10 +1399,11 @@ pub mod cross_staking {
         }
 
         #[msg(query)]
-        fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, ContractError> {
-            let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
-            Ok(MaxSlashResponse {
-                max_slash: max_slashing,
+        fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, ContractError> {
+            let Config { slash_ratio, .. } = self.config.load(ctx.deps.storage)?;
+            Ok(SlashRatioResponse {
+                slash_ratio_dsign: slash_ratio.double_sign,
+                slash_ratio_offline: slash_ratio.offline,
             })
         }
     }
@@ -1430,7 +1443,10 @@ mod tests {
                     connection_id: "connection_id_1".to_string(),
                     port_id: "port_id_1".to_string(),
                 },
-                Decimal::percent(10),
+                SlashRatio {
+                    double_sign: Decimal::percent(10),
+                    offline: Decimal::percent(10),
+                },
             )
             .unwrap();
         let exec_ctx = ExecCtx {

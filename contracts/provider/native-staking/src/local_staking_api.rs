@@ -4,7 +4,7 @@ use sylvia::types::QueryCtx;
 use sylvia::{contract, types::ExecCtx};
 
 #[allow(unused_imports)]
-use mesh_apis::local_staking_api::{self, LocalStakingApi, MaxSlashResponse};
+use mesh_apis::local_staking_api::{self, LocalStakingApi, SlashRatioResponse};
 
 use crate::contract::{NativeStakingContract, REPLY_ID_INSTANTIATE};
 use crate::error::ContractError;
@@ -121,10 +121,15 @@ impl LocalStakingApi for NativeStakingContract<'_> {
 
     /// Returns the maximum percentage that can be slashed
     #[msg(query)]
-    fn max_slash(&self, ctx: QueryCtx) -> Result<MaxSlashResponse, Self::Error> {
-        let Config { max_slashing, .. } = self.config.load(ctx.deps.storage)?;
-        Ok(MaxSlashResponse {
-            max_slash: max_slashing,
+    fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, Self::Error> {
+        let Config {
+            slash_ratio_dsign,
+            slash_ratio_offline,
+            ..
+        } = self.config.load(ctx.deps.storage)?;
+        Ok(SlashRatioResponse {
+            slash_ratio_dsign,
+            slash_ratio_offline,
         })
     }
 }
