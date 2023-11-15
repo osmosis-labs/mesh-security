@@ -83,7 +83,7 @@ mod tests {
 
         #[track_caller]
         fn assert_noop<A: Action>(s: &Scheduler<A>, deps: DepsMut, env: &Env) {
-            assert!(s.trigger(deps, env).unwrap().data.is_none())
+            assert_eq!(s.trigger(deps, env).unwrap(), Response::new())
         }
 
         assert_fired(&scheduler, deps.as_mut(), &env);
