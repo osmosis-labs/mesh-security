@@ -38,6 +38,11 @@ pub struct NativeStakingContract<'a> {
     pub delegators: Map<'a, (&'a str, &'a Addr), bool>,
 }
 
+pub(crate) enum SlashingReason {
+    Offline,
+    DoubleSign,
+}
+
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
@@ -92,7 +97,8 @@ impl NativeStakingContract<'_> {
         let mut msgs = vec![];
         for validator in tombstoned {
             // Slash the validator (if bonded)
-            let slash_msg = self.handle_slashing(&mut deps, &cfg, validator)?;
+            let slash_msg =
+                self.handle_slashing(&mut deps, &cfg, validator, SlashingReason::DoubleSign)?;
             if let Some(msg) = slash_msg {
                 msgs.push(msg)
             }
@@ -100,7 +106,8 @@ impl NativeStakingContract<'_> {
         for validator in jailed {
             // Slash the validator (if bonded)
             // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
-            let slash_msg = self.handle_slashing(&mut deps, &cfg, validator)?;
+            let slash_msg =
+                self.handle_slashing(&mut deps, &cfg, validator, SlashingReason::Offline)?;
             if let Some(msg) = slash_msg {
                 msgs.push(msg)
             }
@@ -120,7 +127,12 @@ impl NativeStakingContract<'_> {
         deps: &mut DepsMut,
         config: &Config,
         validator: &str,
+        reason: SlashingReason,
     ) -> Result<Option<WasmMsg>, ContractError> {
+        let slash_ratio = match reason {
+            SlashingReason::Offline => config.slash_ratio_offline,
+            SlashingReason::DoubleSign => config.slash_ratio_dsign,
+        };
         // Get all mesh delegators to this validator
         let owners = self
             .delegators
@@ -150,7 +162,7 @@ impl NativeStakingContract<'_> {
                 continue;
             }
 
-            let slash_amount = delegation * config.max_slashing;
+            let slash_amount = delegation * slash_ratio;
 
             slash_infos.push(SlashInfo {
                 user: owner.to_string(),
