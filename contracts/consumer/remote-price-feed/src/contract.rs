@@ -25,6 +25,12 @@ pub struct RemotePriceFeedContract {
     pub scheduler: Scheduler<Box<dyn Action>>,
 }
 
+impl Default for RemotePriceFeedContract {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[error(ContractError)]
@@ -37,7 +43,7 @@ impl RemotePriceFeedContract {
             price_info: Item::new("price"),
             price_info_ttl_in_secs: Item::new("price_ttl"),
             // TODO: the indirection can be removed once Sylvia supports
-            // generics
+            // generics. The constructor can then probably be constant
             scheduler: Scheduler::new(Box::new(handle_epoch)),
         }
     }

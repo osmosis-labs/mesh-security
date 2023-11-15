@@ -94,6 +94,7 @@ mod tests {
         assert_fired(&scheduler, deps.as_mut(), &env);
         env.block.time = env.block.time.plus_seconds(5);
         assert_noop(&scheduler, deps.as_mut(), &env);
+        assert_noop(&scheduler, deps.as_mut(), &env);
         env.block.time = env.block.time.plus_seconds(5);
         assert_fired(&scheduler, deps.as_mut(), &env);
     }
