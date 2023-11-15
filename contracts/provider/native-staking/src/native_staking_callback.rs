@@ -3,7 +3,6 @@ use cw_utils::must_pay;
 use sylvia::contract;
 use sylvia::types::ExecCtx;
 
-use mesh_apis::vault_api::VaultApiHelper;
 #[allow(unused_imports)]
 use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCallback};
 
@@ -35,7 +34,8 @@ impl NativeStakingCallback for NativeStakingContract<'_> {
             .load(ctx.deps.storage, &ctx.info.sender)?;
 
         // Send the tokens to the vault contract
-        let msg = VaultApiHelper(cfg.vault)
+        let msg = cfg
+            .vault
             .release_local_stake(owner_addr.to_string(), ctx.info.funds)?;
 
         Ok(Response::new().add_message(msg))

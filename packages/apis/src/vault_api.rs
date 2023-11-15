@@ -40,6 +40,18 @@ pub trait VaultApi {
     #[msg(exec)]
     fn rollback_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
 
+    /// This must be called by the native staking contract to process a slashing event
+    /// because of a misbehaviour on the Provider chain.
+    /// `validator` is the misbehaving validator address. Used during slashing propagation to
+    /// preferentially burn stakes from this validator.
+    #[msg(exec)]
+    fn local_slash(
+        &self,
+        ctx: ExecCtx,
+        slashes: Vec<SlashInfo>,
+        validator: String,
+    ) -> Result<Response, Self::Error>;
+
     /// This must be called by the external staking contract to process a slashing event
     /// because of a misbehaviour on the Consumer chain.
     /// `validator` is the misbehaving validator address. Used during slashing propagation to
@@ -96,6 +108,23 @@ impl VaultApiHelper {
             contract_addr: self.0.to_string(),
             msg: to_binary(&msg)?,
             funds,
+        };
+        Ok(wasm)
+    }
+
+    pub fn process_local_slashing(
+        &self,
+        slashes: Vec<SlashInfo>,
+        slashed_validator: &str,
+    ) -> Result<WasmMsg, StdError> {
+        let msg = VaultApiExecMsg::LocalSlash {
+            slashes,
+            validator: slashed_validator.to_string(),
+        };
+        let wasm = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&msg)?,
+            funds: vec![],
         };
         Ok(wasm)
     }

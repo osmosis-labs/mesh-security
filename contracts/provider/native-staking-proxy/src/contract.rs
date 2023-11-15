@@ -112,7 +112,7 @@ impl NativeStakingProxyContract<'_> {
 
         let delegations = match validator {
             Some(validator) => {
-                let delegation = ctx
+                match ctx
                     .deps
                     .querier
                     .query_delegation(ctx.env.contract.address.clone(), validator)?
@@ -121,25 +121,23 @@ impl NativeStakingProxyContract<'_> {
                             full_delegation.validator,
                             full_delegation.amount.amount.u128(),
                         )
-                    })
-                    .unwrap();
-                vec![delegation]
+                    }) {
+                    Some(delegation) => vec![delegation],
+                    None => vec![],
+                }
             }
-            None => {
-                let delegations = ctx
-                    .deps
-                    .querier
-                    .query_all_delegations(ctx.env.contract.address.clone())?
-                    .iter()
-                    .map(|delegation| {
-                        (
-                            delegation.validator.clone(),
-                            delegation.amount.amount.u128(),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                delegations
-            }
+            None => ctx
+                .deps
+                .querier
+                .query_all_delegations(ctx.env.contract.address.clone())?
+                .iter()
+                .map(|delegation| {
+                    (
+                        delegation.validator.clone(),
+                        delegation.amount.amount.u128(),
+                    )
+                })
+                .collect::<Vec<_>>(),
         };
 
         // Error if no validators

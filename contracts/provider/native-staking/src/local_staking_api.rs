@@ -31,7 +31,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     ) -> Result<Response, Self::Error> {
         // Can only be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
-        ensure_eq!(cfg.vault, ctx.info.sender, ContractError::Unauthorized {});
+        ensure_eq!(cfg.vault.0, ctx.info.sender, ContractError::Unauthorized {});
 
         // Assert funds are passed in
         let _paid = must_pay(&ctx.info, &cfg.denom)?;
@@ -40,6 +40,10 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         let StakeMsg { validator } = from_slice(&msg)?;
 
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
+
+        // Add it to the delegators map
+        self.delegators
+            .save(ctx.deps.storage, (&validator, &owner_addr), &true)?;
 
         // Look up if there is a proxy to match. Instantiate or call stake on existing
         match self
@@ -91,7 +95,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     ) -> Result<Response, Self::Error> {
         // Can only be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
-        ensure_eq!(cfg.vault, ctx.info.sender, ContractError::Unauthorized {});
+        ensure_eq!(cfg.vault.0, ctx.info.sender, ContractError::Unauthorized {});
         // Assert no funds are passed in
         nonpayable(&ctx.info)?;
 

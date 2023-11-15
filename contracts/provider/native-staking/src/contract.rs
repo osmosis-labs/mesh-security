@@ -1,11 +1,20 @@
-use cosmwasm_std::{from_slice, Addr, Decimal, DepsMut, Reply, Response, SubMsgResponse};
+#[cfg(not(feature = "library"))]
+use cosmwasm_std::entry_point;
+
+use cosmwasm_std::Order::Ascending;
+use cosmwasm_std::{
+    from_slice, Addr, Decimal, DepsMut, Env, Event, Reply, Response, StdResult, SubMsgResponse,
+    WasmMsg,
+};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
-use sylvia::types::{InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
+use mesh_apis::local_staking_api::SudoMsg;
+use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
 use mesh_native_staking_proxy::msg::OwnerMsg;
 use mesh_native_staking_proxy::native_staking_callback;
 
@@ -24,6 +33,14 @@ pub struct NativeStakingContract<'a> {
     pub proxy_by_owner: Map<'a, &'a Addr, Addr>,
     /// Reverse map of owner address by proxy contract address
     pub owner_by_proxy: Map<'a, &'a Addr, Addr>,
+    /// Map of delegators per validator
+    // This is used for prefixing and ranging during slashing
+    pub delegators: Map<'a, (&'a str, &'a Addr), bool>,
+}
+
+pub(crate) enum SlashingReason {
+    Offline,
+    DoubleSign,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -37,6 +54,7 @@ impl NativeStakingContract<'_> {
             config: Item::new("config"),
             proxy_by_owner: Map::new("proxies"),
             owner_by_proxy: Map::new("owners"),
+            delegators: Map::new("delegators"),
         }
     }
 
@@ -57,13 +75,108 @@ impl NativeStakingContract<'_> {
         let config = Config {
             denom,
             proxy_code_id,
-            vault: ctx.info.sender,
+            vault: VaultApiHelper(ctx.info.sender),
             slash_ratio_dsign,
             slash_ratio_offline,
         };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         Ok(Response::new())
+    }
+
+    /// This is called every time there's a change of the active validator set that implies slashing.
+    /// In test code, this is called from `test_handle_jailing`.
+    /// In non-test code, this is called from `sudo`.
+    fn handle_jailing(
+        &self,
+        mut deps: DepsMut,
+        jailed: &[String],
+        tombstoned: &[String],
+    ) -> Result<Response, ContractError> {
+        let cfg = self.config.load(deps.storage)?;
+        let mut msgs = vec![];
+        for validator in tombstoned {
+            // Slash the validator (if bonded)
+            let slash_msg =
+                self.handle_slashing(&mut deps, &cfg, validator, SlashingReason::DoubleSign)?;
+            if let Some(msg) = slash_msg {
+                msgs.push(msg)
+            }
+        }
+        for validator in jailed {
+            // Slash the validator (if bonded)
+            // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
+            let slash_msg =
+                self.handle_slashing(&mut deps, &cfg, validator, SlashingReason::Offline)?;
+            if let Some(msg) = slash_msg {
+                msgs.push(msg)
+            }
+        }
+        let mut evt = Event::new("jailing");
+        if !jailed.is_empty() {
+            evt = evt.add_attribute("jailed", jailed.join(","));
+        }
+        if !tombstoned.is_empty() {
+            evt = evt.add_attribute("tombstoned", tombstoned.join(","));
+        }
+        Ok(Response::new().add_event(evt).add_messages(msgs))
+    }
+
+    fn handle_slashing(
+        &self,
+        deps: &mut DepsMut,
+        config: &Config,
+        validator: &str,
+        reason: SlashingReason,
+    ) -> Result<Option<WasmMsg>, ContractError> {
+        let slash_ratio = match reason {
+            SlashingReason::Offline => config.slash_ratio_offline,
+            SlashingReason::DoubleSign => config.slash_ratio_dsign,
+        };
+        // Get all mesh delegators to this validator
+        let owners = self
+            .delegators
+            .prefix(validator)
+            .range(deps.storage, None, None, Ascending)
+            .collect::<StdResult<Vec<_>>>()?;
+        if owners.is_empty() {
+            return Ok(None);
+        }
+
+        let mut slash_infos = vec![];
+        for (owner, _) in &owners {
+            // Get owner proxy address
+            let proxy = self.proxy_by_owner.load(deps.storage, owner)?;
+            // Get proxy's delegation (pre-slashing?) amount over validator
+            // TODO: Confirm queried delegation amounts are pre- or post-slashing
+            let delegation = deps
+                .querier
+                .query_delegation(proxy, validator)?
+                .map(|full_delegation| full_delegation.amount.amount)
+                .unwrap_or_default();
+
+            if delegation.is_zero() {
+                // Maintenance: Remove delegator from map in passing
+                // TODO: Remove zero amount delegations from delegators map periodically
+                self.delegators.remove(deps.storage, (validator, owner));
+                continue;
+            }
+
+            let slash_amount = delegation * slash_ratio;
+
+            slash_infos.push(SlashInfo {
+                user: owner.to_string(),
+                slash: slash_amount,
+            });
+        }
+        if slash_infos.is_empty() {
+            return Ok(None);
+        }
+        // Route associated users to vault for slashing of their collateral
+        let msg = config
+            .vault
+            .process_local_slashing(slash_infos, validator)?;
+        Ok(Some(msg))
     }
 
     #[msg(query)]
@@ -123,5 +236,36 @@ impl NativeStakingContract<'_> {
         Ok(OwnerByProxyResponse {
             owner: owner_addr.to_string(),
         })
+    }
+
+    /// Jails validators temporarily or permanently.
+    /// Method used for test only.
+    #[msg(exec)]
+    fn test_handle_jailing(
+        &self,
+        ctx: ExecCtx,
+        jailed: Vec<String>,
+        tombstoned: Vec<String>,
+    ) -> Result<Response, ContractError> {
+        #[cfg(any(feature = "mt", test))]
+        {
+            NativeStakingContract::new().handle_jailing(ctx.deps, &jailed, &tombstoned)
+        }
+        #[cfg(not(any(feature = "mt", test)))]
+        {
+            let _ = (ctx, jailed, tombstoned);
+            Err(ContractError::Unauthorized {})
+        }
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+    match msg {
+        SudoMsg::Jailing { jailed, tombstoned } => NativeStakingContract::new().handle_jailing(
+            deps,
+            &jailed.unwrap_or_default(),
+            &tombstoned.unwrap_or_default(),
+        ),
     }
 }
