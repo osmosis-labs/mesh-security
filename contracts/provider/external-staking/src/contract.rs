@@ -488,13 +488,6 @@ impl ExternalStakingContract<'_> {
             // Maintenance
             valopers.insert(valoper.clone());
         }
-        // Process removals. Non-existent validators will be ignored.
-        for valoper in removals {
-            self.val_set
-                .remove_validator(deps.storage, valoper, height, time)?;
-            // Maintenance
-            valopers.insert(valoper.clone());
-        }
         // Process jailings. Non-existent validators will be ignored.
         for valoper in jailed {
             // Check that the validator is active at height and slash it if that is the case
@@ -513,6 +506,17 @@ impl ExternalStakingContract<'_> {
             }
             // Maintenance
             valopers.insert(valoper.clone());
+        }
+        // Process removals. Non-existent validators will be ignored.
+        // Filter out jailed validators, as they are already removed from the active validator set
+        let rms: HashSet<_> = removals.iter().collect();
+        let j: HashSet<_> = jailed.iter().collect();
+        let rms: Vec<_> = rms.difference(&j).collect();
+        for valoper in rms {
+            self.val_set
+                .remove_validator(deps.storage, valoper, height, time)?;
+            // Maintenance
+            valopers.insert((*valoper).clone());
         }
         // Process unjailings. Does nothing at the moment, as we don't have a way to know if we the
         // validator must go to the active or the unbonded state.
