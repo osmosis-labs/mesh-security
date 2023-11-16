@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_binary, Binary, Coin, StdResult};
+use cosmwasm_std::{to_binary, Binary, Coin, Decimal, StdResult, Timestamp};
 
 use crate::converter_api::RewardInfo;
 
@@ -169,4 +169,18 @@ pub fn ack_success<T: serde::Serialize>(data: &T) -> StdResult<Binary> {
 pub fn ack_fail<E: Error>(err: E) -> StdResult<Binary> {
     let res = AckWrapper::Error(err.to_string());
     to_binary(&res)
+}
+
+#[cw_serde]
+pub enum PriceFeedProviderAck {
+    Update { time: Timestamp, twap: Decimal },
+}
+
+#[cw_serde]
+pub enum RemotePriceFeedPacket {
+    QueryTwap {
+        pool_id: u64,
+        base_asset: String,
+        quote_asset: String,
+    },
 }
