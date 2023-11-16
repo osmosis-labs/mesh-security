@@ -129,4 +129,26 @@ mod tests {
         let err = keeper.price(deps.as_ref(), &env).unwrap_err();
         assert_eq!(err, PriceKeeperError::OutdatedPriceData);
     }
+
+    #[test]
+    fn update_with_older_price_info_is_ignored() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let keeper = PriceKeeper::new();
+
+        keeper.init(&mut deps.as_mut(), 600).unwrap();
+        keeper
+            .update(deps.as_mut(), env.block.time, Decimal::one())
+            .unwrap();
+        keeper
+            .update(
+                deps.as_mut(),
+                env.block.time.minus_seconds(1),
+                Decimal::percent(50),
+            )
+            .unwrap();
+
+        let price = keeper.price(deps.as_ref(), &env).unwrap();
+        assert_eq!(price, Decimal::one());
+    }
 }
