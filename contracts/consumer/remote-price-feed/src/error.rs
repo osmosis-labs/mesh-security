@@ -3,6 +3,8 @@ use cw_utils::PaymentError;
 use mesh_apis::ibc::VersionError;
 use thiserror::Error;
 
+use crate::price_keeper::PriceKeeperError;
+
 #[derive(Error, Debug)]
 pub enum ContractError {
     #[error("{0}")]
@@ -13,6 +15,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     IbcVersion(#[from] VersionError),
+
+    #[error("{0}")]
+    PriceKeeper(#[from] PriceKeeperError),
 
     #[error("Unauthorized")]
     Unauthorized,

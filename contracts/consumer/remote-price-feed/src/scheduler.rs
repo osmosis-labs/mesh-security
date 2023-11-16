@@ -6,7 +6,7 @@ use crate::error::ContractError;
 pub trait Action: Fn(DepsMut, &Env) -> Result<Response, ContractError> {}
 impl<F> Action for F where F: Fn(DepsMut, &Env) -> Result<Response, ContractError> {}
 
-/// A helper to schedule a single action to be executed regularly,
+/// A component that schedules a single action to be executed regularly,
 /// as in "every epoch". It relies on a trigger being called rather rapidly (every block?).
 pub struct Scheduler<A> {
     last_epoch: Item<'static, Timestamp>,

@@ -15,7 +15,6 @@ use mesh_apis::ibc::{
 use crate::contract::RemotePriceFeedContract;
 use crate::error::ContractError;
 use crate::msg::AuthorizedEndpoint;
-use crate::state::PriceInfo;
 
 /// This is the maximum version of the Mesh Security protocol that we support
 const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.1.0";
@@ -129,20 +128,7 @@ pub fn ibc_packet_ack(
     let ack: PriceFeedProviderAck = from_slice(&msg.acknowledgement.data)?;
     let PriceFeedProviderAck::Update { time, twap } = ack;
     let contract = RemotePriceFeedContract::new();
-
-    let old = contract.price_info.may_load(deps.storage)?;
-    match old {
-        Some(old) if old.time > time => {
-            // don't update if we have newer price info stored
-        }
-        _ => contract.price_info.save(
-            deps.storage,
-            &PriceInfo {
-                time,
-                native_per_foreign: twap,
-            },
-        )?,
-    }
+    contract.update_twap(deps, time, twap)?;
 
     Ok(IbcBasicResponse::new())
 }
