@@ -648,9 +648,15 @@ impl VaultContract<'_> {
             .load(ctx.deps.storage, (&tx_user, &tx_lienholder))?;
         // Rollback amount
         lien.amount.rollback_add(tx_amount);
-        // Save it
-        self.liens
-            .save(ctx.deps.storage, (&tx_user, &tx_lienholder), &lien)?;
+        if lien.amount.high().u128() == 0 {
+            // Remove lien if it's empty
+            self.liens
+                .remove(ctx.deps.storage, (&tx_user, &tx_lienholder));
+        } else {
+            // Save lien
+            self.liens
+                .save(ctx.deps.storage, (&tx_user, &tx_lienholder), &lien)?;
+        }
 
         // Load user
         let mut user = self.users.load(ctx.deps.storage, &tx_user)?;
@@ -706,8 +712,15 @@ impl VaultContract<'_> {
             .sub(amount, Uint128::zero())
             .map_err(|_| ContractError::InsufficientLien)?;
 
-        self.liens
-            .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien)?;
+        if lien.amount.high().u128() == 0 {
+            // Remove lien if it's empty
+            self.liens
+                .remove(ctx.deps.storage, (&owner, &ctx.info.sender));
+        } else {
+            // Save lien
+            self.liens
+                .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien)?;
+        }
 
         let mut user = self.users.load(ctx.deps.storage, &owner)?;
 
