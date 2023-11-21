@@ -319,7 +319,9 @@ impl VaultContract<'_> {
         let account = ctx.deps.api.addr_validate(&account)?;
         let lienholder = ctx.deps.api.addr_validate(&lienholder)?;
 
-        Ok(self.liens.load(ctx.deps.storage, (&account, &lienholder))?)
+        self.liens
+            .may_load(ctx.deps.storage, (&account, &lienholder))?
+            .ok_or(ContractError::NoClaim)
     }
 
     /// Returns paginated claims list for an user

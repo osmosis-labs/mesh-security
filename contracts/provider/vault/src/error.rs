@@ -46,4 +46,7 @@ pub enum ContractError {
 
     #[error("No local staking configured")]
     NoLocalStaking,
+
+    #[error("No claim found")]
+    NoClaim,
 }
