@@ -1351,13 +1351,7 @@ fn stake_cross_rollback_tx() {
     );
     // No non-empty claims
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
-    assert_eq!(
-        claims.claims,
-        [LienResponse {
-            lienholder: cross_staking.contract_addr.to_string(),
-            amount: ValueRange::new_val(Uint128::zero())
-        }]
-    );
+    assert_eq!(claims.claims, []);
     // Vault has the funds
     assert_eq!(
         app.app()

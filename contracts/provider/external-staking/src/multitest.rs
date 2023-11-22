@@ -493,10 +493,12 @@ fn immediate_unstake_if_unbonded_validator() {
         .unwrap();
     contract.withdraw_unbonded().call(user).unwrap();
 
-    let claim = vault
+    let err = vault
         .claim(user.to_string(), contract.contract_addr.to_string())
-        .unwrap();
-    assert_eq!(claim.amount.val().unwrap().u128(), 0);
+        .unwrap_err();
+    assert!(err
+        .to_string()
+        .contains(&mesh_vault::error::ContractError::NoClaim.to_string()));
 }
 
 #[test]
@@ -531,10 +533,12 @@ fn immediate_unstake_if_tombstoned_validator() {
         .unwrap();
     contract.withdraw_unbonded().call(user).unwrap();
 
-    let claim = vault
+    let err = vault
         .claim(user.to_string(), contract.contract_addr.to_string())
-        .unwrap();
-    assert_eq!(claim.amount.val().unwrap().u128(), 0);
+        .unwrap_err();
+    assert!(err
+        .to_string()
+        .contains(&mesh_vault::error::ContractError::NoClaim.to_string()));
 }
 
 #[test]
@@ -1562,10 +1566,12 @@ fn slashing_pending_tx_full_unbond() {
     contract.withdraw_unbonded().call(user).unwrap();
 
     // Now claims on vault got reduced by the (full) unbonded amount
-    let claim = vault
+    let err = vault
         .claim(user.to_owned(), contract.contract_addr.to_string())
-        .unwrap();
-    assert_eq!(claim.amount.val().unwrap().u128(), 0);
+        .unwrap_err();
+    assert!(err
+        .to_string()
+        .contains(&mesh_vault::error::ContractError::NoClaim.to_string()));
 }
 
 #[test]

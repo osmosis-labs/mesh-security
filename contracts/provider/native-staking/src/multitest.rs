@@ -354,11 +354,5 @@ fn releasing_proxy_stake() {
     );
     // And there are no more liens
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
-    assert_eq!(
-        claims.claims,
-        [mesh_vault::msg::LienResponse {
-            lienholder: staking_addr.to_owned(),
-            amount: ValueRange::new_val(Uint128::zero()) // TODO? Clean-up empty liens
-        }]
-    );
+    assert_eq!(claims.claims, []);
 }
