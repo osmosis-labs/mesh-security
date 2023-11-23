@@ -2,7 +2,26 @@
 
 ## [Unreleased](https://github.com/osmosis-labs/mesh-security/tree/HEAD)
 
-[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.8.1...HEAD)
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.9.0...HEAD)
+
+## [v0.9.0](https://github.com/osmosis-labs/mesh-security/tree/v0.9.0) (2023-11-23)
+
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.8.1...v0.9.0)
+
+**Closed issues:**
+
+- osmosis-price-oracle: Add discount factor [\#168](https://github.com/osmosis-labs/mesh-security/issues/168)
+- Native-staking empty liens cleanup [\#101](https://github.com/osmosis-labs/mesh-security/issues/101)
+
+**Merged pull requests:**
+
+- Clean up empty liens in `vault` [\#167](https://github.com/osmosis-labs/mesh-security/pull/167) ([uint](https://github.com/uint))
+- Osmosis price oracle - just one more test :\) [\#165](https://github.com/osmosis-labs/mesh-security/pull/165) ([uint](https://github.com/uint))
+- support multiple slash ratios [\#164](https://github.com/osmosis-labs/mesh-security/pull/164) ([uint](https://github.com/uint))
+- Native slashing acct [\#162](https://github.com/osmosis-labs/mesh-security/pull/162) ([maurolacy](https://github.com/maurolacy))
+- Sudo refactoring [\#161](https://github.com/osmosis-labs/mesh-security/pull/161) ([maurolacy](https://github.com/maurolacy))
+- Specify precise deps / set minimum cw version [\#160](https://github.com/osmosis-labs/mesh-security/pull/160) ([maurolacy](https://github.com/maurolacy))
+- Osmosis price oracle [\#155](https://github.com/osmosis-labs/mesh-security/pull/155) ([uint](https://github.com/uint))
 
 ## [v0.8.1](https://github.com/osmosis-labs/mesh-security/tree/v0.8.1-alpha.1) (2023-11-17)
 

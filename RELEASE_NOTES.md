@@ -1,3 +1,11 @@
+# 0.9.0
+
+- Osmosis price oracle.
+- Native slashing.
+- Multiple slash ratios.
+- Clean up empty liens in vault.
+- Specify precise deps / set minimum cw version.
+
 # 0.8.1
 
 - Modify jailing test helper to better reflect blockchain's behaviour.
