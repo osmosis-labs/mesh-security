@@ -26,7 +26,6 @@ mesh-native-staking-proxy        = { workspace = true, features = ["library"] }
 sylvia = { workspace = true }
 cosmwasm-schema  = { workspace = true }
 cosmwasm-std     = { workspace = true }
-cosmwasm-storage = { workspace = true }
 cw-storage-plus  = { workspace = true }
 cw2              = { workspace = true }
 cw-utils         = { workspace = true }

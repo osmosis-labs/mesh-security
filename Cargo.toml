@@ -27,7 +27,6 @@ mesh-virtual-staking    = { path = "./contracts/consumer/virtual-staking" }
 sylvia           = "0.8.1"
 cosmwasm-schema  = "1.3.3"
 cosmwasm-std     = { version = "1.3.3", features = ["ibc3", "cosmwasm_1_3"] }
-cosmwasm-storage = "1.3.3"
 cw-storage-plus  = "1.1.0"
 cw-utils         = "1.0.1"
 cw2              = "1.0.1"
