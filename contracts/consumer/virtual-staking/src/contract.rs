@@ -880,7 +880,7 @@ mod tests {
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after jailing
             .assert_unbond(&[]) // No unbond msgs after jailing
-            .assert_rewards(&["val1", "val2"]); // But rewards are still being gathered
+            .assert_rewards(&["val2"]); // Rewards are not gathered anymore because of the removal
 
         // Check that the bonded amounts of val1 have been slashed for being offline (10%)
         // Val2 is unaffected.
@@ -946,7 +946,7 @@ mod tests {
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (20u128, &denom))]) // Tombstoned validators can still bond
             .assert_unbond(&[]) // No unbond msgs after jailing
-            .assert_rewards(&["val1"]); // Rewards are still being gathered
+            .assert_rewards(&[]); // Rewards are not gathered anymore because of jailing implying removal
 
         // Check that the non-slashed amounts of val1 have been bonded
         let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
@@ -978,7 +978,7 @@ mod tests {
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after jailing
             .assert_unbond(&[("val1", (9u128, &denom))]) // Only unbond non-slashed amount
-            .assert_rewards(&["val1"]); // Rewards are still being gathered
+            .assert_rewards(&[]); // Rewards are not gathered anymore because of the removal
 
         // Check that the non-slashed amounts of val1 have been unbonded
         // FIXME: Remove / filter zero amounts
@@ -1424,8 +1424,17 @@ mod tests {
         }
 
         fn jail(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[], &[], &[val.to_string()], &[], &[])
-                .unwrap();
+            // We sent a removal along with the jail, as this is what the blockchain does
+            self.handle_valset_update(
+                deps,
+                &[],
+                &[val.to_string()],
+                &[],
+                &[val.to_string()],
+                &[],
+                &[],
+            )
+            .unwrap();
         }
 
         fn unjail(&self, deps: DepsMut, val: &str) {

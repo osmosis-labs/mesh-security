@@ -1,3 +1,8 @@
+# 0.8.1
+
+- Modify jailing test helper to better reflect blockchain's behaviour.
+- Fix: Filter out jailed validators from removed set.
+
 # 0.8.1-alpha.1
 
 - Slashing propagation accounting.
