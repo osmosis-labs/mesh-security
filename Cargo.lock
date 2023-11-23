@@ -663,7 +663,7 @@ checksum = "76fc44e2588d5b436dbc3c6cf62aef290f90dab6235744a93dfe1cc18f451e2c"
 
 [[package]]
 name = "mesh-apis"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -676,7 +676,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-bindings"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -684,11 +684,11 @@ dependencies = [
 
 [[package]]
 name = "mesh-burn"
-version = "0.8.1"
+version = "0.9.0"
 
 [[package]]
 name = "mesh-converter"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -711,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-external-staking"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-native-staking"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -759,7 +759,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-native-staking-proxy"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -783,7 +783,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-osmosis-price-provider"
-version = "0.8.1-alpha.1"
+version = "0.9.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-remote-price-feed"
-version = "0.8.1-alpha.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -822,7 +822,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-simple-price-feed"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -843,7 +843,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-sync"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-vault"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -881,7 +881,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-virtual-staking"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -907,7 +907,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-virtual-staking-mock"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "cosmwasm-std",
