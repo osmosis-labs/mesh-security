@@ -2,7 +2,20 @@
 
 ## [Unreleased](https://github.com/osmosis-labs/mesh-security/tree/HEAD)
 
-[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.8.1-alpha.1...HEAD)
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.8.1...HEAD)
+
+## [v0.8.1](https://github.com/osmosis-labs/mesh-security/tree/v0.8.1-alpha.1) (2023-11-17)
+
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.8.1-alpha.1...v0.8.1)
+
+**Closed issues:**
+
+- Modify jailing test helper to better reflect blockchain's behaviour
+- Fix: Filter out jailed validators from removed set
+
+**Merged pull requests:**
+
+- Merge pull request #166 from osmosis-labs/fix/slashing-sequence
 
 ## [v0.8.1-alpha.1](https://github.com/osmosis-labs/mesh-security/tree/v0.8.1-alpha.1) (2023-11-06)
 
