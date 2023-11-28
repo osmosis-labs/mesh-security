@@ -22,8 +22,8 @@ As of V2, the external staker (on the Provider side) must have a method to allow
 double-signing which can be verified and immediately slash all delegators of that
 validator.
 
-This can be done by following the approach and implementation of Inter Chain Security (ICS) for
-[slashing](https://github.com/cosmos/interchain-security/issues/1222). At the time of writing,
+This can be done by following the approach and implementation of InterChain Security (ICS) for
+[slashing](https://cosmos.github.io/interchain-security/adrs/adr-013-equivocation-slashing). At the time of writing,
 there's already an implementation of ICS misbehaviour handling on the [Hermes relayer](https://github.com/informalsystems/hermes).
 We can therefore use that as a reference.
 
@@ -87,6 +87,9 @@ evidence. Or we just accept any age and just use the age of the evidence to deci
 (based on the unbonding period). Or just slash everyone bonded or unbonding, as the timestamps
 of the two votes may be wildly different, and they really shouldn't have trusted this
 cheating validator in the first place.
+
+**Note**: Here we can again refer to the ICS specs / impl for reference:
+https://cosmos.github.io/interchain-security/adrs/adr-005-cryptographic-equivocation-verification
 
 ## Trust Assumptions
 
