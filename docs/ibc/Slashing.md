@@ -137,7 +137,7 @@ and misbehaviour evidence handling and submission.
 **Note 2**: Another possibility in this scenario is a malicious validator on the Consumer relaying and submitting false / forged misbehaviour evidence to the Provider,
 through the Relayer. That is, tricking the Relayer into submitting false slashing evidence to the Provider, in order to slash associated Provider's delegators.
 This is in principle possible, and called a "Nothing at Stake" attack (since the validator has in principle nothing to lose on the Consumer chain when doing this).
-To prevent against this, the Relayer must broadcast / replay the slashing evidence it gets on the Cosumer chain. This way, if a validator forged
+To prevent against this, the Relayer must broadcast / replay the slashing evidence it gets on the Consumer chain. This way, if a validator forged
 the evidenced, it will be slashed on the Consumer side anyway; so that it's no longer a "nothing at stake" scenario.
 
 ## Slashing Handling
@@ -423,7 +423,7 @@ and therefore cannot do immediate unbonding. This will be implemented as part of
 ### Effects of Validator Tombstoning During Slashing
 
 Validator tombstoning, when or as a consequence of double signing, permanently removes the validator from the validator set.
-Validator jailing, when or as a consequence of offline detection, also temporarily removes thw validator from the active validator set.
+Validator jailing, when or as a consequence of offline detection, also temporarily removes the validator from the active validator set.
 
 Both events also lead to slashing, with different slash ratios for each misbehaviour. Only active validators
 can be slashed, and this is a check that is currently done as part of the slashing process.
