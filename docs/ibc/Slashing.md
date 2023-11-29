@@ -417,7 +417,7 @@ the resulting sum of slashable amounts is below the collateral.
 ### Native vs. Cross Slashing
 
 Native vs. Cross Slashing processing and effects are similar, and are being implemented in the same way.
-The main difference is that as of V1, we currently lack a native staking module on the Provider side blockchain,
+The main difference is that as of V1, we currently lack a **native** `x/meshsecurity` module (that is, for the Provider blockchain),
 and therefore cannot do immediate unbonding. This will be implemented as part of V2.
 
 ### Effects of Validator Tombstoning During Slashing
