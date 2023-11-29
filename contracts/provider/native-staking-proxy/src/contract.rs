@@ -159,6 +159,7 @@ impl NativeStakingProxyContract<'_> {
         }
 
         // Build undelegate messages
+        // FIXME: Use an "immediate unbonding" message for undelegation
         let mut undelegate_msgs = vec![];
         for (validator, burn_amount) in burns {
             let undelegate_msg = StakingMsg::Undelegate {
