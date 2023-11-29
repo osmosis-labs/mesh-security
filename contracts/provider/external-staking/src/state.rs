@@ -94,6 +94,8 @@ impl Stake {
 
     /// Slashes all the entries in `pending_unbonds`, returning total slashed amount.
     pub fn slash_pending(&mut self, info: &BlockInfo, slash_ratio: Decimal) -> Uint128 {
+        // TODO: Only slash undelegations that started after the misbehaviour's time. This is not
+        //       possible right now, because we don't have access to the misbehaviour's time. (#177)
         self.pending_unbonds
             .iter_mut()
             .filter(|pending| pending.release_at > info.time)
