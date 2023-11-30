@@ -33,9 +33,9 @@ jobs:
       - name: Build Wasm images
         uses: addnab/docker-run-action@v3
         with:
-          image: cosmwasm/workspace-optimizer:0.12.13
+          image: cosmwasm/optimizer:0.15.0
           options: -v ${{ github.workspace }}:/code 
-          run: optimize_workspace.sh
+          run: optimize.sh
 
       - name: Create release
         uses: softprops/action-gh-release@v1
