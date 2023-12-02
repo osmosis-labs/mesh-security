@@ -17,7 +17,7 @@ use mesh_bindings::{
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
-use mesh_apis::virtual_staking_api::{self, SudoMsg, VirtualStakingApi};
+use mesh_apis::virtual_staking_api::{self, SudoMsg, ValidatorSlash, VirtualStakingApi};
 
 use crate::error::ContractError;
 use crate::msg::ConfigResponse;
@@ -240,7 +240,10 @@ impl VirtualStakingContract<'_> {
         jailed: &[String],
         unjailed: &[String],
         tombstoned: &[String],
+        slashed: &[ValidatorSlash],
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
+        // TODO: Process slashed
+        let _ = slashed;
         // Account for tombstoned validators. Will be processed in handle_epoch
         if !tombstoned.is_empty() {
             self.tombstone_requests.update(deps.storage, |mut old| {
@@ -640,6 +643,7 @@ pub fn sudo(
             jailed,
             unjailed,
             tombstoned,
+            slashed,
         } => VirtualStakingContract::new().handle_valset_update(
             deps,
             &additions.unwrap_or_default(),
@@ -648,6 +652,7 @@ pub fn sudo(
             &jailed.unwrap_or_default(),
             &unjailed.unwrap_or_default(),
             &tombstoned.unwrap_or_default(),
+            &slashed.unwrap_or_default(),
         ),
     }
 }
@@ -1433,17 +1438,18 @@ mod tests {
                 &[val.to_string()],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
         }
 
         fn unjail(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[], &[], &[], &[val.to_string()], &[])
+            self.handle_valset_update(deps, &[], &[], &[], &[], &[val.to_string()], &[], &[])
                 .unwrap();
         }
 
         fn tombstone(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[], &[], &[], &[], &[val.to_string()])
+            self.handle_valset_update(deps, &[], &[], &[], &[], &[], &[val.to_string()], &[])
                 .unwrap();
         }
 
@@ -1454,12 +1460,12 @@ mod tests {
                 max_commission: Default::default(),
                 max_change_rate: Default::default(),
             };
-            self.handle_valset_update(deps, &[val], &[], &[], &[], &[], &[])
+            self.handle_valset_update(deps, &[val], &[], &[], &[], &[], &[], &[])
                 .unwrap();
         }
 
         fn remove_val(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[val.to_string()], &[], &[], &[], &[])
+            self.handle_valset_update(deps, &[], &[val.to_string()], &[], &[], &[], &[], &[])
                 .unwrap();
         }
     }

@@ -155,6 +155,7 @@ fn valset_update_sudo() {
         jailed: None,
         unjailed: None,
         tombstoned: Some(tombs),
+        slashed: None,
     };
 
     let res = app
