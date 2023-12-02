@@ -61,5 +61,25 @@ pub enum SudoMsg {
         jailed: Option<Vec<String>>,
         unjailed: Option<Vec<String>>,
         tombstoned: Option<Vec<String>>,
+        slashed: Option<Vec<ValidatorSlash>>,
     },
+}
+
+#[cw_serde]
+pub struct ValidatorSlash {
+    /// The operator address of the validator (e.g. cosmosvaloper1...).
+    pub address: String,
+    /// The height at which the slash is being processed.
+    pub height: u64,
+    /// The time at which the slash is being processed, in seconds.
+    pub time: u64,
+    /// The height at which the misbehaviour occurred.
+    pub infraction_height: u64,
+    /// The time at which the misbehaviour occurred.
+    pub infraction_time: u64,
+    /// The validator power when the misbehaviour occurred.
+    pub power: u64,
+    /// The (nominal) slash ratio for the validator.
+    /// Useful in case we don't know if it's a double sign or downtime slash.
+    pub slash_ratio: String,
 }
