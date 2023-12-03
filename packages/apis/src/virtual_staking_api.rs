@@ -67,7 +67,7 @@ pub enum SudoMsg {
 
 #[cw_serde]
 pub struct ValidatorSlash {
-    /// The operator address of the validator (e.g. cosmosvaloper1...).
+    /// The address of the validator.
     pub address: String,
     /// The height at which the slash is being processed.
     pub height: u64,
@@ -75,7 +75,7 @@ pub struct ValidatorSlash {
     pub time: u64,
     /// The height at which the misbehaviour occurred.
     pub infraction_height: u64,
-    /// The time at which the misbehaviour occurred.
+    /// The time at which the misbehaviour occurred, in seconds.
     pub infraction_time: u64,
     /// The validator power when the misbehaviour occurred.
     pub power: u64,

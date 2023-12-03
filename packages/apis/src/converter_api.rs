@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Response, StdError, Uint128, Validator};
+use cosmwasm_std::{Coin, Response, StdError, Uint128, Validator};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -41,6 +41,7 @@ pub trait ConverterApi {
         jailed: Vec<String>,
         unjailed: Vec<String>,
         tombstoned: Vec<String>,
+        slashed: Vec<ValidatorSlashInfo>,
     ) -> Result<Response, Self::Error>;
 }
 
@@ -49,4 +50,21 @@ pub trait ConverterApi {
 pub struct RewardInfo {
     pub validator: String,
     pub reward: Uint128,
+}
+
+#[cw_serde]
+pub struct ValidatorSlashInfo {
+    /// The address of the validator.
+    pub address: String,
+    /// The height at which the misbehaviour occurred.
+    pub infraction_height: u64,
+    /// The time at which the misbehaviour occurred, in seconds.
+    pub infraction_time: u64,
+    /// The validator power when the misbehaviour occurred.
+    pub power: u64,
+    /// The (nominal) slash ratio for the validator.
+    /// Useful in case we don't know if it's a double sign or downtime slash.
+    pub slash_ratio: String,
+    /// The slash amount for the validator.
+    pub slash_amount: Coin,
 }
