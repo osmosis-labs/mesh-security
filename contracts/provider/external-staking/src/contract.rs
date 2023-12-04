@@ -8,7 +8,7 @@ use cw_utils::{nonpayable, PaymentError};
 use std::cmp::min;
 use std::collections::HashSet;
 
-use mesh_apis::converter_api::RewardInfo;
+use mesh_apis::converter_api::{RewardInfo, ValidatorSlashInfo};
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
@@ -58,11 +58,6 @@ impl Default for ExternalStakingContract<'_> {
     fn default() -> Self {
         Self::new()
     }
-}
-
-pub(crate) enum SlashingReason {
-    Offline,
-    DoubleSign,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -464,31 +459,42 @@ impl ExternalStakingContract<'_> {
         jailed: &[String],
         unjailed: &[String],
         tombstoned: &[String],
+        slashed: &[ValidatorSlashInfo],
     ) -> Result<(Event, Vec<WasmMsg>), ContractError> {
         let cfg = self.config.load(deps.storage)?;
         let mut msgs = vec![];
         let mut valopers: HashSet<String> = HashSet::new();
-        // Process tombstoning events first. Once tombstoned, a validator cannot be changed anymore.
-        for valoper in tombstoned {
-            // Check that the validator is active at height and slash it if that is the case
-            let active =
-                self.val_set
-                    .is_active_validator_at_height(deps.storage, valoper, height)?;
-            self.val_set
-                .tombstone_validator(deps.storage, valoper, height, time)?;
+        // Process slashing events first.
+        for valinfo in slashed {
+            let valoper = &valinfo.address;
+            // Check that the validator is active at the infraction height, and slash it if that is the case
+            let active = self.val_set.is_active_validator_at_height(
+                deps.storage,
+                valoper,
+                valinfo.infraction_height,
+            )?;
             if active {
+                // TODO: Compute effective slash ratio
+                let slash_ratio = match valinfo.slash_ratio.parse::<Decimal>() {
+                    Ok(ratio) => ratio,
+                    Err(_) => {
+                        return Err(ContractError::InvalidSlashRatio);
+                    }
+                };
                 // Slash the validator, if bonded
-                let slash_msg = self.handle_slashing(
-                    &env,
-                    deps.storage,
-                    &cfg,
-                    valoper,
-                    SlashingReason::DoubleSign,
-                )?;
+                let slash_msg =
+                    self.handle_slashing(&env, deps.storage, &cfg, valoper, slash_ratio)?;
                 if let Some(msg) = slash_msg {
                     msgs.push(msg)
                 }
             }
+            // Maintenance
+            valopers.insert(valoper.clone());
+        }
+        // Process tombstoning events second. Once tombstoned, a validator cannot be changed anymore.
+        for valoper in tombstoned {
+            self.val_set
+                .tombstone_validator(deps.storage, valoper, height, time)?;
             // Maintenance
             valopers.insert(valoper.clone());
         }
@@ -502,25 +508,8 @@ impl ExternalStakingContract<'_> {
         }
         // Process jailings. Non-existent validators will be ignored.
         for valoper in jailed {
-            // Check that the validator is active at height and slash it if that is the case
-            let active =
-                self.val_set
-                    .is_active_validator_at_height(deps.storage, valoper, height)?;
             self.val_set
                 .jail_validator(deps.storage, valoper, height, time)?;
-            if active {
-                // Slash the validator, if bonded
-                let slash_msg = self.handle_slashing(
-                    &env,
-                    deps.storage,
-                    &cfg,
-                    valoper,
-                    SlashingReason::Offline,
-                )?;
-                if let Some(msg) = slash_msg {
-                    msgs.push(msg)
-                }
-            }
             // Maintenance
             valopers.insert(valoper.clone());
         }
@@ -587,6 +576,16 @@ impl ExternalStakingContract<'_> {
         }
         if !tombstoned.is_empty() {
             event = event.add_attribute("tombstoned", tombstoned.join(","));
+        }
+        if !slashed.is_empty() {
+            event = event.add_attribute(
+                "slashed",
+                slashed
+                    .iter()
+                    .map(|v| v.address.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
         }
         Ok((event, msgs))
     }
@@ -866,12 +865,8 @@ impl ExternalStakingContract<'_> {
         storage: &mut dyn Storage,
         config: &Config,
         validator: &str,
-        reason: SlashingReason,
+        slash_ratio: Decimal,
     ) -> Result<Option<WasmMsg>, ContractError> {
-        let slash_ratio = match reason {
-            SlashingReason::Offline => config.slash_ratio.offline,
-            SlashingReason::DoubleSign => config.slash_ratio.double_sign,
-        };
         // Get the list of users staking via this validator
         let users = self
             .stakes
@@ -1516,6 +1511,7 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[],
             )
             .unwrap();
 
@@ -1586,6 +1582,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -1627,6 +1624,7 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[],
             )
             .unwrap();
 
@@ -1702,6 +1700,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -1742,6 +1741,7 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[],
             )
             .unwrap();
 
@@ -1817,6 +1817,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -1871,6 +1872,7 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[],
             )
             .unwrap();
 
@@ -1946,6 +1948,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
         // Bob has no cross-delegations (which can be possible)
@@ -1965,6 +1968,7 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[],
             )
             .unwrap();
 
@@ -2027,6 +2031,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -2045,6 +2050,7 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[],
             )
             .unwrap();
 
@@ -2109,6 +2115,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -2125,6 +2132,7 @@ mod tests {
                 &[],
                 &[],
                 &jails,
+                &[],
                 &[],
                 &[],
             )
@@ -2150,6 +2158,7 @@ mod tests {
                 &[],
                 &[],
                 &unjails,
+                &[],
                 &[],
             )
             .unwrap();
@@ -2209,6 +2218,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -2248,6 +2258,7 @@ mod tests {
                 &[],
                 &[],
                 &jails,
+                &[],
                 &[],
                 &[],
             )
@@ -2325,6 +2336,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -2339,6 +2351,7 @@ mod tests {
                 2345,
                 &[],
                 &rems,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -2403,6 +2416,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -2417,6 +2431,7 @@ mod tests {
                 2345,
                 &[],
                 &rems,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -2442,6 +2457,7 @@ mod tests {
                 &[],
                 &[],
                 &upds,
+                &[],
                 &[],
                 &[],
                 &[],

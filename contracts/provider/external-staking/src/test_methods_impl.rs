@@ -234,7 +234,7 @@ impl TestMethods for ExternalStakingContract<'_> {
                 ctx.deps.storage,
                 &cfg,
                 &validator,
-                crate::contract::SlashingReason::DoubleSign,
+                cfg.slash_ratio.double_sign,
             )?;
             match slash_msg {
                 Some(msg) => Ok(Response::new().add_message(msg)),
