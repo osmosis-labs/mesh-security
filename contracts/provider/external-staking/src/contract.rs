@@ -474,7 +474,6 @@ impl ExternalStakingContract<'_> {
                 valinfo.infraction_height,
             )?;
             if active {
-                // TODO: Compute effective slash ratio
                 let slash_ratio = match valinfo.slash_ratio.parse::<Decimal>() {
                     Ok(ratio) => ratio,
                     Err(_) => {
@@ -482,8 +481,15 @@ impl ExternalStakingContract<'_> {
                     }
                 };
                 // Slash the validator, if bonded
-                let slash_msg =
-                    self.handle_slashing(&env, deps.storage, &cfg, valoper, slash_ratio)?;
+                let slash_msg = self.handle_slashing(
+                    &env,
+                    deps.storage,
+                    &cfg,
+                    valoper,
+                    slash_ratio,
+                    valinfo.slash_amount.amount,
+                    valinfo.infraction_time,
+                )?;
                 if let Some(msg) = slash_msg {
                     msgs.push(msg)
                 }
@@ -866,8 +872,11 @@ impl ExternalStakingContract<'_> {
         config: &Config,
         validator: &str,
         slash_ratio: Decimal,
+        slash_amount: Uint128,
+        infraction_time: u64,
     ) -> Result<Option<WasmMsg>, ContractError> {
         // Get the list of users staking via this validator
+        // FIXME: It should be over the *historical* (at infraction height) stake. Not over the *current* stake
         let users = self
             .stakes
             .stake
@@ -883,6 +892,12 @@ impl ExternalStakingContract<'_> {
         if users.is_empty() {
             return Ok(None);
         }
+        // Compute effective slash ratio
+        let total_amount = users
+            .iter()
+            .map(|(_, stake)| stake.stake.high())
+            .sum::<Uint128>();
+        let effective_slash_ratio = Decimal::from_ratio(slash_amount, total_amount);
 
         // Slash their stake in passing
         let mut slash_infos = vec![];
@@ -895,7 +910,7 @@ impl ExternalStakingContract<'_> {
             if stake_high.is_zero() {
                 continue;
             }
-            let stake_slash = stake_high * slash_ratio;
+            let stake_slash = stake_high * effective_slash_ratio;
             // Requires proper saturating methods in commit/rollback_stake/unstake
             stake.stake = ValueRange::new(
                 stake_low.saturating_sub(stake_slash),
@@ -913,8 +928,13 @@ impl ExternalStakingContract<'_> {
             distribution.total_stake = distribution.total_stake.saturating_sub(stake_slash); // Don't fail if pending bond tx
             self.distribution.save(storage, validator, &distribution)?;
 
-            // Slash the unbondings
-            let pending_slashed = stake.slash_pending(&env.block, slash_ratio);
+            // Slash the unbondings. We use the nominal slash ratio here, like in the blockchain
+            let pending_slashed = stake.slash_pending(
+                &env.block,
+                slash_ratio,
+                config.unbonding_period,
+                infraction_time,
+            );
 
             self.stakes.stake.save(storage, (&user, validator), stake)?;
 
