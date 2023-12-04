@@ -9,7 +9,7 @@ use mesh_apis::ibc::ConsumerPacket;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
-use mesh_apis::converter_api::{self, ConverterApi, RewardInfo};
+use mesh_apis::converter_api::{self, ConverterApi, RewardInfo, ValidatorSlashInfo};
 use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
@@ -395,6 +395,7 @@ impl ConverterApi for ConverterContract<'_> {
     /// Send validator set additions (entering the active validator set), jailings and tombstonings
     /// to the external staking contract on the Consumer via IBC.
     #[msg(exec)]
+    #[allow(clippy::too_many_arguments)]
     fn valset_update(
         &self,
         ctx: ExecCtx,
@@ -404,6 +405,7 @@ impl ConverterApi for ConverterContract<'_> {
         jailed: Vec<String>,
         unjailed: Vec<String>,
         tombstoned: Vec<String>,
+        slashed: Vec<ValidatorSlashInfo>,
     ) -> Result<Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
@@ -451,6 +453,18 @@ impl ConverterApi for ConverterContract<'_> {
             event = event.add_attribute("tombstoned", tombstoned.join(","));
             is_empty = false;
         }
+        if !slashed.is_empty() {
+            event = event.add_attribute(
+                "slashed",
+                slashed
+                    .iter()
+                    .map(|v| v.address.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+            is_empty = false;
+            // TODO: convert slash amounts to Provider's coin
+        }
         let mut resp = Response::new();
         if !is_empty {
             let valset_msg = valset_update_msg(
@@ -462,6 +476,7 @@ impl ConverterApi for ConverterContract<'_> {
                 &jailed,
                 &unjailed,
                 &tombstoned,
+                &slashed,
             )?;
             resp = resp.add_message(valset_msg);
         }
