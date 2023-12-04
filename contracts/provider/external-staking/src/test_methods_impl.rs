@@ -2,7 +2,7 @@ use crate::contract::ExternalStakingContract;
 use crate::error::ContractError;
 use crate::test_methods::TestMethods;
 
-use cosmwasm_std::{Coin, Response};
+use cosmwasm_std::{Coin, Response, Uint128};
 use mesh_apis::converter_api::RewardInfo;
 use mesh_apis::ibc::AddValidator;
 use sylvia::contract;
@@ -225,6 +225,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         &self,
         ctx: ExecCtx,
         validator: String,
+        slash_amount: Uint128,
     ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
@@ -235,6 +236,8 @@ impl TestMethods for ExternalStakingContract<'_> {
                 &cfg,
                 &validator,
                 cfg.slash_ratio.double_sign,
+                slash_amount,
+                ctx.env.block.time.seconds(),
             )?;
             match slash_msg {
                 Some(msg) => Ok(Response::new().add_message(msg)),
@@ -243,7 +246,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         }
         #[cfg(not(any(test, feature = "mt")))]
         {
-            let _ = (ctx, validator);
+            let _ = (ctx, validator, slash_amount);
             Err(ContractError::Unauthorized {})
         }
     }

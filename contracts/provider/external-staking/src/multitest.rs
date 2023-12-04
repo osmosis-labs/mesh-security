@@ -1359,7 +1359,7 @@ fn slashing() {
     // But now validators[0] slashing happens
     contract
         .test_methods_proxy()
-        .test_handle_slashing(validators[0].to_string())
+        .test_handle_slashing(validators[0].to_string(), Uint128::new(8))
         .call("test")
         .unwrap();
 
@@ -1444,7 +1444,7 @@ fn slashing_pending_tx_partial_unbond() {
     // Now validators[0] slashing happens
     contract
         .test_methods_proxy()
-        .test_handle_slashing(validators[0].to_string())
+        .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
         .call("test")
         .unwrap();
 
@@ -1527,7 +1527,7 @@ fn slashing_pending_tx_full_unbond() {
     // Now validators[0] slashing happens
     contract
         .test_methods_proxy()
-        .test_handle_slashing(validators[0].to_string())
+        .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
         .call("test")
         .unwrap();
 
@@ -1612,7 +1612,7 @@ fn slashing_pending_tx_full_unbond_rolled_back() {
     // Now validators[0] slashing happens
     contract
         .test_methods_proxy()
-        .test_handle_slashing(validators[0].to_string())
+        .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
         .call("test")
         .unwrap();
 
@@ -1717,7 +1717,7 @@ fn slashing_pending_tx_bond() {
     // Now validators[0] slashing happens
     contract
         .test_methods_proxy()
-        .test_handle_slashing(validators[0].to_string())
+        .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
         .call("test")
         .unwrap();
 
@@ -1804,7 +1804,7 @@ fn slashing_pending_tx_bond_rolled_back() {
     // Now validators[0] slashing happens
     contract
         .test_methods_proxy()
-        .test_handle_slashing(validators[0].to_string())
+        .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
         .call("test")
         .unwrap();
 

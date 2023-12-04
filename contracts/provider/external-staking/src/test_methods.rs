@@ -1,4 +1,4 @@
-use cosmwasm_std::{Coin, Response, StdError};
+use cosmwasm_std::{Coin, Response, StdError, Uint128};
 use mesh_apis::converter_api::RewardInfo;
 use mesh_apis::ibc::AddValidator;
 use sylvia::interface;
@@ -97,5 +97,6 @@ pub trait TestMethods {
         &self,
         ctx: ExecCtx,
         validator: String,
+        slash_amount: Uint128,
     ) -> Result<Response, Self::Error>;
 }
