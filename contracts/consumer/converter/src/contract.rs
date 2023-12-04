@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event,
+    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Fraction,
     MessageInfo, Reply, Response, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -59,7 +59,7 @@ impl ConverterContract<'_> {
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
         // validate args
-        if discount > Decimal::one() {
+        if discount >= Decimal::one() {
             return Err(ContractError::InvalidDiscount);
         }
         if remote_denom.is_empty() {
@@ -285,6 +285,34 @@ impl ConverterContract<'_> {
         })
     }
 
+    fn invert_price(&self, deps: Deps, amount: Coin) -> Result<Coin, ContractError> {
+        let config = self.config.load(deps.storage)?;
+        ensure_eq!(
+            config.local_denom,
+            amount.denom,
+            ContractError::WrongDenom {
+                sent: amount.denom,
+                expected: config.local_denom
+            }
+        );
+
+        // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
+        // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
+        use price_feed_api::Querier;
+        let remote = price_feed_api::Remote::new(config.price_feed);
+        let price = remote.querier(&deps.querier).price()?.native_per_foreign;
+        let converted = (amount.amount * price.inv().ok_or(ContractError::InvalidPrice {})?)
+            * config
+                .price_adjustment
+                .inv()
+                .ok_or(ContractError::InvalidDiscount {})?;
+
+        Ok(Coin {
+            denom: config.remote_denom,
+            amount: converted,
+        })
+    }
+
     pub(crate) fn transfer_rewards(
         &self,
         deps: Deps,
@@ -405,7 +433,7 @@ impl ConverterApi for ConverterContract<'_> {
         jailed: Vec<String>,
         unjailed: Vec<String>,
         tombstoned: Vec<String>,
-        slashed: Vec<ValidatorSlashInfo>,
+        mut slashed: Vec<ValidatorSlashInfo>,
     ) -> Result<Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
@@ -462,8 +490,52 @@ impl ConverterApi for ConverterContract<'_> {
                     .collect::<Vec<String>>()
                     .join(","),
             );
+            event = event.add_attribute(
+                "ratios",
+                slashed
+                    .iter()
+                    .map(|v| v.slash_ratio.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+            event = event.add_attribute(
+                "amounts",
+                slashed
+                    .iter()
+                    .map(|v| {
+                        [
+                            v.slash_amount.amount.to_string(),
+                            v.slash_amount.denom.clone(),
+                        ]
+                        .concat()
+                    })
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
+            // Convert slash amounts to Provider's coin
+            slashed
+                .iter_mut()
+                .map(|v| {
+                    v.slash_amount =
+                        self.invert_price(ctx.deps.as_ref(), v.slash_amount.clone())?;
+                    Ok(v)
+                })
+                .collect::<Result<Vec<_>, ContractError>>()?;
+            event = event.add_attribute(
+                "provider_amounts",
+                slashed
+                    .iter()
+                    .map(|v| {
+                        [
+                            v.slash_amount.amount.to_string(),
+                            v.slash_amount.denom.clone(),
+                        ]
+                        .concat()
+                    })
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
             is_empty = false;
-            // TODO: convert slash amounts to Provider's coin
         }
         let mut resp = Response::new();
         if !is_empty {
