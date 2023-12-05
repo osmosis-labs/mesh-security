@@ -62,9 +62,9 @@ pub struct ValidatorSlashInfo {
     pub infraction_time: u64,
     /// The validator power when the misbehaviour occurred.
     pub power: u64,
+    /// The slash amount over the amount delegated by virtual-staking for the validator.
+    pub slash_amount: Coin,
     /// The (nominal) slash ratio for the validator.
     /// Useful in case we don't know if it's a double sign or downtime slash.
     pub slash_ratio: String,
-    /// The slash amount for the validator.
-    pub slash_amount: Coin,
 }

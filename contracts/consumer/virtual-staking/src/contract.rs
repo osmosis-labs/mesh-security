@@ -136,8 +136,7 @@ impl VirtualStakingContract<'_> {
         // Process slashes due to tombstoning (unbonded) or jailing, over bond_requests and current
         let slash = self.slash_requests.load(deps.storage)?;
         if !slash.is_empty() {
-            let slash_msg =
-                self.adjust_slashings(deps.branch(), &env, &config, &mut current, &slash)?;
+            self.adjust_slashings(deps.branch(), &mut current, &slash)?;
             // Update inactive list. Defensive, as it should already been updated in handle_valset_update, due to removals
             self.inactive.update(deps.branch().storage, |mut old| {
                 old.extend_from_slice(&slash.iter().map(|v| v.address.clone()).collect::<Vec<_>>());
@@ -146,10 +145,6 @@ impl VirtualStakingContract<'_> {
             })?;
             // Clear up slash requests
             self.slash_requests.save(deps.storage, &vec![])?;
-            // Add slash message to response
-            if let Some(msg) = slash_msg {
-                resp = resp.add_message(msg)
-            }
         }
 
         // calculate what the delegations should be when we are done
@@ -182,78 +177,30 @@ impl VirtualStakingContract<'_> {
     fn adjust_slashings(
         &self,
         deps: DepsMut<VirtualStakeCustomQuery>,
-        env: &Env,
-        config: &Config,
         current: &mut [(String, Uint128)],
         slash: &[ValidatorSlash],
-    ) -> StdResult<Option<WasmMsg>> {
+    ) -> StdResult<()> {
         let slashes: HashMap<String, ValidatorSlash> =
             HashMap::from_iter(slash.iter().map(|s| (s.address.clone(), s.clone())));
 
-        let mut validator_slash_infos = vec![];
         // this is linear over current, but better than turn it in to a map
         for (validator, prev) in current {
             match slashes.get(validator) {
                 None => continue,
                 Some(s) => {
-                    // We query the chain to get our *current* (post-slashing) delegation amount.
-                    // If it's less than the amount we have in our state, we know we've been slashed over the validator,
-                    // and we need to adjust our state accordingly.
-                    let contract_address = env.contract.address.to_string();
-                    let delegation = deps
-                        .querier
-                        .query_delegation(contract_address, validator.as_str())?;
-                    let bonded = match delegation {
-                        None => {
-                            // If zero or not found, this has been undelegated fully.
-                            // TODO: Add event
-                            // TODO: Handle full undelegation case. For now, we just ignore it.
-                            continue;
-                        }
-                        Some(delegation) => delegation.amount.amount,
-                    };
-
-                    let slash_amount = *prev - bonded;
-                    *prev -= slash_amount;
+                    // Just deduct the slash amount passed by the chain
+                    *prev -= s.slash_amount;
                     // Apply to request as well (to avoid unbonding msg)
                     let mut request = self
                         .bond_requests
                         .may_load(deps.storage, validator)?
                         .unwrap_or_default();
-                    request = request.saturating_sub(slash_amount);
+                    request = request.saturating_sub(s.slash_amount);
                     self.bond_requests.save(deps.storage, validator, &request)?;
-
-                    // Send message to the converter to burn the slashed amount on the Provider side
-                    let validator_slash_info = ValidatorSlashInfo {
-                        address: validator.clone(),
-                        infraction_height: s.infraction_height,
-                        infraction_time: s.infraction_time,
-                        power: s.power,
-                        slash_ratio: s.slash_ratio.clone(),
-                        slash_amount: coin(slash_amount.u128(), config.denom.clone()),
-                    };
-                    validator_slash_infos.push(validator_slash_info);
                 }
             }
         }
-        if validator_slash_infos.is_empty() {
-            return Ok(None);
-        }
-        let msg = converter_api::ExecMsg::ValsetUpdate {
-            additions: vec![],
-            removals: vec![],
-            updated: vec![],
-            jailed: vec![],
-            unjailed: vec![],
-            tombstoned: vec![],
-            slashed: validator_slash_infos,
-        };
-        let msg = WasmMsg::Execute {
-            contract_addr: config.converter.to_string(),
-            msg: to_binary(&msg)?,
-            funds: vec![],
-        };
-        Ok(Some(msg))
+        Ok(())
     }
 
     /**
@@ -292,7 +239,7 @@ impl VirtualStakingContract<'_> {
                 Ok::<_, ContractError>(old)
             })?;
         }
-        // Send all updates to the Converter, except for slashed, which will be sent in `handle_epoch`
+        // Send all updates to the converter.
         let cfg = self.config.load(deps.storage)?;
         let msg = converter_api::ExecMsg::ValsetUpdate {
             additions: additions.to_vec(),
@@ -301,7 +248,17 @@ impl VirtualStakingContract<'_> {
             jailed: jailed.to_vec(),
             unjailed: unjailed.to_vec(),
             tombstoned: tombstoned.to_vec(),
-            slashed: vec![],
+            slashed: slashed
+                .iter()
+                .map(|s| ValidatorSlashInfo {
+                    address: s.address.clone(),
+                    infraction_height: s.infraction_height,
+                    infraction_time: s.infraction_time,
+                    power: s.power,
+                    slash_amount: coin(s.slash_amount.u128(), cfg.denom.clone()),
+                    slash_ratio: s.slash_ratio.clone(),
+                })
+                .collect(),
         };
         let msg = WasmMsg::Execute {
             contract_addr: cfg.converter.to_string(),
