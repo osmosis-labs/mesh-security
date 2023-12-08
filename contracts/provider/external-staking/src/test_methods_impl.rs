@@ -235,9 +235,9 @@ impl TestMethods for ExternalStakingContract<'_> {
                 ctx.deps.storage,
                 &cfg,
                 &validator,
-                cfg.slash_ratio.double_sign,
+                cfg.slash_ratio.double_sign, // TODO: Add slash ratio parameter
                 slash_amount,
-                ctx.env.block.time.seconds(),
+                0, // TODO: Add infraction time parameter
             )?;
             match slash_msg {
                 Some(msg) => Ok(Response::new().add_message(msg)),

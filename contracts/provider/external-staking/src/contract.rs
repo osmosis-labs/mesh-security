@@ -1574,7 +1574,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_tombstoning_slashes() {
+    fn valset_update_tombstoning_and_slashing() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -1629,7 +1629,7 @@ mod tests {
         // Commit stake
         contract.commit_stake(stake_deps, 1).unwrap();
 
-        // Bob is tombstoned next
+        // Bob is slashed and tombstoned next
         let update_ctx = ctx.branch();
         let tombs = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -1644,12 +1644,25 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
-                &[],
+                &[ValidatorSlashInfo {
+                    address: "bob".to_string(),
+                    infraction_height: 200,
+                    infraction_time: 2345,
+                    power: 100,
+                    slash_amount: coin(10, "uosmo"),
+                    slash_ratio: Decimal::percent(10).to_string(),
+                }],
             )
             .unwrap();
 
         // Check the event
-        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("tombstoned", "bob"),
+                Attribute::new("slashed", "bob")
+            ]
+        );
 
         // Check the slashing message
         assert_eq!(msgs.len(), 1);
@@ -1692,7 +1705,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_tombstoning_slashes_pending_bond() {
+    fn valset_update_tombstoning_and_slashing_pending_bond() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -1746,7 +1759,7 @@ mod tests {
             .unwrap();
         // Stake tx is pending
 
-        // Bob is tombstoned next
+        // Bob is slashed and tombstoned next
         let update_ctx = ctx.branch();
         let tombs = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -1761,12 +1774,25 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
-                &[],
+                &[ValidatorSlashInfo {
+                    address: "bob".to_string(),
+                    infraction_height: 200,
+                    infraction_time: 2345,
+                    power: 100,
+                    slash_amount: coin(10, "uosmo"),
+                    slash_ratio: Decimal::percent(10).to_string(),
+                }],
             )
             .unwrap();
 
         // Check the event
-        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("tombstoned", "bob"),
+                Attribute::new("slashed", "bob")
+            ]
+        );
 
         // Check the slashing message
         assert_eq!(msgs.len(), 1);
@@ -1809,7 +1835,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_tombstoning_slashes_pending_unbond() {
+    fn valset_update_tombstoning_and_slashing_pending_unbond() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -1877,7 +1903,7 @@ mod tests {
             .unwrap();
         // Unstake tx is pending
 
-        // Bob is tombstoned next
+        // Bob is slashed and tombstoned next
         let update_ctx = ctx.branch();
         let tombs = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -1892,12 +1918,25 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
-                &[],
+                &[ValidatorSlashInfo {
+                    address: "bob".to_string(),
+                    infraction_height: 200,
+                    infraction_time: 2345,
+                    power: 100,
+                    slash_amount: coin(10, "uosmo"),
+                    slash_ratio: Decimal::percent(10).to_string(),
+                }],
             )
             .unwrap();
 
         // Check the event
-        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("tombstoned", "bob"),
+                Attribute::new("slashed", "bob")
+            ]
+        );
 
         // Check the slashing message
         assert_eq!(msgs.len(), 1);
@@ -1940,7 +1979,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_tombstoning_slashes_no_stake() {
+    fn valset_update_tombstoning_and_slashing_no_stake() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -1973,7 +2012,7 @@ mod tests {
             .unwrap();
         // Bob has no cross-delegations (which can be possible)
 
-        // Bob is tombstoned next
+        // Bob is slashed and tombstoned next
         let update_ctx = ctx.branch();
         let tombs = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -2210,7 +2249,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_jailing_slashes() {
+    fn valset_update_jailing_and_slashing() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -2265,7 +2304,7 @@ mod tests {
         // Commit stake
         contract.commit_stake(stake_deps, 1).unwrap();
 
-        // Bob is jailed next
+        // Bob is slashed and jailed next
         let update_ctx = ctx.branch();
         let jails = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -2280,12 +2319,25 @@ mod tests {
                 &jails,
                 &[],
                 &[],
-                &[],
+                &[ValidatorSlashInfo {
+                    address: "bob".to_string(),
+                    infraction_height: 200,
+                    infraction_time: 2345,
+                    power: 100,
+                    slash_amount: coin(10, "uosmo"),
+                    slash_ratio: Decimal::percent(10).to_string(),
+                }],
             )
             .unwrap();
 
         // Check the event
-        assert_eq!(evt.attributes, vec![Attribute::new("jailed", "bob"),]);
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("jailed", "bob"),
+                Attribute::new("slashed", "bob")
+            ]
+        );
 
         // Check the slashing message
         assert_eq!(msgs.len(), 1);

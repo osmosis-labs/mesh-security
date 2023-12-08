@@ -1714,10 +1714,10 @@ fn slashing_pending_tx_bond() {
         ValueRange::new(Uint128::new(250), Uint128::new(300))
     );
 
-    // Now validators[0] slashing happens
+    // Now validators[0] slashing happens, over the amount included the pending bond
     contract
         .test_methods_proxy()
-        .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
+        .test_handle_slashing(validators[0].to_string(), Uint128::new(25))
         .call("test")
         .unwrap();
 
@@ -1801,20 +1801,20 @@ fn slashing_pending_tx_bond_rolled_back() {
         ValueRange::new(Uint128::new(250), Uint128::new(300))
     );
 
-    // Now validators[0] slashing happens
+    // Now validators[0] slashing happens, but over the amount without the pending bond
     contract
         .test_methods_proxy()
         .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
         .call("test")
         .unwrap();
 
-    // Claims on vault got reduced, for high end of pending slashed bond
+    // Claims on vault got reduced, for *low* end of pending slashed bond
     let claim = vault
         .claim(user.to_owned(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(
         claim.amount,
-        ValueRange::new(Uint128::new(225), Uint128::new(275))
+        ValueRange::new(Uint128::new(230), Uint128::new(280))
     );
 
     // Now the extra bond gets rolled back (i.e. failed)
@@ -1828,5 +1828,5 @@ fn slashing_pending_tx_bond_rolled_back() {
     let claim = vault
         .claim(user.to_owned(), contract.contract_addr.to_string())
         .unwrap();
-    assert_eq!(claim.amount.val().unwrap().u128(), 225);
+    assert_eq!(claim.amount.val().unwrap().u128(), 230);
 }
