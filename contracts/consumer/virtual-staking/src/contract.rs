@@ -646,6 +646,7 @@ mod tests {
     use cosmwasm_std::{
         coins, from_binary,
         testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
+        Decimal,
     };
     use mesh_bindings::{BondStatusResponse, SlashRatioResponse};
     use serde::de::DeserializeOwned;
@@ -856,8 +857,8 @@ mod tests {
             .assert_bond(&[("val1", (10u128, &denom)), ("val2", (20u128, &denom))])
             .assert_rewards(&[]);
 
-        // val1 is being jailed
-        contract.jail(deps.as_mut(), "val1");
+        // val1 is being jailed and slashed for being offline
+        contract.jail(deps.as_mut(), "val1", Decimal::percent(10), Uint128::one());
 
         contract
             .hit_epoch(deps.as_mut())
@@ -923,7 +924,7 @@ mod tests {
         contract.quick_bond(deps.as_mut(), "val1", 20);
 
         // And it's being jailed at the same time
-        contract.jail(deps.as_mut(), "val1");
+        contract.jail(deps.as_mut(), "val1", Decimal::percent(10), Uint128::one());
 
         contract
             .hit_epoch(deps.as_mut())
@@ -955,7 +956,7 @@ mod tests {
         contract.quick_unbond(deps.as_mut(), "val1", 10);
 
         // And it's being jailed at the same time
-        contract.jail(deps.as_mut(), "val1");
+        contract.jail(deps.as_mut(), "val1", Decimal::percent(10), Uint128::one());
 
         contract
             .hit_epoch(deps.as_mut())
@@ -1028,7 +1029,7 @@ mod tests {
             .assert_rewards(&[]);
 
         // Val1 is being tombstoned
-        contract.tombstone(deps.as_mut(), "val1");
+        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(5));
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after tombstoning
@@ -1070,7 +1071,7 @@ mod tests {
         contract.quick_bond(deps.as_mut(), "val1", 20);
 
         // And it's being tombstoned at the same time
-        contract.tombstone(deps.as_mut(), "val1");
+        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
 
         contract
             .hit_epoch(deps.as_mut())
@@ -1110,7 +1111,7 @@ mod tests {
         contract.quick_unbond(deps.as_mut(), "val1", 10);
 
         // And it's being tombstoned at the same time
-        contract.tombstone(deps.as_mut(), "val1");
+        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
 
         contract
             .hit_epoch(deps.as_mut())
@@ -1303,9 +1304,21 @@ mod tests {
             validator: &[&str],
             amount: u128,
         ) -> Result<Response, ContractError>;
-        fn jail(&self, deps: DepsMut, val: &str);
+        fn jail(
+            &self,
+            deps: DepsMut,
+            val: &str,
+            nominal_slash_ratio: Decimal,
+            slash_amount: Uint128,
+        );
         fn unjail(&self, deps: DepsMut, val: &str);
-        fn tombstone(&self, deps: DepsMut, val: &str);
+        fn tombstone(
+            &self,
+            deps: DepsMut,
+            val: &str,
+            nominal_slash_ratio: Decimal,
+            slash_amount: Uint128,
+        );
         fn add_val(&self, deps: DepsMut, val: &str);
         fn remove_val(&self, deps: DepsMut, val: &str);
     }
@@ -1406,8 +1419,14 @@ mod tests {
             )
         }
 
-        fn jail(&self, deps: DepsMut, val: &str) {
-            // We sent a removal along with the jail, as this is what the blockchain does
+        fn jail(
+            &self,
+            deps: DepsMut,
+            val: &str,
+            nominal_slash_ratio: Decimal,
+            slash_amount: Uint128,
+        ) {
+            // We sent a removal and a slash along with the jail, as this is what the blockchain does
             self.handle_valset_update(
                 deps,
                 &[],
@@ -1416,7 +1435,16 @@ mod tests {
                 &[val.to_string()],
                 &[],
                 &[],
-                &[],
+                &[ValidatorSlash {
+                    address: val.to_string(),
+                    height: 0,
+                    time: 0,
+                    infraction_height: 0,
+                    infraction_time: 0,
+                    power: 0,
+                    slash_amount,
+                    slash_ratio: nominal_slash_ratio.to_string(),
+                }],
             )
             .unwrap();
         }
@@ -1426,9 +1454,34 @@ mod tests {
                 .unwrap();
         }
 
-        fn tombstone(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[], &[], &[], &[], &[val.to_string()], &[])
-                .unwrap();
+        fn tombstone(
+            &self,
+            deps: DepsMut,
+            val: &str,
+            nominal_slash_ratio: Decimal,
+            slash_amount: Uint128,
+        ) {
+            // We sent a slash along with the tombstone, as this is what the blockchain does
+            self.handle_valset_update(
+                deps,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[val.to_string()],
+                &[ValidatorSlash {
+                    address: val.to_string(),
+                    height: 0,
+                    time: 0,
+                    infraction_height: 0,
+                    infraction_time: 0,
+                    power: 0,
+                    slash_amount,
+                    slash_ratio: nominal_slash_ratio.to_string(),
+                }],
+            )
+            .unwrap();
         }
 
         fn add_val(&self, deps: DepsMut, val: &str) {
