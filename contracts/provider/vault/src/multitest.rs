@@ -1749,7 +1749,7 @@ fn cross_slash_scenario_1() {
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(10))
         .call("test")
         .unwrap();
 
@@ -1861,7 +1861,7 @@ fn cross_slash_scenario_2() {
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(20))
         .call("test")
         .unwrap();
 
@@ -1969,7 +1969,7 @@ fn cross_slash_scenario_3() {
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(15))
         .call("test")
         .unwrap();
 
@@ -2102,7 +2102,7 @@ fn cross_slash_scenario_4() {
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(14))
         .call("test")
         .unwrap();
 
@@ -2279,7 +2279,10 @@ fn cross_slash_scenario_5() {
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(
+            validator1.to_string(),
+            Uint128::new(180) * Decimal::percent(slashing_percentage),
+        )
         .call("test")
         .unwrap();
 
@@ -2419,7 +2422,7 @@ fn cross_slash_no_native_staking() {
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(14))
         .call("test")
         .unwrap();
 
@@ -2548,10 +2551,10 @@ fn cross_slash_pending_unbonding() {
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(50)));
     assert_eq!(cross_stake1.pending_unbonds[0].amount, Uint128::new(50));
 
-    // Validator 1 is slashed
+    // Validator 1 is slashed, over the current bond
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(5))
         .call("test")
         .unwrap();
 
