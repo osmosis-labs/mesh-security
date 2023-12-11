@@ -84,4 +84,4 @@ jobs:
         with:
           toolchain: 1.70.0
           command: clippy
-          args: --all-targets -- -D warnings
+          args: --all-targets -- -D warnings -A clippy::too-many-arguments

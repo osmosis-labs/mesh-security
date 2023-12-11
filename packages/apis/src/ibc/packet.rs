@@ -3,7 +3,7 @@ use std::error::Error;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{to_binary, Binary, Coin, Decimal, StdResult, Timestamp};
 
-use crate::converter_api::RewardInfo;
+use crate::converter_api::{RewardInfo, ValidatorSlashInfo};
 
 /// These are messages sent from provider -> consumer
 /// ibc_packet_receive in converter must handle them all.
@@ -104,6 +104,11 @@ pub enum ConsumerPacket {
         /// If the validator doesn't exist or is already tombstoned, this is a no-op for that validator.
         /// This has precedence over all other events in the same packet
         tombstoned: Vec<String>,
+        /// This is sent when a validator is slashed.
+        /// If the validator doesn't exist or is inactive at the infraction height, this is a no-op
+        /// for that validator.
+        /// This has precedence over all other events in the same packet.
+        slashed: Vec<ValidatorSlashInfo>,
     },
     /// This is part of the rewards protocol
     Distribute {

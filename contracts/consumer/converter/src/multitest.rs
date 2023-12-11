@@ -329,7 +329,7 @@ fn valset_update_works() {
     // Check that only the virtual staking contract can call this handler
     let res = converter
         .converter_api_proxy()
-        .valset_update(vec![], vec![], vec![], vec![], vec![], vec![])
+        .valset_update(vec![], vec![], vec![], vec![], vec![], vec![], vec![])
         .call(owner);
     assert_eq!(res.unwrap_err(), Unauthorized {});
 
@@ -338,6 +338,7 @@ fn valset_update_works() {
         .valset_update(
             add_validators,
             rem_validators,
+            vec![],
             vec![],
             vec![],
             vec![],
@@ -397,7 +398,7 @@ fn unauthorized() {
 
     let err = converter
         .converter_api_proxy()
-        .valset_update(vec![], vec![], vec![], vec![], vec![], vec![])
+        .valset_update(vec![], vec![], vec![], vec![], vec![], vec![], vec![])
         .call("mallory")
         .unwrap_err();
 

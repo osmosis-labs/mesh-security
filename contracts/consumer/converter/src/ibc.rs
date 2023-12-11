@@ -9,6 +9,7 @@ use cosmwasm_std::{
 };
 use cw_storage_plus::Item;
 
+use mesh_apis::converter_api::ValidatorSlashInfo;
 use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, ProtocolVersion,
     ProviderPacket, StakeAck, TransferRewardsAck, UnstakeAck, PROTOCOL_NAME,
@@ -115,7 +116,7 @@ pub fn ibc_channel_connect(
 
     // Send a validator sync packet to arrive with the newly established channel
     let validators = deps.querier.query_all_validators()?;
-    let msg = valset_update_msg(&env, &channel, &validators, &[], &[], &[], &[], &[])?;
+    let msg = valset_update_msg(&env, &channel, &validators, &[], &[], &[], &[], &[], &[])?;
 
     Ok(IbcBasicResponse::new().add_message(msg))
 }
@@ -130,6 +131,7 @@ pub(crate) fn valset_update_msg(
     jailed: &[String],
     unjailed: &[String],
     tombstoned: &[String],
+    slashed: &[ValidatorSlashInfo],
 ) -> Result<IbcMsg, ContractError> {
     let additions = additions
         .iter()
@@ -156,6 +158,7 @@ pub(crate) fn valset_update_msg(
         jailed: jailed.to_vec(),
         unjailed: unjailed.to_vec(),
         tombstoned: tombstoned.to_vec(),
+        slashed: slashed.to_vec(),
     };
     let msg = IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id.clone(),
