@@ -1,3 +1,9 @@
+# 0.10.0
+
+- Slash amounts support.
+- Update cosmwasm.
+- Slashing docs update.
+
 # 0.9.0
 
 - Osmosis price oracle.
