@@ -2,7 +2,17 @@
 
 ## [Unreleased](https://github.com/osmosis-labs/mesh-security/tree/HEAD)
 
-[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.9.0...HEAD)
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.10.0...HEAD)
+
+## [v0.10.0](https://github.com/osmosis-labs/mesh-security/tree/v0.10.0) (2023-12-13)
+
+[Full Changelog](https://github.com/osmosis-labs/mesh-security/compare/v0.9.0...v0.10.0)
+
+**Merged pull requests:**
+
+- Slash amounts support [\#179](https://github.com/osmosis-labs/mesh-security/pull/179) ([maurolacy](https://github.com/maurolacy))
+- Update cosmwasm [\#178](https://github.com/osmosis-labs/mesh-security/pull/178) ([maurolacy](https://github.com/maurolacy))
+- Slashing docs update [\#171](https://github.com/osmosis-labs/mesh-security/pull/171) ([maurolacy](https://github.com/maurolacy))
 
 ## [v0.9.0](https://github.com/osmosis-labs/mesh-security/tree/v0.9.0) (2023-11-23)
 
