@@ -1,6 +1,6 @@
 {
   "name": "@mesh-security/types",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "",
   "author": "Jake Hartnell <no-reply@no-reply.com>",
   "homepage": "https://github.com/osmosis-labs/mesh-security",
@@ -40,6 +40,6 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
-    "@cosmjs/cosmwasm-stargate": "^0.31.0"
+    "@cosmjs/cosmwasm-stargate": "^0.32.1"
   }
 }
