@@ -1,0 +1,45 @@
+{
+  "name": "@mesh-security/types",
+  "version": "0.4.1",
+  "description": "",
+  "author": "Jake Hartnell <no-reply@no-reply.com>",
+  "homepage": "https://github.com/osmosis-labs/mesh-security",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "typings": "dist/index.d.ts",
+  "directories": {
+    "lib": "src"
+  },
+  "files": [
+    "dist",
+    "!CHANGELOG.md"
+  ],
+  "scripts": {
+    "build:cjs": "yarn tsc -p tsconfig.json --outDir dist --module commonjs || true",
+    "build:mjs": "yarn tsc -p tsconfig.json --outDir mjs --module es2022 --declaration false || true",
+    "build:rename": "publish-scripts --cmd rename --srcDir mjs --outDir dist --findExt js --replaceExt mjs",
+    "build": "npm run clean && npm run build:cjs && npm run build:mjs && npm run build:rename && rimraf mjs",
+    "clean:mjs": "rimraf mjs",
+    "clean:dist": "rimraf dist",
+    "clean": "npm run build:clean && npm run clean:mjs && npm run clean:dist",
+    "codegen": "node codegen/codegen.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/osmosis-labs/mesh-security"
+  },
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/osmosis-labs/mesh-security/issues"
+  },
+  "devDependencies": {
+    "@cosmwasm/ts-codegen": "^0.33.0",
+    "publish-scripts": "1.9.0",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.4"
+  },
+  "dependencies": {
+    "@cosmjs/cosmwasm-stargate": "^0.31.0"
+  }
+}
