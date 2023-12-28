@@ -1,7 +1,7 @@
 use anyhow::Result as AnyResult;
 
 use cosmwasm_std::testing::mock_env;
-use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Validator};
+use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Delegation, Validator};
 
 use cw_multi_test::{App as MtApp, StakingInfo, StakingSudo, SudoMsg};
 
@@ -194,10 +194,21 @@ fn staking() {
     let delegation = app
         .app()
         .wrap()
-        .query_delegation(staking_proxy.contract_addr, validator.to_owned())
+        .query_delegation(staking_proxy.contract_addr.clone(), validator.to_owned())
         .unwrap()
         .unwrap();
     assert_eq!(delegation.amount, coin(120, OSMO));
+
+    // Test staked balances query
+    let balances = staking_proxy.staked_balances().unwrap();
+    assert_eq!(
+        balances,
+        vec![Delegation {
+            delegator: Addr::unchecked(proxy_addr),
+            validator: validator.to_string(),
+            amount: coin(120, OSMO),
+        }]
+    );
 }
 
 #[test]
