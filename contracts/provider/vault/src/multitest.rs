@@ -16,7 +16,7 @@ use crate::contract;
 use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
-use crate::msg::{AccountResponse, AllAccountsResponseItem, LienResponse, StakingInitInfo};
+use crate::msg::{AccountResponse, AllAccountsResponseItem, LienResponse, StakingInitInfo, AllActiveExternalStakingResponse};
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
@@ -482,6 +482,14 @@ fn local_staking_disabled() {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: ValueRange::new(Uint128::new(200), Uint128::new(300)),
+        }
+    );
+
+    let res = vault.active_external_staking().unwrap();
+    assert_eq!(
+        res,
+        AllActiveExternalStakingResponse{
+            contracts: vec![cross_staking.contract_addr.to_string()],
         }
     );
 }

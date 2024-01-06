@@ -71,6 +71,11 @@ pub struct ConfigResponse {
     pub local_staking: Option<String>,
 }
 
+#[cw_serde]
+pub struct AllActiveExternalStakingResponse {
+    pub contracts: Vec<String>,
+}
+
 pub type TxResponse = Tx;
 pub type AllTxsResponseItem = TxResponse;
 
