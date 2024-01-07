@@ -16,7 +16,10 @@ use crate::contract;
 use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
-use crate::msg::{AccountResponse, AllAccountsResponseItem, LienResponse, StakingInitInfo, AllActiveExternalStakingResponse};
+use crate::msg::{
+    AccountResponse, AllAccountsResponseItem, AllActiveExternalStakingResponse, LienResponse,
+    StakingInitInfo,
+};
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
@@ -484,14 +487,6 @@ fn local_staking_disabled() {
             free: ValueRange::new(Uint128::new(200), Uint128::new(300)),
         }
     );
-
-    let res = vault.active_external_staking().unwrap();
-    assert_eq!(
-        res,
-        AllActiveExternalStakingResponse{
-            contracts: vec![cross_staking.contract_addr.to_string()],
-        }
-    );
 }
 
 #[test]
@@ -720,6 +715,9 @@ fn stake_cross() {
         coin(0, OSMO)
     );
 
+    let res = vault.active_external_staking().unwrap();
+    assert_eq!(res, AllActiveExternalStakingResponse { contracts: vec![] });
+
     // Staking remotely
     vault
         .stake_remote(
@@ -732,6 +730,14 @@ fn stake_cross() {
         )
         .call(user)
         .unwrap();
+
+    let res = vault.active_external_staking().unwrap();
+    assert_eq!(
+        res,
+        AllActiveExternalStakingResponse {
+            contracts: vec![cross_staking.contract_addr.to_string()],
+        }
+    );
 
     let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
