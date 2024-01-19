@@ -1,7 +1,7 @@
 use cosmwasm_std::WasmMsg::Execute;
 use cosmwasm_std::{
-    coin, ensure_eq, to_binary, Coin, DistributionMsg, GovMsg, Response, StakingMsg, VoteOption,
-    WeightedVoteOption,
+    coin, ensure_eq, to_binary, Coin, Delegation, DistributionMsg, GovMsg, Response, StakingMsg,
+    VoteOption, WeightedVoteOption,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -331,6 +331,15 @@ impl NativeStakingProxyContract<'_> {
     #[msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         Ok(self.config.load(ctx.deps.storage)?)
+    }
+
+    #[msg(query)]
+    fn staked_balances(&self, ctx: QueryCtx) -> Result<Vec<Delegation>, ContractError> {
+        let balances = ctx
+            .deps
+            .querier
+            .query_all_delegations(ctx.env.contract.address)?;
+        Ok(balances)
     }
 }
 
