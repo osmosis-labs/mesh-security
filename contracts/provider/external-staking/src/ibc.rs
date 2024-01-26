@@ -64,8 +64,12 @@ pub fn ibc_channel_open(
     if authorized.connection_id != channel.connection_id
         || authorized.port_id != channel.counterparty_endpoint.port_id
     {
-        // FIXME: do we need a better error here?
-        return Err(ContractError::Unauthorized);
+        return Err(ContractError::IbcUnauthorized(
+            channel.connection_id,
+            channel.counterparty_endpoint.port_id,
+            authorized.connection_id,
+            authorized.port_id,
+        ));
     }
 
     // we handshake with the counterparty version, it must not be empty

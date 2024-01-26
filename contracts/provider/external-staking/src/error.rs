@@ -21,6 +21,9 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized,
 
+    #[error("Unauthorized. Received connection id: {0}, counterparty port id: {1}. Expected connection id: {2}, counterparty port id: {3}.")]
+    IbcUnauthorized(String, String, String, String),
+
     #[error("Invalid denom, {0} expected")]
     InvalidDenom(String),
 
