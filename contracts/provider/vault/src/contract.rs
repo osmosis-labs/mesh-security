@@ -20,8 +20,8 @@ use sylvia::{contract, schemars};
 use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountDetailsResponse, AccountResponse, AllAccountsResponse,
-    AllAccountsResponseItem, AllTxsResponse, AllTxsResponseItem, ConfigResponse, LienResponse,
-    StakingInitInfo, TxResponse,
+    AllAccountsResponseItem, AllActiveExternalStakingResponse, AllTxsResponse, AllTxsResponseItem,
+    ConfigResponse, LienResponse, StakingInitInfo, TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
@@ -55,6 +55,8 @@ pub struct VaultContract<'a> {
     pub liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
     /// Per-user information
     pub users: Map<'a, &'a Addr, UserInfo>,
+    /// All active external staking contracts in use by this vault
+    pub active_external: Map<'a, &'a Addr, ()>,
     /// Pending txs information
     pub tx_count: Item<'a, u64>,
     pub pending: Txs<'a>,
@@ -73,6 +75,7 @@ impl VaultContract<'_> {
             users: Map::new("users"),
             pending: Txs::new("pending_txs", "users"),
             tx_count: Item::new("tx_count"),
+            active_external: Map::new("active_external"),
         }
     }
 
@@ -206,6 +209,9 @@ impl VaultContract<'_> {
             vec![],
         )?;
 
+        self.active_external
+            .save(ctx.deps.storage, &contract.0, &())?;
+
         let resp = Response::new()
             .add_message(stake_msg)
             .add_attribute("action", "stake_remote")
@@ -303,6 +309,23 @@ impl VaultContract<'_> {
         let resp = ConfigResponse {
             denom: config.denom,
             local_staking: local_staking.map(|ls| ls.contract.0.into()),
+        };
+
+        Ok(resp)
+    }
+
+    #[msg(query)]
+    fn active_external_staking(
+        &self,
+        ctx: QueryCtx,
+    ) -> Result<AllActiveExternalStakingResponse, ContractError> {
+        let active = self
+            .active_external
+            .keys(ctx.deps.storage, None, None, Order::Ascending)
+            .collect::<StdResult<Vec<_>>>()?;
+
+        let resp = AllActiveExternalStakingResponse {
+            contracts: active.into_iter().map(|addr| addr.to_string()).collect(),
         };
 
         Ok(resp)

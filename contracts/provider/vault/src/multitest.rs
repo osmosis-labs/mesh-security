@@ -16,7 +16,10 @@ use crate::contract;
 use crate::contract::multitest_utils::VaultContractProxy;
 use crate::contract::test_utils::VaultApi;
 use crate::error::ContractError;
-use crate::msg::{AccountResponse, AllAccountsResponseItem, LienResponse, StakingInitInfo};
+use crate::msg::{
+    AccountResponse, AllAccountsResponseItem, AllActiveExternalStakingResponse, LienResponse,
+    StakingInitInfo,
+};
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
@@ -712,6 +715,9 @@ fn stake_cross() {
         coin(0, OSMO)
     );
 
+    let res = vault.active_external_staking().unwrap();
+    assert_eq!(res, AllActiveExternalStakingResponse { contracts: vec![] });
+
     // Staking remotely
     vault
         .stake_remote(
@@ -724,6 +730,14 @@ fn stake_cross() {
         )
         .call(user)
         .unwrap();
+
+    let res = vault.active_external_staking().unwrap();
+    assert_eq!(
+        res,
+        AllActiveExternalStakingResponse {
+            contracts: vec![cross_staking.contract_addr.to_string()],
+        }
+    );
 
     let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
@@ -1749,7 +1763,7 @@ fn cross_slash_scenario_1() {
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(10))
         .call("test")
         .unwrap();
 
@@ -1861,7 +1875,7 @@ fn cross_slash_scenario_2() {
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(20))
         .call("test")
         .unwrap();
 
@@ -1969,7 +1983,7 @@ fn cross_slash_scenario_3() {
     // Validator 1 is slashed
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(15))
         .call("test")
         .unwrap();
 
@@ -2102,7 +2116,7 @@ fn cross_slash_scenario_4() {
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(14))
         .call("test")
         .unwrap();
 
@@ -2279,7 +2293,10 @@ fn cross_slash_scenario_5() {
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(
+            validator1.to_string(),
+            Uint128::new(180) * Decimal::percent(slashing_percentage),
+        )
         .call("test")
         .unwrap();
 
@@ -2419,7 +2436,7 @@ fn cross_slash_no_native_staking() {
     // Validator 1 is slashed
     cross_staking_1
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(14))
         .call("test")
         .unwrap();
 
@@ -2548,10 +2565,10 @@ fn cross_slash_pending_unbonding() {
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(50)));
     assert_eq!(cross_stake1.pending_unbonds[0].amount, Uint128::new(50));
 
-    // Validator 1 is slashed
+    // Validator 1 is slashed, over the current bond
     cross_staking
         .test_methods_proxy()
-        .test_handle_slashing(validator1.to_string())
+        .test_handle_slashing(validator1.to_string(), Uint128::new(5))
         .call("test")
         .unwrap();
 

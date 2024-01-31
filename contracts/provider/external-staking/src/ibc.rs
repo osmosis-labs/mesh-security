@@ -134,6 +134,7 @@ pub fn ibc_packet_receive(
             jailed,
             unjailed,
             tombstoned,
+            slashed,
         } => {
             let (evt, msgs) = contract.valset_update(
                 deps,
@@ -146,6 +147,7 @@ pub fn ibc_packet_receive(
                 &jailed,
                 &unjailed,
                 &tombstoned,
+                &slashed,
             )?;
             let ack = ack_success(&ValsetUpdateAck {})?;
             IbcReceiveResponse::new()

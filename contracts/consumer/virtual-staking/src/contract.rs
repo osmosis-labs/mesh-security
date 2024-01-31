@@ -1,23 +1,22 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::str::FromStr;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cosmwasm_std::{
-    coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, Decimal, DepsMut,
+    coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
     DistributionMsg, Env, Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator,
     WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::nonpayable;
-use mesh_apis::converter_api::{self, RewardInfo};
+use mesh_apis::converter_api::{self, RewardInfo, ValidatorSlashInfo};
 use mesh_bindings::{
     TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
 };
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
-use mesh_apis::virtual_staking_api::{self, SudoMsg, VirtualStakingApi};
+use mesh_apis::virtual_staking_api::{self, SudoMsg, ValidatorSlash, VirtualStakingApi};
 
 use crate::error::ContractError;
 use crate::msg::ConfigResponse;
@@ -39,12 +38,9 @@ pub struct VirtualStakingContract<'a> {
     // `bonded` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
     pub bonded: Item<'a, Vec<(String, Uint128)>>,
-    /// This is what validators have been requested to be slashed due to tombstoning.
+    /// This is what validators have been requested to be slashed.
     // The list will be cleared after processing in `handle_epoch`.
-    pub tombstone_requests: Item<'a, Vec<String>>,
-    /// This is what validators have been requested to be slashed due to jailing.
-    // The list will be cleared after processing in `handle_epoch`.
-    pub jail_requests: Item<'a, Vec<String>>,
+    pub slash_requests: Item<'a, Vec<ValidatorSlash>>,
     /// This is what validators are inactive because of tombstoning, jailing or removal (unbonded).
     // `inactive` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
@@ -66,8 +62,7 @@ impl VirtualStakingContract<'_> {
             config: Item::new("config"),
             bond_requests: Map::new("bond_requests"),
             bonded: Item::new("bonded"),
-            tombstone_requests: Item::new("tombstoned"),
-            jail_requests: Item::new("jailed"),
+            slash_requests: Item::new("slashed"),
             inactive: Item::new("inactive"),
             burned: Map::new("burned"),
         }
@@ -85,8 +80,7 @@ impl VirtualStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         // initialize these to no one, so no issue when reading for the first time
         self.bonded.save(ctx.deps.storage, &vec![])?;
-        self.tombstone_requests.save(ctx.deps.storage, &vec![])?;
-        self.jail_requests.save(ctx.deps.storage, &vec![])?;
+        self.slash_requests.save(ctx.deps.storage, &vec![])?;
         self.inactive.save(ctx.deps.storage, &vec![])?;
         VALIDATOR_REWARDS_BATCH.init(ctx.deps.storage)?;
 
@@ -123,7 +117,7 @@ impl VirtualStakingContract<'_> {
         let bonded = self.bonded.load(deps.storage)?;
         let inactive = self.inactive.load(deps.storage)?;
         let withdraw = withdraw_reward_msgs(deps.branch(), &bonded, &inactive);
-        let resp = Response::new().add_submessages(withdraw);
+        let mut resp = Response::new().add_submessages(withdraw);
 
         let bond =
             TokenQuerier::new(&deps.querier).bond_status(env.contract.address.to_string())?;
@@ -136,39 +130,32 @@ impl VirtualStakingContract<'_> {
             return Ok(resp);
         }
 
+        let config = self.config.load(deps.storage)?;
         // Make current bonded mutable
         let mut current = bonded;
-        // Process tombstoning (unbonded) and jailing (slashed) over bond_requests and current
-        let tombstone = self.tombstone_requests.load(deps.storage)?;
-        let jail = self.jail_requests.load(deps.storage)?;
-        if !tombstone.is_empty() || !jail.is_empty() {
-            let ratios = TokenQuerier::new(&deps.querier).slash_ratio()?;
-            let slash_ratio_double_sign = Decimal::from_str(&ratios.slash_fraction_double_sign)?;
-            let slash_ratio_downtime = Decimal::from_str(&ratios.slash_fraction_downtime)?;
-            self.adjust_slashings(
-                deps.storage,
-                &mut current,
-                &tombstone,
-                &jail,
-                slash_ratio_double_sign,
-                slash_ratio_downtime,
-            )?;
-            // Update inactive list
-            self.inactive.update(deps.storage, |mut old| {
-                old.extend_from_slice(&tombstone);
-                old.extend_from_slice(&jail);
+        // Process slashes due to tombstoning (unbonded) or jailing, over bond_requests and current
+        let slash = self.slash_requests.load(deps.storage)?;
+        if !slash.is_empty() {
+            self.adjust_slashings(deps.branch(), &mut current, &slash)?;
+            // Update inactive list. Defensive, as it should already been updated in handle_valset_update, due to removals
+            self.inactive.update(deps.branch().storage, |mut old| {
+                old.extend_from_slice(&slash.iter().map(|v| v.address.clone()).collect::<Vec<_>>());
                 old.dedup();
                 Ok::<_, ContractError>(old)
             })?;
-            // Clear up both requests
-            self.tombstone_requests.save(deps.storage, &vec![])?;
-            self.jail_requests.save(deps.storage, &vec![])?;
+            // Clear up slash requests
+            self.slash_requests.save(deps.storage, &vec![])?;
         }
 
         // calculate what the delegations should be when we are done
         let mut requests: Vec<(String, Uint128)> = self
             .bond_requests
-            .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
+            .range(
+                deps.as_ref().storage,
+                None,
+                None,
+                cosmwasm_std::Order::Ascending,
+            )
             .collect::<Result<_, _>>()?;
         let total_requested: Uint128 = requests.iter().map(|(_, v)| v).sum();
         if total_requested > max_cap {
@@ -178,50 +165,40 @@ impl VirtualStakingContract<'_> {
         }
 
         // Save the future values
-        self.bonded.save(deps.storage, &requests)?;
+        self.bonded.save(deps.branch().storage, &requests)?;
 
         // Compare these two to make bond/unbond calls as needed
-        let config = self.config.load(deps.storage)?;
         let rebalance = calculate_rebalance(current, requests, &config.denom);
-        let resp = resp.add_messages(rebalance);
+        resp = resp.add_messages(rebalance);
 
         Ok(resp)
     }
 
     fn adjust_slashings(
         &self,
-        storage: &mut dyn Storage,
+        deps: DepsMut<VirtualStakeCustomQuery>,
         current: &mut [(String, Uint128)],
-        tombstones: &[String],
-        jailing: &[String],
-        slash_ratio_tombstoning: Decimal,
-        slash_ratio_jailing: Decimal,
+        slash: &[ValidatorSlash],
     ) -> StdResult<()> {
-        let tombstones: BTreeSet<_> = tombstones.iter().collect();
-        let jailing: BTreeSet<_> = jailing.iter().collect();
+        let slashes: HashMap<String, ValidatorSlash> =
+            HashMap::from_iter(slash.iter().map(|s| (s.address.clone(), s.clone())));
 
         // this is linear over current, but better than turn it in to a map
         for (validator, prev) in current {
-            let tombstoned = tombstones.contains(validator);
-            let jailed = jailing.contains(validator);
-            // Tombstoned has precedence over jailing
-            let slash_ratio = if tombstoned {
-                slash_ratio_tombstoning
-            } else if jailed {
-                slash_ratio_jailing
-            } else {
-                continue;
-            };
-            // Apply slash ratio over current
-            let slash_amount = *prev * slash_ratio;
-            *prev -= slash_amount;
-            // Apply to request as well, to avoid unbonding msg
-            let mut request = self
-                .bond_requests
-                .may_load(storage, validator)?
-                .unwrap_or_default();
-            request = request.saturating_sub(slash_amount);
-            self.bond_requests.save(storage, validator, &request)?;
+            match slashes.get(validator) {
+                None => continue,
+                Some(s) => {
+                    // Just deduct the slash amount passed by the chain
+                    *prev -= s.slash_amount;
+                    // Apply to request as well (to avoid unbonding msg)
+                    let mut request = self
+                        .bond_requests
+                        .may_load(deps.storage, validator)?
+                        .unwrap_or_default();
+                    request = request.saturating_sub(s.slash_amount);
+                    self.bond_requests.save(deps.storage, validator, &request)?;
+                }
+            }
         }
         Ok(())
     }
@@ -240,19 +217,12 @@ impl VirtualStakingContract<'_> {
         jailed: &[String],
         unjailed: &[String],
         tombstoned: &[String],
+        slashed: &[ValidatorSlash],
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        // Account for tombstoned validators. Will be processed in handle_epoch
-        if !tombstoned.is_empty() {
-            self.tombstone_requests.update(deps.storage, |mut old| {
-                old.extend_from_slice(tombstoned);
-                Ok::<_, ContractError>(old)
-            })?;
-        }
-
-        // Account for jailed validators. Will be processed in handle_epoch
-        if !jailed.is_empty() {
-            self.jail_requests.update(deps.storage, |mut old| {
-                old.extend_from_slice(jailed);
+        // Account for slashed validators. Will be processed in handle_epoch
+        if !slashed.is_empty() {
+            self.slash_requests.update(deps.storage, |mut old| {
+                old.extend_from_slice(slashed);
                 Ok::<_, ContractError>(old)
             })?;
         }
@@ -269,7 +239,7 @@ impl VirtualStakingContract<'_> {
                 Ok::<_, ContractError>(old)
             })?;
         }
-        // Send all updates to the Converter.
+        // Send all updates to the converter.
         let cfg = self.config.load(deps.storage)?;
         let msg = converter_api::ExecMsg::ValsetUpdate {
             additions: additions.to_vec(),
@@ -278,6 +248,17 @@ impl VirtualStakingContract<'_> {
             jailed: jailed.to_vec(),
             unjailed: unjailed.to_vec(),
             tombstoned: tombstoned.to_vec(),
+            slashed: slashed
+                .iter()
+                .map(|s| ValidatorSlashInfo {
+                    address: s.address.clone(),
+                    infraction_height: s.infraction_height,
+                    infraction_time: s.infraction_time,
+                    power: s.power,
+                    slash_amount: coin(s.slash_amount.u128(), cfg.denom.clone()),
+                    slash_ratio: s.slash_ratio.clone(),
+                })
+                .collect(),
         };
         let msg = WasmMsg::Execute {
             contract_addr: cfg.converter.to_string(),
@@ -640,6 +621,7 @@ pub fn sudo(
             jailed,
             unjailed,
             tombstoned,
+            slashed,
         } => VirtualStakingContract::new().handle_valset_update(
             deps,
             &additions.unwrap_or_default(),
@@ -648,6 +630,7 @@ pub fn sudo(
             &jailed.unwrap_or_default(),
             &unjailed.unwrap_or_default(),
             &tombstoned.unwrap_or_default(),
+            &slashed.unwrap_or_default(),
         ),
     }
 }
@@ -663,6 +646,7 @@ mod tests {
     use cosmwasm_std::{
         coins, from_binary,
         testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
+        Decimal,
     };
     use mesh_bindings::{BondStatusResponse, SlashRatioResponse};
     use serde::de::DeserializeOwned;
@@ -873,8 +857,8 @@ mod tests {
             .assert_bond(&[("val1", (10u128, &denom)), ("val2", (20u128, &denom))])
             .assert_rewards(&[]);
 
-        // val1 is being jailed
-        contract.jail(deps.as_mut(), "val1");
+        // val1 is being jailed and slashed for being offline
+        contract.jail(deps.as_mut(), "val1", Decimal::percent(10), Uint128::one());
 
         contract
             .hit_epoch(deps.as_mut())
@@ -940,7 +924,7 @@ mod tests {
         contract.quick_bond(deps.as_mut(), "val1", 20);
 
         // And it's being jailed at the same time
-        contract.jail(deps.as_mut(), "val1");
+        contract.jail(deps.as_mut(), "val1", Decimal::percent(10), Uint128::one());
 
         contract
             .hit_epoch(deps.as_mut())
@@ -972,7 +956,7 @@ mod tests {
         contract.quick_unbond(deps.as_mut(), "val1", 10);
 
         // And it's being jailed at the same time
-        contract.jail(deps.as_mut(), "val1");
+        contract.jail(deps.as_mut(), "val1", Decimal::percent(10), Uint128::one());
 
         contract
             .hit_epoch(deps.as_mut())
@@ -1045,7 +1029,7 @@ mod tests {
             .assert_rewards(&[]);
 
         // Val1 is being tombstoned
-        contract.tombstone(deps.as_mut(), "val1");
+        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(5));
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after tombstoning
@@ -1087,7 +1071,7 @@ mod tests {
         contract.quick_bond(deps.as_mut(), "val1", 20);
 
         // And it's being tombstoned at the same time
-        contract.tombstone(deps.as_mut(), "val1");
+        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
 
         contract
             .hit_epoch(deps.as_mut())
@@ -1127,7 +1111,7 @@ mod tests {
         contract.quick_unbond(deps.as_mut(), "val1", 10);
 
         // And it's being tombstoned at the same time
-        contract.tombstone(deps.as_mut(), "val1");
+        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
 
         contract
             .hit_epoch(deps.as_mut())
@@ -1320,9 +1304,21 @@ mod tests {
             validator: &[&str],
             amount: u128,
         ) -> Result<Response, ContractError>;
-        fn jail(&self, deps: DepsMut, val: &str);
+        fn jail(
+            &self,
+            deps: DepsMut,
+            val: &str,
+            nominal_slash_ratio: Decimal,
+            slash_amount: Uint128,
+        );
         fn unjail(&self, deps: DepsMut, val: &str);
-        fn tombstone(&self, deps: DepsMut, val: &str);
+        fn tombstone(
+            &self,
+            deps: DepsMut,
+            val: &str,
+            nominal_slash_ratio: Decimal,
+            slash_amount: Uint128,
+        );
         fn add_val(&self, deps: DepsMut, val: &str);
         fn remove_val(&self, deps: DepsMut, val: &str);
     }
@@ -1423,8 +1419,14 @@ mod tests {
             )
         }
 
-        fn jail(&self, deps: DepsMut, val: &str) {
-            // We sent a removal along with the jail, as this is what the blockchain does
+        fn jail(
+            &self,
+            deps: DepsMut,
+            val: &str,
+            nominal_slash_ratio: Decimal,
+            slash_amount: Uint128,
+        ) {
+            // We sent a removal and a slash along with the jail, as this is what the blockchain does
             self.handle_valset_update(
                 deps,
                 &[],
@@ -1433,18 +1435,53 @@ mod tests {
                 &[val.to_string()],
                 &[],
                 &[],
+                &[ValidatorSlash {
+                    address: val.to_string(),
+                    height: 0,
+                    time: 0,
+                    infraction_height: 0,
+                    infraction_time: 0,
+                    power: 0,
+                    slash_amount,
+                    slash_ratio: nominal_slash_ratio.to_string(),
+                }],
             )
             .unwrap();
         }
 
         fn unjail(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[], &[], &[], &[val.to_string()], &[])
+            self.handle_valset_update(deps, &[], &[], &[], &[], &[val.to_string()], &[], &[])
                 .unwrap();
         }
 
-        fn tombstone(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[], &[], &[], &[], &[val.to_string()])
-                .unwrap();
+        fn tombstone(
+            &self,
+            deps: DepsMut,
+            val: &str,
+            nominal_slash_ratio: Decimal,
+            slash_amount: Uint128,
+        ) {
+            // We sent a slash along with the tombstone, as this is what the blockchain does
+            self.handle_valset_update(
+                deps,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[val.to_string()],
+                &[ValidatorSlash {
+                    address: val.to_string(),
+                    height: 0,
+                    time: 0,
+                    infraction_height: 0,
+                    infraction_time: 0,
+                    power: 0,
+                    slash_amount,
+                    slash_ratio: nominal_slash_ratio.to_string(),
+                }],
+            )
+            .unwrap();
         }
 
         fn add_val(&self, deps: DepsMut, val: &str) {
@@ -1454,12 +1491,12 @@ mod tests {
                 max_commission: Default::default(),
                 max_change_rate: Default::default(),
             };
-            self.handle_valset_update(deps, &[val], &[], &[], &[], &[], &[])
+            self.handle_valset_update(deps, &[val], &[], &[], &[], &[], &[], &[])
                 .unwrap();
         }
 
         fn remove_val(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[val.to_string()], &[], &[], &[], &[])
+            self.handle_valset_update(deps, &[], &[val.to_string()], &[], &[], &[], &[], &[])
                 .unwrap();
         }
     }

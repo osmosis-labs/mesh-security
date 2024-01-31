@@ -8,7 +8,7 @@ use cw_utils::{nonpayable, PaymentError};
 use std::cmp::min;
 use std::collections::HashSet;
 
-use mesh_apis::converter_api::RewardInfo;
+use mesh_apis::converter_api::{RewardInfo, ValidatorSlashInfo};
 use sylvia::contract;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 
@@ -58,11 +58,6 @@ impl Default for ExternalStakingContract<'_> {
     fn default() -> Self {
         Self::new()
     }
-}
-
-pub(crate) enum SlashingReason {
-    Offline,
-    DoubleSign,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -464,31 +459,48 @@ impl ExternalStakingContract<'_> {
         jailed: &[String],
         unjailed: &[String],
         tombstoned: &[String],
+        slashed: &[ValidatorSlashInfo],
     ) -> Result<(Event, Vec<WasmMsg>), ContractError> {
         let cfg = self.config.load(deps.storage)?;
         let mut msgs = vec![];
         let mut valopers: HashSet<String> = HashSet::new();
-        // Process tombstoning events first. Once tombstoned, a validator cannot be changed anymore.
-        for valoper in tombstoned {
-            // Check that the validator is active at height and slash it if that is the case
-            let active =
-                self.val_set
-                    .is_active_validator_at_height(deps.storage, valoper, height)?;
-            self.val_set
-                .tombstone_validator(deps.storage, valoper, height, time)?;
+        // Process slashing events first.
+        for valinfo in slashed {
+            let valoper = &valinfo.address;
+            // Check that the validator is active at the infraction height, and slash it if that is the case
+            let active = self.val_set.is_active_validator_at_height(
+                deps.storage,
+                valoper,
+                valinfo.infraction_height,
+            )?;
             if active {
+                let slash_ratio = match valinfo.slash_ratio.parse::<Decimal>() {
+                    Ok(ratio) => ratio,
+                    Err(_) => {
+                        return Err(ContractError::InvalidSlashRatio);
+                    }
+                };
                 // Slash the validator, if bonded
                 let slash_msg = self.handle_slashing(
                     &env,
                     deps.storage,
                     &cfg,
                     valoper,
-                    SlashingReason::DoubleSign,
+                    slash_ratio,
+                    valinfo.slash_amount.amount,
+                    valinfo.infraction_time,
                 )?;
                 if let Some(msg) = slash_msg {
                     msgs.push(msg)
                 }
             }
+            // Maintenance
+            valopers.insert(valoper.clone());
+        }
+        // Process tombstoning events second. Once tombstoned, a validator cannot be changed anymore.
+        for valoper in tombstoned {
+            self.val_set
+                .tombstone_validator(deps.storage, valoper, height, time)?;
             // Maintenance
             valopers.insert(valoper.clone());
         }
@@ -502,25 +514,8 @@ impl ExternalStakingContract<'_> {
         }
         // Process jailings. Non-existent validators will be ignored.
         for valoper in jailed {
-            // Check that the validator is active at height and slash it if that is the case
-            let active =
-                self.val_set
-                    .is_active_validator_at_height(deps.storage, valoper, height)?;
             self.val_set
                 .jail_validator(deps.storage, valoper, height, time)?;
-            if active {
-                // Slash the validator, if bonded
-                let slash_msg = self.handle_slashing(
-                    &env,
-                    deps.storage,
-                    &cfg,
-                    valoper,
-                    SlashingReason::Offline,
-                )?;
-                if let Some(msg) = slash_msg {
-                    msgs.push(msg)
-                }
-            }
             // Maintenance
             valopers.insert(valoper.clone());
         }
@@ -587,6 +582,16 @@ impl ExternalStakingContract<'_> {
         }
         if !tombstoned.is_empty() {
             event = event.add_attribute("tombstoned", tombstoned.join(","));
+        }
+        if !slashed.is_empty() {
+            event = event.add_attribute(
+                "slashed",
+                slashed
+                    .iter()
+                    .map(|v| v.address.clone())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
         }
         Ok((event, msgs))
     }
@@ -866,13 +871,12 @@ impl ExternalStakingContract<'_> {
         storage: &mut dyn Storage,
         config: &Config,
         validator: &str,
-        reason: SlashingReason,
+        slash_ratio: Decimal,
+        slash_amount: Uint128,
+        infraction_time: u64,
     ) -> Result<Option<WasmMsg>, ContractError> {
-        let slash_ratio = match reason {
-            SlashingReason::Offline => config.slash_ratio.offline,
-            SlashingReason::DoubleSign => config.slash_ratio.double_sign,
-        };
         // Get the list of users staking via this validator
+        // FIXME: It should be over the *historical* (at infraction height) stake. Not over the *current* stake
         let users = self
             .stakes
             .stake
@@ -888,6 +892,12 @@ impl ExternalStakingContract<'_> {
         if users.is_empty() {
             return Ok(None);
         }
+        // Compute effective slash ratio
+        let total_amount = users
+            .iter()
+            .map(|(_, stake)| stake.stake.high())
+            .sum::<Uint128>();
+        let effective_slash_ratio = Decimal::from_ratio(slash_amount, total_amount);
 
         // Slash their stake in passing
         let mut slash_infos = vec![];
@@ -900,7 +910,7 @@ impl ExternalStakingContract<'_> {
             if stake_high.is_zero() {
                 continue;
             }
-            let stake_slash = stake_high * slash_ratio;
+            let stake_slash = stake_high * effective_slash_ratio;
             // Requires proper saturating methods in commit/rollback_stake/unstake
             stake.stake = ValueRange::new(
                 stake_low.saturating_sub(stake_slash),
@@ -918,8 +928,13 @@ impl ExternalStakingContract<'_> {
             distribution.total_stake = distribution.total_stake.saturating_sub(stake_slash); // Don't fail if pending bond tx
             self.distribution.save(storage, validator, &distribution)?;
 
-            // Slash the unbondings
-            let pending_slashed = stake.slash_pending(&env.block, slash_ratio);
+            // Slash the unbondings. We use the nominal slash ratio here, like in the blockchain
+            let pending_slashed = stake.slash_pending(
+                &env.block,
+                slash_ratio,
+                config.unbonding_period,
+                infraction_time,
+            );
 
             self.stakes.stake.save(storage, (&user, validator), stake)?;
 
@@ -1516,6 +1531,7 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[],
             )
             .unwrap();
 
@@ -1558,7 +1574,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_tombstoning_slashes() {
+    fn valset_update_tombstoning_and_slashing() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -1581,6 +1597,7 @@ mod tests {
                 100,
                 1234,
                 &adds,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -1612,7 +1629,7 @@ mod tests {
         // Commit stake
         contract.commit_stake(stake_deps, 1).unwrap();
 
-        // Bob is tombstoned next
+        // Bob is slashed and tombstoned next
         let update_ctx = ctx.branch();
         let tombs = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -1627,11 +1644,25 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[ValidatorSlashInfo {
+                    address: "bob".to_string(),
+                    infraction_height: 200,
+                    infraction_time: 2345,
+                    power: 100,
+                    slash_amount: coin(10, "uosmo"),
+                    slash_ratio: Decimal::percent(10).to_string(),
+                }],
             )
             .unwrap();
 
         // Check the event
-        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("tombstoned", "bob"),
+                Attribute::new("slashed", "bob")
+            ]
+        );
 
         // Check the slashing message
         assert_eq!(msgs.len(), 1);
@@ -1674,7 +1705,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_tombstoning_slashes_pending_bond() {
+    fn valset_update_tombstoning_and_slashing_pending_bond() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -1697,6 +1728,7 @@ mod tests {
                 100,
                 1234,
                 &adds,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -1727,7 +1759,7 @@ mod tests {
             .unwrap();
         // Stake tx is pending
 
-        // Bob is tombstoned next
+        // Bob is slashed and tombstoned next
         let update_ctx = ctx.branch();
         let tombs = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -1742,11 +1774,25 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[ValidatorSlashInfo {
+                    address: "bob".to_string(),
+                    infraction_height: 200,
+                    infraction_time: 2345,
+                    power: 100,
+                    slash_amount: coin(10, "uosmo"),
+                    slash_ratio: Decimal::percent(10).to_string(),
+                }],
             )
             .unwrap();
 
         // Check the event
-        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("tombstoned", "bob"),
+                Attribute::new("slashed", "bob")
+            ]
+        );
 
         // Check the slashing message
         assert_eq!(msgs.len(), 1);
@@ -1789,7 +1835,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_tombstoning_slashes_pending_unbond() {
+    fn valset_update_tombstoning_and_slashing_pending_unbond() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -1812,6 +1858,7 @@ mod tests {
                 100,
                 1234,
                 &adds,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -1856,7 +1903,7 @@ mod tests {
             .unwrap();
         // Unstake tx is pending
 
-        // Bob is tombstoned next
+        // Bob is slashed and tombstoned next
         let update_ctx = ctx.branch();
         let tombs = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -1871,11 +1918,25 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[ValidatorSlashInfo {
+                    address: "bob".to_string(),
+                    infraction_height: 200,
+                    infraction_time: 2345,
+                    power: 100,
+                    slash_amount: coin(10, "uosmo"),
+                    slash_ratio: Decimal::percent(10).to_string(),
+                }],
             )
             .unwrap();
 
         // Check the event
-        assert_eq!(evt.attributes, vec![Attribute::new("tombstoned", "bob"),]);
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("tombstoned", "bob"),
+                Attribute::new("slashed", "bob")
+            ]
+        );
 
         // Check the slashing message
         assert_eq!(msgs.len(), 1);
@@ -1918,7 +1979,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_tombstoning_slashes_no_stake() {
+    fn valset_update_tombstoning_and_slashing_no_stake() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -1946,11 +2007,12 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
         // Bob has no cross-delegations (which can be possible)
 
-        // Bob is tombstoned next
+        // Bob is slashed and tombstoned next
         let update_ctx = ctx.branch();
         let tombs = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -1965,6 +2027,7 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[],
             )
             .unwrap();
 
@@ -2027,6 +2090,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -2045,6 +2109,7 @@ mod tests {
                 &[],
                 &[],
                 &tombs,
+                &[],
             )
             .unwrap();
 
@@ -2109,6 +2174,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -2125,6 +2191,7 @@ mod tests {
                 &[],
                 &[],
                 &jails,
+                &[],
                 &[],
                 &[],
             )
@@ -2150,6 +2217,7 @@ mod tests {
                 &[],
                 &[],
                 &unjails,
+                &[],
                 &[],
             )
             .unwrap();
@@ -2181,7 +2249,7 @@ mod tests {
     }
 
     #[test]
-    fn valset_update_jailing_slashes() {
+    fn valset_update_jailing_and_slashing() {
         let mut deps = mock_dependencies();
         let (mut ctx, contract) = do_instantiate(deps.as_mut());
 
@@ -2204,6 +2272,7 @@ mod tests {
                 100,
                 1234,
                 &adds,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -2235,7 +2304,7 @@ mod tests {
         // Commit stake
         contract.commit_stake(stake_deps, 1).unwrap();
 
-        // Bob is jailed next
+        // Bob is slashed and jailed next
         let update_ctx = ctx.branch();
         let jails = vec!["bob".to_string()];
         let (evt, msgs) = contract
@@ -2250,11 +2319,25 @@ mod tests {
                 &jails,
                 &[],
                 &[],
+                &[ValidatorSlashInfo {
+                    address: "bob".to_string(),
+                    infraction_height: 200,
+                    infraction_time: 2345,
+                    power: 100,
+                    slash_amount: coin(10, "uosmo"),
+                    slash_ratio: Decimal::percent(10).to_string(),
+                }],
             )
             .unwrap();
 
         // Check the event
-        assert_eq!(evt.attributes, vec![Attribute::new("jailed", "bob"),]);
+        assert_eq!(
+            evt.attributes,
+            vec![
+                Attribute::new("jailed", "bob"),
+                Attribute::new("slashed", "bob")
+            ]
+        );
 
         // Check the slashing message
         assert_eq!(msgs.len(), 1);
@@ -2325,6 +2408,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -2339,6 +2423,7 @@ mod tests {
                 2345,
                 &[],
                 &rems,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -2403,6 +2488,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -2417,6 +2503,7 @@ mod tests {
                 2345,
                 &[],
                 &rems,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -2442,6 +2529,7 @@ mod tests {
                 &[],
                 &[],
                 &upds,
+                &[],
                 &[],
                 &[],
                 &[],

@@ -105,7 +105,6 @@ impl NativeStakingContract<'_> {
         }
         for validator in jailed {
             // Slash the validator (if bonded)
-            // TODO: Slash with a different slash ratio! (downtime / offline slash ratio)
             let slash_msg =
                 self.handle_slashing(&mut deps, &cfg, validator, SlashingReason::Offline)?;
             if let Some(msg) = slash_msg {
@@ -157,7 +156,6 @@ impl NativeStakingContract<'_> {
 
             if delegation.is_zero() {
                 // Maintenance: Remove delegator from map in passing
-                // TODO: Remove zero amount delegations from delegators map periodically
                 self.delegators.remove(deps.storage, (validator, owner));
                 continue;
             }
