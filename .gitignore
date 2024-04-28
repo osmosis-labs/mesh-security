@@ -34,7 +34,7 @@ node_modules
 
 
 # Codegen builds in src
-src
+/src
 
 
 # Optional npm cache directory
