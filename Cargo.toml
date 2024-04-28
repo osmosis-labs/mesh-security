@@ -24,7 +24,7 @@ mesh-converter    = { path = "./contracts/consumer/converter" }
 mesh-simple-price-feed    = { path = "./contracts/consumer/simple-price-feed" }
 mesh-virtual-staking    = { path = "./contracts/consumer/virtual-staking" }
 
-sylvia           = "0.8.1"
+sylvia           = "0.10.1"
 cosmwasm-schema  = "1.5.4"
 cosmwasm-std     = { version = "1.5.4", features = ["ibc3", "cosmwasm_1_3"] }
 cw-storage-plus  = "1.2.0"
@@ -39,7 +39,7 @@ itertools = "0.12.1"
 
 # dev deps
 anyhow        = "1"
-cw-multi-test = "0.16.5"
+cw-multi-test = "0.20"
 derivative    = "2"
 test-case     = "3.3.1"
 

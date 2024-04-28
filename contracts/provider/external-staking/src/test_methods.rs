@@ -11,15 +11,15 @@ pub trait TestMethods {
     type Error: From<StdError>;
 
     /// Commits a pending stake.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
 
     /// Rollbacks a pending stake.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
 
     /// Updates the active validator set.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_set_active_validator(
         &self,
         ctx: ExecCtx,
@@ -29,7 +29,7 @@ pub trait TestMethods {
     ) -> Result<Response, Self::Error>;
 
     /// Sets validator as `unbonded`.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_remove_validator(
         &self,
         ctx: ExecCtx,
@@ -38,7 +38,7 @@ pub trait TestMethods {
         time: u64,
     ) -> Result<Response, Self::Error>;
 
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_tombstone_validator(
         &self,
         ctx: ExecCtx,
@@ -48,15 +48,15 @@ pub trait TestMethods {
     ) -> Result<Response, Self::Error>;
 
     /// Commits a pending unstake.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
 
     /// Rollbacks a pending unstake.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
 
     /// Distribute rewards.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_distribute_rewards(
         &self,
         ctx: ExecCtx,
@@ -65,7 +65,7 @@ pub trait TestMethods {
     ) -> Result<Response, Self::Error>;
 
     /// Batch distribute rewards.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_distribute_rewards_batch(
         &self,
         ctx: ExecCtx,
@@ -74,7 +74,7 @@ pub trait TestMethods {
     ) -> Result<Response, Self::Error>;
 
     /// Commits a withdraw rewards transaction.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_commit_withdraw_rewards(
         &self,
         ctx: ExecCtx,
@@ -82,7 +82,7 @@ pub trait TestMethods {
     ) -> Result<Response, Self::Error>;
 
     /// Rollbacks a withdraw rewards transaction.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_rollback_withdraw_rewards(
         &self,
         ctx: ExecCtx,
@@ -92,7 +92,7 @@ pub trait TestMethods {
     /// Slashes a validator.
     /// This will not perform any check on the validator's state in the validator set, which should
     /// be done before calling this function.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_handle_slashing(
         &self,
         ctx: ExecCtx,

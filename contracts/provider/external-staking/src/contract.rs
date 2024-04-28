@@ -62,9 +62,9 @@ impl Default for ExternalStakingContract<'_> {
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
-#[error(ContractError)]
-#[messages(cross_staking_api as CrossStakingApi)]
-#[messages(crate::test_methods as TestMethods)]
+#[sv::error(ContractError)]
+#[sv::messages(cross_staking_api as CrossStakingApi)]
+#[sv::messages(crate::test_methods as TestMethods)]
 impl ExternalStakingContract<'_> {
     pub fn new() -> Self {
         Self {
@@ -86,7 +86,7 @@ impl ExternalStakingContract<'_> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[msg(instantiate)]
+    #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx,
@@ -245,7 +245,7 @@ impl ExternalStakingContract<'_> {
 
     /// Schedules tokens for release, adding them to the pending unbonds. After the unbonding period
     /// passes, funds are ready to be released through a `withdraw_unbonded` call by the user.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     pub fn unstake(
         &self,
         ctx: ExecCtx,
@@ -600,7 +600,7 @@ impl ExternalStakingContract<'_> {
     ///
     /// Tokens to be claimed have to be unbond before by calling the `unbond` message, and
     /// their unbonding period must have passed.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     pub fn withdraw_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
@@ -727,7 +727,7 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Withdraw rewards from staking via given validator
-    #[msg(exec)]
+    #[sv::msg(exec)]
     pub fn withdraw_rewards(
         &self,
         ctx: ExecCtx,
@@ -956,14 +956,14 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Queries for contract configuration
-    #[msg(query)]
+    #[sv::msg(query)]
     pub fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         let resp = self.config.load(ctx.deps.storage)?.into();
         Ok(resp)
     }
 
     /// Query for the endpoint that can connect
-    #[msg(query)]
+    #[sv::msg(query)]
     pub fn authorized_endpoint(
         &self,
         ctx: QueryCtx,
@@ -973,14 +973,14 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Query for the endpoint that can connect
-    #[msg(query)]
+    #[sv::msg(query)]
     pub fn ibc_channel(&self, ctx: QueryCtx) -> Result<IbcChannelResponse, ContractError> {
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
         Ok(IbcChannelResponse { channel })
     }
 
     /// Show all external validators that we know to be active (and can delegate to)
-    #[msg(query)]
+    #[sv::msg(query)]
     pub fn list_active_validators(
         &self,
         ctx: QueryCtx,
@@ -995,7 +995,7 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Show all external validators that we know about, along with their state.
-    #[msg(query)]
+    #[sv::msg(query)]
     pub fn list_validators(
         &self,
         ctx: QueryCtx,
@@ -1020,7 +1020,7 @@ impl ExternalStakingContract<'_> {
     /// Queries for stake info
     ///
     /// If stake does not exist for (user, validator) pair, the zero-stake is returned
-    #[msg(query)]
+    #[sv::msg(query)]
     pub fn stake(
         &self,
         ctx: QueryCtx,
@@ -1040,7 +1040,7 @@ impl ExternalStakingContract<'_> {
     /// Paginated list of user stakes.
     ///
     /// `start_after` is the last validator of previous page
-    #[msg(query)]
+    #[sv::msg(query)]
     pub fn stakes(
         &self,
         ctx: QueryCtx,
@@ -1076,7 +1076,7 @@ impl ExternalStakingContract<'_> {
     }
 
     /// Queries a pending tx.
-    #[msg(query)]
+    #[sv::msg(query)]
     fn pending_tx(&self, ctx: QueryCtx, tx_id: u64) -> Result<TxResponse, ContractError> {
         let resp = self.pending_txs.load(ctx.deps.storage, tx_id)?;
         Ok(resp)
@@ -1085,7 +1085,7 @@ impl ExternalStakingContract<'_> {
     /// Queries for all pending txs.
     /// Reports txs in descending order (newest first).
     /// `start_after` is the last tx id included in previous page
-    #[msg(query)]
+    #[sv::msg(query)]
     fn all_pending_txs_desc(
         &self,
         ctx: QueryCtx,
@@ -1112,7 +1112,7 @@ impl ExternalStakingContract<'_> {
 
     /// Returns how much rewards are to be withdrawn by particular user, from the particular
     /// validator staking
-    #[msg(query)]
+    #[sv::msg(query)]
     pub fn pending_rewards(
         &self,
         ctx: QueryCtx,
@@ -1142,7 +1142,7 @@ impl ExternalStakingContract<'_> {
 
     /// Returns how much rewards are to be withdrawn by particular user, iterating over all validators.
     /// This is like stakes is to stake query, but for rewards.
-    #[msg(query)]
+    #[sv::msg(query)]
     pub fn all_pending_rewards(
         &self,
         ctx: QueryCtx,
@@ -1211,11 +1211,11 @@ pub mod cross_staking {
     use mesh_apis::{cross_staking_api::CrossStakingApi, local_staking_api::SlashRatioResponse};
 
     #[contract(module=crate::contract)]
-    #[messages(mesh_apis::cross_staking_api as CrossStakingApi)]
+    #[sv::messages(mesh_apis::cross_staking_api as CrossStakingApi)]
     impl CrossStakingApi for ExternalStakingContract<'_> {
         type Error = ContractError;
 
-        #[msg(exec)]
+        #[sv::msg(exec)]
         fn receive_virtual_stake(
             &self,
             ctx: ExecCtx,
@@ -1299,7 +1299,7 @@ pub mod cross_staking {
             Ok(resp)
         }
 
-        #[msg(exec)]
+        #[sv::msg(exec)]
         fn burn_virtual_stake(
             &self,
             ctx: ExecCtx,
@@ -1433,7 +1433,7 @@ pub mod cross_staking {
             Ok(resp)
         }
 
-        #[msg(query)]
+        #[sv::msg(query)]
         fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, ContractError> {
             let Config { slash_ratio, .. } = self.config.load(ctx.deps.storage)?;
             Ok(SlashRatioResponse {

@@ -2,7 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     to_json_binary, Addr, Binary, Coin, Decimal, Deps, Response, StdError, WasmMsg,
 };
-use sylvia::types::{ExecCtx, QueryCtx};
+use sylvia::types::{ExecCtx, QueryCtx, SudoCtx};
 use sylvia::{interface, schemars};
 
 #[cw_serde]
@@ -20,7 +20,7 @@ pub trait LocalStakingApi {
     /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
     /// specified in msg with it.
     /// Msg is custom to each implementation of the staking contract and opaque to the vault
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn receive_stake(
         &self,
         ctx: ExecCtx,
@@ -37,7 +37,7 @@ pub trait LocalStakingApi {
     /// propagation, the native staking contract needs to burn / discount the indicated slashing amount.
     /// If `validator` is set, undelegate preferentially from it first.
     /// If it is not set, undelegate evenly from all validators the user has stake in.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn burn_stake(
         &self,
         ctx: ExecCtx,
@@ -47,8 +47,20 @@ pub trait LocalStakingApi {
     ) -> Result<Response, Self::Error>;
 
     /// Returns the maximum percentage that can be slashed
-    #[msg(query)]
+    #[sv::msg(query)]
     fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, Self::Error>;
+
+    /// `SudoMsg::Jailing` should be called every time there's a validator set update that implies
+    /// slashing.
+    ///  - Temporary removal of a validator from the active set due to jailing.
+    ///  - Permanent removal (i.e. tombstoning) of a validator from the active set.
+    #[sv::msg(sudo)]
+    fn jailing(
+        &self,
+        ctx: SudoCtx,
+        jailed: Option<Vec<String>>,
+        tombstoned: Option<Vec<String>>,
+    ) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]
@@ -68,7 +80,7 @@ impl LocalStakingApiHelper {
         // amount to stake on that contract
         funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {
-        let msg = LocalStakingApiExecMsg::ReceiveStake { owner, msg };
+        let msg = sv::LocalStakingApiExecMsg::ReceiveStake { owner, msg };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_json_binary(&msg)?,
@@ -83,7 +95,7 @@ impl LocalStakingApiHelper {
         amount: Coin,
         validator: Option<String>,
     ) -> Result<WasmMsg, StdError> {
-        let msg = LocalStakingApiExecMsg::BurnStake {
+        let msg = sv::LocalStakingApiExecMsg::BurnStake {
             owner: owner.to_string(),
             validator,
             amount,
@@ -97,19 +109,7 @@ impl LocalStakingApiHelper {
     }
 
     pub fn max_slash(&self, deps: Deps) -> Result<SlashRatioResponse, StdError> {
-        let query = LocalStakingApiQueryMsg::MaxSlash {};
+        let query = sv::LocalStakingApiQueryMsg::MaxSlash {};
         deps.querier.query_wasm_smart(&self.0, &query)
     }
-}
-
-#[cw_serde]
-pub enum SudoMsg {
-    /// `SudoMsg::Jailing` should be called every time there's a validator set update that implies
-    /// slashing.
-    ///  - Temporary removal of a validator from the active set due to jailing.
-    ///  - Permanent removal (i.e. tombstoning) of a validator from the active set.
-    Jailing {
-        jailed: Option<Vec<String>>,
-        tombstoned: Option<Vec<String>>,
-    },
 }

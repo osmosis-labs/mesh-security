@@ -2,7 +2,7 @@ use cosmwasm_std::{ensure_eq, Decimal, Response};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
@@ -20,8 +20,8 @@ pub struct SimplePriceFeedContract<'a> {
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
-#[error(ContractError)]
-#[messages(price_feed_api as PriceFeedApi)]
+#[sv::error(ContractError)]
+#[sv::messages(price_feed_api as PriceFeedApi)]
 impl SimplePriceFeedContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -31,7 +31,7 @@ impl SimplePriceFeedContract<'_> {
 
     /// Sets up the contract with an initial price.
     /// If the owner is not set in the message, it defaults to info.sender.
-    #[msg(instantiate)]
+    #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx,
@@ -53,7 +53,7 @@ impl SimplePriceFeedContract<'_> {
         Ok(Response::new())
     }
 
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn update_price(
         &self,
         ctx: ExecCtx,
@@ -75,7 +75,7 @@ impl SimplePriceFeedContract<'_> {
         Ok(Response::new())
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
         Ok(ConfigResponse {
@@ -85,18 +85,20 @@ impl SimplePriceFeedContract<'_> {
     }
 }
 
-#[contract]
-#[messages(price_feed_api as PriceFeedApi)]
 impl PriceFeedApi for SimplePriceFeedContract<'_> {
     type Error = ContractError;
 
     /// Return the price of the foreign token. That is, how many native tokens
     /// are needed to buy one foreign token.
-    #[msg(query)]
     fn price(&self, ctx: QueryCtx) -> Result<PriceResponse, Self::Error> {
         let config = self.config.load(ctx.deps.storage)?;
         Ok(PriceResponse {
             native_per_foreign: config.native_per_foreign,
         })
+    }
+
+    /// Nothing needs to be done on the epoch
+    fn handle_epoch(&self, _ctx: SudoCtx) -> Result<Response, Self::Error> {
+        Ok(Response::new())
     }
 }

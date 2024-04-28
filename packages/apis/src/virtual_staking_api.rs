@@ -13,13 +13,13 @@ pub trait VirtualStakingApi {
     /// Requests to bond tokens to a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance.
     /// If the max cap is 0, then this will immediately return an error.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn bond(&self, ctx: ExecCtx, validator: String, amount: Coin) -> Result<Response, Self::Error>;
 
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
     /// If the virtual staking contract doesn't have at least amount tokens staked to the given validator, this will return an error.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn unbond(
         &self,
         ctx: ExecCtx,
@@ -30,7 +30,7 @@ pub trait VirtualStakingApi {
     /// Burns stake. This is called when the user's collateral is slashed and, as part of slashing
     /// propagation, the virtual staking contract needs to burn / discount the indicated slashing amount.
     /// Undelegates evenly from all `validators`.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn burn(
         &self,
         ctx: ExecCtx,

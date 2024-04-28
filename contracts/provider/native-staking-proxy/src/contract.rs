@@ -25,7 +25,7 @@ pub struct NativeStakingProxyContract<'a> {
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
-#[error(ContractError)]
+#[sv::error(ContractError)]
 impl NativeStakingProxyContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -36,7 +36,7 @@ impl NativeStakingProxyContract<'_> {
 
     /// The caller of the instantiation will be the native-staking contract.
     /// We stake `funds.info` on the given validator
-    #[msg(instantiate)]
+    #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx,
@@ -75,7 +75,7 @@ impl NativeStakingProxyContract<'_> {
 
     /// Stakes the tokens from `info.funds` to the given validator.
     /// Can only be called by the parent contract
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn stake(&self, ctx: ExecCtx, validator: String) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
@@ -91,7 +91,7 @@ impl NativeStakingProxyContract<'_> {
     /// Burn `amount` tokens from the given validator, if set.
     /// If `validator` is not set, undelegate evenly from all validators the user has stake.
     /// Can only be called by the parent contract
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn burn(
         &self,
         ctx: ExecCtx,
@@ -179,7 +179,7 @@ impl NativeStakingProxyContract<'_> {
 
     /// Re-stakes the given amount from the one validator to another on behalf of the calling user.
     /// Returns an error if the user doesn't have such stake
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn restake(
         &self,
         ctx: ExecCtx,
@@ -207,7 +207,7 @@ impl NativeStakingProxyContract<'_> {
     }
 
     /// Vote with the user's stake (over all delegations)
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn vote(
         &self,
         ctx: ExecCtx,
@@ -224,7 +224,7 @@ impl NativeStakingProxyContract<'_> {
     }
 
     /// Vote with the user's stake (over all delegations)
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn vote_weighted(
         &self,
         ctx: ExecCtx,
@@ -246,7 +246,7 @@ impl NativeStakingProxyContract<'_> {
     /// If the caller has any delegations, withdraw all rewards from those delegations and
     /// send the tokens to the caller.
     /// NOTE: must make sure not to release unbonded tokens
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn withdraw_rewards(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
@@ -270,7 +270,7 @@ impl NativeStakingProxyContract<'_> {
     /// Unstakes the given amount from the given validator on behalf of the calling user.
     /// Returns an error if the user doesn't have such stake.
     /// After the unbonding period, it will allow the user to claim the tokens (returning to vault)
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn unstake(
         &self,
         ctx: ExecCtx,
@@ -295,7 +295,7 @@ impl NativeStakingProxyContract<'_> {
     /// Releases any tokens that have fully unbonded from a previous unstake.
     /// This will go back to the parent via `release_proxy_stake`.
     /// Errors if the proxy doesn't have any liquid tokens
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn release_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
@@ -318,7 +318,7 @@ impl NativeStakingProxyContract<'_> {
         }
 
         // Send them to the parent contract via `release_proxy_stake`
-        let msg = to_json_binary(&native_staking_callback::ExecMsg::ReleaseProxyStake {})?;
+        let msg = to_json_binary(&native_staking_callback::sv::ExecMsg::ReleaseProxyStake {})?;
 
         let wasm_msg = Execute {
             contract_addr: cfg.parent.to_string(),
@@ -328,7 +328,7 @@ impl NativeStakingProxyContract<'_> {
         Ok(Response::new().add_message(wasm_msg))
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         Ok(self.config.load(ctx.deps.storage)?)
     }

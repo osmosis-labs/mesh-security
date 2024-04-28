@@ -12,7 +12,7 @@ pub trait ConverterApi {
 
     /// Rewards tokens (in native staking denom) are sent alongside the message, and should be distributed to all
     /// stakers who staked on this validator.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn distribute_reward(&self, ctx: ExecCtx, validator: String) -> Result<Response, Self::Error>;
 
     /// This is a batch for of distribute_reward, including the payment for multiple validators.
@@ -20,7 +20,7 @@ pub trait ConverterApi {
     ///
     /// info.funds sent along with the message should be the sum of all rewards for all validators,
     /// in the native staking denom.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn distribute_rewards(
         &self,
         ctx: ExecCtx,
@@ -31,7 +31,7 @@ pub trait ConverterApi {
     ///
     /// TODO: pubkeys need to be part of the Validator struct (requires CosmWasm support).
     #[allow(clippy::too_many_arguments)]
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn valset_update(
         &self,
         ctx: ExecCtx,

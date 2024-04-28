@@ -42,7 +42,7 @@ pub struct VirtualStakingMock<'a> {
 
 #[contract]
 #[error(ContractError)]
-#[messages(virtual_staking_api as VirtualStakingApi)]
+#[sv::messages(virtual_staking_api as VirtualStakingApi)]
 impl VirtualStakingMock<'_> {
     pub const fn new() -> Self {
         Self {
@@ -51,7 +51,7 @@ impl VirtualStakingMock<'_> {
         }
     }
 
-    #[msg(instantiate)]
+    #[sv::msg(instantiate)]
     pub fn instantiate(&self, ctx: InstantiateCtx) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
         let denom = ctx.deps.querier.query_bonded_denom()?;
@@ -63,7 +63,7 @@ impl VirtualStakingMock<'_> {
         Ok(Response::new())
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         let denom = cfg.denom;
@@ -71,7 +71,7 @@ impl VirtualStakingMock<'_> {
         Ok(ConfigResponse { denom, converter })
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn stake(&self, ctx: QueryCtx, validator: String) -> Result<StakeResponse, ContractError> {
         let stake = self
             .stake
@@ -80,7 +80,7 @@ impl VirtualStakingMock<'_> {
         Ok(StakeResponse { stake })
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn all_stake(&self, ctx: QueryCtx) -> Result<AllStakeResponse, ContractError> {
         let stakes = self
             .stake
@@ -107,14 +107,14 @@ pub struct ConfigResponse {
 }
 
 #[contract]
-#[messages(virtual_staking_api as VirtualStakingApi)]
+#[sv::messages(virtual_staking_api as VirtualStakingApi)]
 impl VirtualStakingApi for VirtualStakingMock<'_> {
     type Error = ContractError;
 
     /// Requests to bond tokens to a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance.
     /// If the max cap is 0, then this will immediately return an error.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn bond(&self, ctx: ExecCtx, validator: String, amount: Coin) -> Result<Response, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
@@ -137,7 +137,7 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
     /// If the virtual staking contract doesn't have at least amount tokens staked to the given validator, this will return an error.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn unbond(
         &self,
         ctx: ExecCtx,
@@ -165,7 +165,7 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     /// Requests to unbond and burn tokens from a lists of validators (one or more). This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
     /// If the virtual staking contract doesn't have at least amount tokens staked over the given validators, this will return an error.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn burn(
         &self,
         ctx: ExecCtx,

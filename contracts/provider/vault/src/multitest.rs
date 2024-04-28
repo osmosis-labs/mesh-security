@@ -1,20 +1,18 @@
 use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Uint128, Validator};
 use cw_multi_test::{App as MtApp, StakingInfo};
 use mesh_apis::ibc::AddValidator;
-use mesh_external_staking::contract::multitest_utils::ExternalStakingContractProxy;
+use mesh_external_staking::contract::sv::mt::ExternalStakingContractProxy;
 use mesh_external_staking::msg::{AuthorizedEndpoint, ReceiveVirtualStake, StakeInfo};
 use mesh_external_staking::state::SlashRatio;
 use mesh_external_staking::state::Stake;
-use mesh_external_staking::test_methods_impl::test_utils::TestMethods;
-use mesh_native_staking::contract::multitest_utils::NativeStakingContractProxy;
-use mesh_native_staking_proxy::contract::multitest_utils::NativeStakingProxyContractProxy;
+use mesh_native_staking::contract::sv::mt::NativeStakingContractProxy;
+use mesh_native_staking_proxy::contract::sv::mt::NativeStakingProxyContractProxy;
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{Tx, ValueRange};
 use sylvia::multitest::App;
 
 use crate::contract;
-use crate::contract::multitest_utils::VaultContractProxy;
-use crate::contract::test_utils::VaultApi;
+use crate::contract::sv::mt::VaultContractProxy;
 use crate::error::ContractError;
 use crate::msg::{
     AccountResponse, AllAccountsResponseItem, AllActiveExternalStakingResponse, LienResponse,
@@ -31,7 +29,7 @@ const SLASHING_PERCENTAGE: u64 = 10;
 
 /// App initialization
 fn init_app(users: &[&str], amounts: &[u128]) -> App<MtApp> {
-    let mut app = MtApp::new(|router, _api, storage| {
+    let mut app = App::new(|router, _api, storage| {
         for (&user, amount) in std::iter::zip(users, amounts) {
             router
                 .bank
@@ -117,15 +115,14 @@ fn setup_inner<'app>(
     Option<NativeStakingContractProxy<'app, MtApp>>,
     ExternalStakingContractProxy<'app, MtApp>,
 ) {
-    let vault_code = contract::multitest_utils::CodeId::store_code(app);
+    let vault_code = contract::sv::mt::CodeId::store_code(app);
 
     let staking_init_info = if local_staking {
-        let native_staking_code =
-            mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
+        let native_staking_code = mesh_native_staking::contract::sv::mt::CodeId::store_code(app);
         let native_staking_proxy_code =
-            mesh_native_staking_proxy::contract::multitest_utils::CodeId::store_code(app);
+            mesh_native_staking_proxy::contract::sv::mt::CodeId::store_code(app);
 
-        let native_staking_inst_msg = mesh_native_staking::contract::InstantiateMsg {
+        let native_staking_inst_msg = mesh_native_staking::contract::sv::InstantiateMsg {
             denom: OSMO.to_string(),
             slash_ratio_dsign: Decimal::percent(10),
             slash_ratio_offline: Decimal::percent(10),
@@ -163,8 +160,7 @@ fn setup_cross_stake<'app>(
     unbond_period: u64,
 ) -> ExternalStakingContractProxy<'app, MtApp> {
     // FIXME: Code shouldn't be duplicated
-    let cross_staking_code =
-        mesh_external_staking::contract::multitest_utils::CodeId::store_code(app);
+    let cross_staking_code = mesh_external_staking::contract::sv::mt::CodeId::store_code(app);
     // FIXME: Connection endpoint should be unique
     let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
 
@@ -275,11 +271,6 @@ fn process_staking_unbondings(app: &App<MtApp>) {
     let mut block_info = app.block_info();
     block_info.time = block_info.time.plus_seconds(61);
     app.set_block(block_info);
-    app.app_mut()
-        .sudo(cw_multi_test::SudoMsg::Staking(
-            cw_multi_test::StakingSudo::ProcessQueue {},
-        ))
-        .unwrap();
 }
 
 #[track_caller]

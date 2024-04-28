@@ -5,14 +5,15 @@ use cosmwasm_std::{
 use cw_multi_test::{App as MtApp, StakingInfo};
 use sylvia::multitest::App;
 
-use mesh_native_staking_proxy::contract::multitest_utils::{
+use mesh_apis::local_staking_api::sv::mt::LocalStakingApiProxy;
+use mesh_native_staking_proxy::contract::sv::mt::{
     CodeId as NativeStakingProxyCodeId, NativeStakingProxyContractProxy,
 };
 use mesh_sync::ValueRange;
-
-use crate::local_staking_api::test_utils::LocalStakingApi;
+use mesh_vault::contract::sv::mt::VaultContractProxy;
 
 use crate::contract;
+use crate::contract::sv::mt::NativeStakingContractProxy;
 use crate::error::ContractError;
 use crate::msg;
 use crate::msg::{OwnerByProxyResponse, ProxyByOwnerResponse};
@@ -107,7 +108,7 @@ fn instantiation() {
     let owner = "vault"; // Owner of the staking contract (i. e. the vault contract)
 
     let staking_proxy_code = NativeStakingProxyCodeId::store_code(&app);
-    let staking_code = contract::multitest_utils::CodeId::store_code(&app);
+    let staking_code = contract::sv::mt::CodeId::store_code(&app);
 
     let staking = staking_code
         .instantiate(
@@ -123,7 +124,7 @@ fn instantiation() {
     let config = staking.config().unwrap();
     assert_eq!(config.denom, OSMO);
 
-    let res = staking.local_staking_api_proxy().max_slash().unwrap();
+    let res = staking.max_slash().unwrap();
     assert_eq!(res.slash_ratio_dsign, slashing_rate_dsign());
 }
 
@@ -141,7 +142,7 @@ fn receiving_stake() {
 
     // Contracts setup
     let staking_proxy_code = NativeStakingProxyCodeId::store_code(&app);
-    let staking_code = contract::multitest_utils::CodeId::store_code(&app);
+    let staking_code = contract::sv::mt::CodeId::store_code(&app);
 
     let staking = staking_code
         .instantiate(
@@ -167,7 +168,6 @@ fn receiving_stake() {
     })
     .unwrap();
     staking
-        .local_staking_api_proxy()
         .receive_stake(user1.to_owned(), stake_msg)
         .with_funds(&coins(100, OSMO))
         .call(owner) // called from vault
@@ -191,7 +191,6 @@ fn receiving_stake() {
     })
     .unwrap();
     staking
-        .local_staking_api_proxy()
         .receive_stake(user1.to_owned(), stake_msg)
         .with_funds(&coins(50, OSMO))
         .call(owner) // called from vault
@@ -222,7 +221,6 @@ fn receiving_stake() {
     })
     .unwrap();
     staking
-        .local_staking_api_proxy()
         .receive_stake(user2.to_owned(), stake_msg)
         .with_funds(&coins(10, OSMO))
         .call(owner) // called from vault
@@ -256,15 +254,15 @@ fn releasing_proxy_stake() {
     let app = app(&[(user, (300, OSMO))], &[validator]);
 
     // Contracts setup
-    let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(&app);
-    let staking_code = contract::multitest_utils::CodeId::store_code(&app);
+    let vault_code = mesh_vault::contract::sv::mt::CodeId::store_code(&app);
+    let staking_code = contract::sv::mt::CodeId::store_code(&app);
     let staking_proxy_code = NativeStakingProxyCodeId::store_code(&app);
 
     // Instantiate vault msg
     let staking_init_info = mesh_vault::msg::StakingInitInfo {
         admin: None,
         code_id: staking_code.code_id(),
-        msg: to_json_binary(&crate::contract::InstantiateMsg {
+        msg: to_json_binary(&crate::contract::sv::InstantiateMsg {
             denom: OSMO.to_owned(),
             proxy_code_id: staking_proxy_code.code_id(),
             slash_ratio_dsign: slashing_rate_dsign(),
@@ -339,11 +337,6 @@ fn releasing_proxy_stake() {
     staking_proxy
         .unstake(validator.to_string(), coin(100, OSMO))
         .call(user)
-        .unwrap();
-    app.app_mut()
-        .sudo(cw_multi_test::SudoMsg::Staking(
-            cw_multi_test::StakingSudo::ProcessQueue {},
-        ))
         .unwrap();
     staking_proxy.release_unbonded().call(user).unwrap();
 
