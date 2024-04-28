@@ -1,4 +1,4 @@
-use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Uint128, Validator};
+use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Uint128, Validator};
 use cw_multi_test::{App as MtApp, StakingInfo};
 use mesh_apis::ibc::AddValidator;
 use mesh_external_staking::contract::multitest_utils::ExternalStakingContractProxy;
@@ -135,7 +135,7 @@ fn setup_inner<'app>(
         Some(StakingInitInfo {
             admin: None,
             code_id: native_staking_code.code_id(),
-            msg: to_binary(&native_staking_inst_msg).unwrap(),
+            msg: to_json_binary(&native_staking_inst_msg).unwrap(),
             label: None,
         })
     } else {
@@ -223,7 +223,7 @@ fn stake_locally(
     };
 
     vault
-        .stake_local(coin(stake, OSMO), to_binary(&msg).unwrap())
+        .stake_local(coin(stake, OSMO), to_json_binary(&msg).unwrap())
         .call(user)
 }
 
@@ -239,7 +239,7 @@ fn stake_remotely(
             .stake_remote(
                 cross_staking.contract_addr.to_string(),
                 coin(*amount, OSMO),
-                to_binary(&ReceiveVirtualStake {
+                to_json_binary(&ReceiveVirtualStake {
                     validator: validator.to_string(),
                 })
                 .unwrap(),
@@ -470,7 +470,7 @@ fn local_staking_disabled() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: remote_val.to_string(),
             })
             .unwrap(),
@@ -723,7 +723,7 @@ fn stake_cross() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validator.to_string(),
             })
             .unwrap(),
@@ -796,7 +796,7 @@ fn stake_cross() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(150, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validator.to_string(),
             })
             .unwrap(),
@@ -862,7 +862,7 @@ fn stake_cross() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(150, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validator.to_string(),
             })
             .unwrap(),
@@ -1118,7 +1118,7 @@ fn stake_cross_txs() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validator.to_string(),
             })
             .unwrap(),
@@ -1136,7 +1136,7 @@ fn stake_cross_txs() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(50, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validator.to_string(),
             })
             .unwrap(),
@@ -1151,7 +1151,7 @@ fn stake_cross_txs() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validator.to_string(),
             })
             .unwrap(),
@@ -1327,7 +1327,7 @@ fn stake_cross_rollback_tx() {
         .stake_remote(
             cross_staking.contract_addr.to_string(),
             coin(100, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validator.to_string(),
             })
             .unwrap(),
@@ -1484,7 +1484,7 @@ fn multiple_stakes() {
         .stake_remote(
             cross_staking2.contract_addr.to_string(),
             coin(400, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validator.to_string(),
             })
             .unwrap(),

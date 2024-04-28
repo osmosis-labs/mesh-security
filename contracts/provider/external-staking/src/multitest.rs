@@ -2,7 +2,7 @@ mod utils;
 
 use anyhow::Result as AnyResult;
 
-use cosmwasm_std::{coin, coins, to_binary, Decimal, Uint128};
+use cosmwasm_std::{coin, coins, to_json_binary, Decimal, Uint128};
 use mesh_native_staking::contract::multitest_utils::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::contract::multitest_utils::CodeId as NativeStakingProxyCodeId;
@@ -60,7 +60,7 @@ fn setup<'app>(
     let staking_init = StakingInitInfo {
         admin: None,
         code_id: native_staking_code.code_id(),
-        msg: to_binary(&native_staking_instantiate)?,
+        msg: to_json_binary(&native_staking_instantiate)?,
         label: Some("Native staking".to_owned()),
     };
 
@@ -133,7 +133,7 @@ fn staking() {
 
     /*
     // Fail to stake on non-registered validator
-    let msg = to_binary(&ReceiveVirtualStake {
+    let msg = to_json_binary(&ReceiveVirtualStake {
         validator: "unknown".to_string(),
     })
     .unwrap();
@@ -836,7 +836,7 @@ fn distribution() {
         .stake_remote(
             contract.contract_addr.to_string(),
             coin(300, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validators[1].to_string(),
             })
             .unwrap(),
@@ -1683,7 +1683,7 @@ fn slashing_pending_tx_bond() {
         .stake_remote(
             contract.contract_addr.to_string(),
             coin(50, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validators[0].into(),
             })
             .unwrap(),
@@ -1770,7 +1770,7 @@ fn slashing_pending_tx_bond_rolled_back() {
         .stake_remote(
             contract.contract_addr.to_string(),
             coin(50, OSMO),
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validators[0].into(),
             })
             .unwrap(),

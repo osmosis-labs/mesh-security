@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_slice, to_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
+    from_json, to_json_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
     IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcMsg,
     IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
     Timestamp,
@@ -65,7 +65,7 @@ pub fn ibc_channel_open(
     }
 
     // we handshake with the counterparty version, it must not be empty
-    let v: ProtocolVersion = from_slice(counterparty_version.as_bytes())?;
+    let v: ProtocolVersion = from_json(counterparty_version.as_bytes())?;
     // if we can build a response to this, then it is compatible. And we use the highest version there
     let version = v.build_response(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?;
 
@@ -125,7 +125,7 @@ pub fn ibc_packet_ack(
     _env: Env,
     msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let ack: PriceFeedProviderAck = from_slice(&msg.acknowledgement.data)?;
+    let ack: PriceFeedProviderAck = from_json(&msg.acknowledgement.data)?;
     let PriceFeedProviderAck::Update { time, twap } = ack;
     let contract = RemotePriceFeedContract::new();
     contract.update_twap(deps, time, twap)?;
@@ -149,7 +149,7 @@ pub(crate) fn make_ibc_packet(
 ) -> Result<IbcMsg, ContractError> {
     Ok(IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id,
-        data: to_binary(&packet)?,
+        data: to_json_binary(&packet)?,
         timeout: packet_timeout(now),
     })
 }

@@ -1,4 +1,4 @@
-use cosmwasm_std::{ensure_eq, from_slice, to_binary, Binary, Coin, Response, SubMsg, WasmMsg};
+use cosmwasm_std::{ensure_eq, from_json, to_json_binary, Binary, Coin, Response, SubMsg, WasmMsg};
 use cw_utils::{must_pay, nonpayable};
 use sylvia::types::QueryCtx;
 use sylvia::{contract, types::ExecCtx};
@@ -37,7 +37,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         let _paid = must_pay(&ctx.info, &cfg.denom)?;
 
         // Parse message to find validator to stake on
-        let StakeMsg { validator } = from_slice(&msg)?;
+        let StakeMsg { validator } = from_json(&msg)?;
 
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 
@@ -52,7 +52,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         {
             None => {
                 // Instantiate proxy contract and send funds to stake, with reply handling on success
-                let msg = to_binary(&mesh_native_staking_proxy::contract::InstantiateMsg {
+                let msg = to_json_binary(&mesh_native_staking_proxy::contract::InstantiateMsg {
                     denom: cfg.denom,
                     owner: owner.clone(),
                     validator,
@@ -69,8 +69,9 @@ impl LocalStakingApi for NativeStakingContract<'_> {
             }
             Some(proxy_addr) => {
                 // Send stake message with funds to the proxy contract
-                let msg =
-                    to_binary(&mesh_native_staking_proxy::contract::ExecMsg::Stake { validator })?;
+                let msg = to_json_binary(&mesh_native_staking_proxy::contract::ExecMsg::Stake {
+                    validator,
+                })?;
                 let wasm_msg = WasmMsg::Execute {
                     contract_addr: proxy_addr.into(),
                     msg,
@@ -109,7 +110,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
             None => Err(ContractError::NoProxy(owner)),
             Some(proxy_addr) => {
                 // Send burn message to the proxy contract
-                let msg = to_binary(&mesh_native_staking_proxy::contract::ExecMsg::Burn {
+                let msg = to_json_binary(&mesh_native_staking_proxy::contract::ExecMsg::Burn {
                     validator,
                     amount,
                 })?;

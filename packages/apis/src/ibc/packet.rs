@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_binary, Binary, Coin, Decimal, StdResult, Timestamp};
+use cosmwasm_std::{to_json_binary, Binary, Coin, Decimal, StdResult, Timestamp};
 
 use crate::converter_api::{RewardInfo, ValidatorSlashInfo};
 
@@ -166,14 +166,14 @@ pub enum AckWrapper {
 
 // create a serialized success message
 pub fn ack_success<T: serde::Serialize>(data: &T) -> StdResult<Binary> {
-    let res = AckWrapper::Result(to_binary(data)?);
-    to_binary(&res)
+    let res = AckWrapper::Result(to_json_binary(data)?);
+    to_json_binary(&res)
 }
 
 // create a serialized error message
 pub fn ack_fail<E: Error>(err: E) -> StdResult<Binary> {
     let res = AckWrapper::Error(err.to_string());
-    to_binary(&res)
+    to_json_binary(&res)
 }
 
 #[cw_serde]

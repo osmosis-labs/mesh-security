@@ -1,7 +1,7 @@
 use cosmwasm_std::WasmMsg::Execute;
 use cosmwasm_std::{
-    coin, ensure_eq, to_binary, Coin, DistributionMsg, GovMsg, Response, StakingMsg, VoteOption,
-    WeightedVoteOption,
+    coin, ensure_eq, to_json_binary, Coin, DistributionMsg, GovMsg, Response, StakingMsg,
+    VoteOption, WeightedVoteOption,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -69,7 +69,7 @@ impl NativeStakingProxyContract<'_> {
         };
 
         // Pass owner to caller's reply handler
-        let owner_msg = to_binary(&OwnerMsg { owner })?;
+        let owner_msg = to_json_binary(&OwnerMsg { owner })?;
         Ok(res.add_message(set_withdrawal).set_data(owner_msg))
     }
 
@@ -318,7 +318,7 @@ impl NativeStakingProxyContract<'_> {
         }
 
         // Send them to the parent contract via `release_proxy_stake`
-        let msg = to_binary(&native_staking_callback::ExecMsg::ReleaseProxyStake {})?;
+        let msg = to_json_binary(&native_staking_callback::ExecMsg::ReleaseProxyStake {})?;
 
         let wasm_msg = Execute {
             contract_addr: cfg.parent.to_string(),
@@ -411,7 +411,7 @@ mod tests {
         // Assert data payload
         assert_eq!(
             res.data.unwrap(),
-            to_binary(&OwnerMsg {
+            to_json_binary(&OwnerMsg {
                 owner: OWNER.to_owned(),
             })
             .unwrap()

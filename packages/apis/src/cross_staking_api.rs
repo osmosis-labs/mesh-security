@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_binary, Addr, Binary, Coin, Deps, Response, StdError, WasmMsg};
+use cosmwasm_std::{to_json_binary, Addr, Binary, Coin, Deps, Response, StdError, WasmMsg};
 use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
@@ -72,7 +72,7 @@ impl CrossStakingApiHelper {
         };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds,
         };
         Ok(wasm)
@@ -91,7 +91,7 @@ impl CrossStakingApiHelper {
         };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
         Ok(wasm)

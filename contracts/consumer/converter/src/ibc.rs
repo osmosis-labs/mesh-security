@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_slice, to_binary, DepsMut, Env, Event, Ibc3ChannelOpenResponse, IbcBasicResponse,
+    from_json, to_json_binary, DepsMut, Env, Event, Ibc3ChannelOpenResponse, IbcBasicResponse,
     IbcChannel, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg,
     IbcChannelOpenResponse, IbcMsg, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg,
     IbcReceiveResponse, IbcTimeout, Validator,
@@ -73,7 +73,7 @@ pub fn ibc_channel_open(
             version: SUPPORTED_IBC_PROTOCOL_VERSION.to_string(),
         }
     } else {
-        let v: ProtocolVersion = from_slice(channel.version.as_bytes())?;
+        let v: ProtocolVersion = from_json(channel.version.as_bytes())?;
         // if we can build a response to this, then it is compatible. And we use the highest version there
         v.build_response(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?
     };
@@ -108,7 +108,7 @@ pub fn ibc_channel_connect(
 
     // Ensure the counterparty responded with a version we support.
     // Note: here, we error if it is higher than what we proposed originally
-    let v: ProtocolVersion = from_slice(counterparty_version.as_bytes())?;
+    let v: ProtocolVersion = from_json(counterparty_version.as_bytes())?;
     v.verify_compatibility(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?;
 
     // store the channel
@@ -162,7 +162,7 @@ pub(crate) fn valset_update_msg(
     };
     let msg = IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id.clone(),
-        data: to_binary(&packet)?,
+        data: to_json_binary(&packet)?,
         timeout: packet_timeout_validator(env),
     };
     Ok(msg)
@@ -188,7 +188,7 @@ pub fn ibc_packet_receive(
     _env: Env,
     msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
-    let packet: ProviderPacket = from_slice(&msg.packet.data)?;
+    let packet: ProviderPacket = from_json(&msg.packet.data)?;
     let contract = ConverterContract::new();
     let res = match packet {
         ProviderPacket::Stake {
@@ -246,7 +246,7 @@ pub fn ibc_packet_ack(
     _env: Env,
     msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let ack: AckWrapper = from_slice(&msg.acknowledgement.data)?;
+    let ack: AckWrapper = from_json(&msg.acknowledgement.data)?;
     let mut res = IbcBasicResponse::new();
     match ack {
         AckWrapper::Result(_) => {}
@@ -286,7 +286,7 @@ pub(crate) fn make_ibc_packet(
     let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
     Ok(IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id,
-        data: to_binary(&packet)?,
+        data: to_json_binary(&packet)?,
         timeout: packet_timeout_rewards(&ctx.env),
     })
 }

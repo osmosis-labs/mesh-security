@@ -1,7 +1,7 @@
 use anyhow::Result as AnyResult;
 
 use cosmwasm_std::testing::mock_env;
-use cosmwasm_std::{coin, coins, to_binary, Addr, Decimal, Validator};
+use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Validator};
 
 use cw_multi_test::{App as MtApp, StakingInfo, StakingSudo, SudoMsg};
 
@@ -65,7 +65,7 @@ fn setup<'app>(
     let staking_init_info = mesh_vault::msg::StakingInitInfo {
         admin: None,
         code_id: staking_code.code_id(),
-        msg: to_binary(&mesh_native_staking::contract::InstantiateMsg {
+        msg: to_json_binary(&mesh_native_staking::contract::InstantiateMsg {
             denom: OSMO.to_owned(),
             proxy_code_id: staking_proxy_code.code_id(),
             slash_ratio_dsign: Decimal::percent(5),
@@ -94,7 +94,7 @@ fn setup<'app>(
         vault
             .stake_local(
                 coin(100, OSMO),
-                to_binary(&mesh_native_staking::msg::StakeMsg {
+                to_json_binary(&mesh_native_staking::msg::StakeMsg {
                     validator: validator.to_owned(),
                 })
                 .unwrap(),
@@ -175,7 +175,7 @@ fn staking() {
     vault
         .stake_local(
             coin(20, OSMO),
-            to_binary(&mesh_native_staking::msg::StakeMsg {
+            to_json_binary(&mesh_native_staking::msg::StakeMsg {
                 validator: validator.to_owned(),
             })
             .unwrap(),
