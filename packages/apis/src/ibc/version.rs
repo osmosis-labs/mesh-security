@@ -1,4 +1,4 @@
-use cosmwasm_std::{to_vec, IbcOrder, StdResult};
+use cosmwasm_std::{to_json_vec, IbcOrder, StdResult};
 use schemars::JsonSchema;
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -108,7 +108,7 @@ impl ProtocolVersion {
     }
 
     pub fn to_string(&self) -> StdResult<String> {
-        let bytes = to_vec(self)?;
+        let bytes = to_json_vec(self)?;
         Ok(String::from_utf8(bytes)?)
     }
 }
