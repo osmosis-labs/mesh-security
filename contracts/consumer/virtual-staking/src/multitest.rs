@@ -15,10 +15,9 @@ struct SetupArgs<'a> {
 }
 
 struct SetupResponse<'a> {
-    price_feed:
-        mesh_simple_price_feed::contract::multitest_utils::SimplePriceFeedContractProxy<'a, MtApp>,
-    converter: mesh_converter::contract::multitest_utils::ConverterContractProxy<'a, MtApp>,
-    virtual_staking: contract::multitest_utils::VirtualStakingContractProxy<'a, MtApp>,
+    price_feed: mesh_simple_price_feed::contract::sv::mt::SimplePriceFeedContractProxy<'a, MtApp>,
+    converter: mesh_converter::contract::sv::mt::ConverterContractProxy<'a, MtApp>,
+    virtual_staking: contract::sv::mt::VirtualStakingContractProxy<'a, MtApp>,
 }
 
 fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
@@ -29,10 +28,9 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
         native_per_foreign,
     } = args;
 
-    let price_feed_code =
-        mesh_simple_price_feed::contract::multitest_utils::CodeId::store_code(app);
-    let virtual_staking_code = contract::multitest_utils::CodeId::store_code(app);
-    let converter_code = mesh_converter::contract::multitest_utils::CodeId::store_code(app);
+    let price_feed_code = mesh_simple_price_feed::contract::sv::mt::CodeId::store_code(app);
+    let virtual_staking_code = contract::sv::mt::CodeId::store_code(app);
+    let converter_code = mesh_converter::contract::sv::mt::CodeId::store_code(app);
 
     let price_feed = price_feed_code
         .instantiate(native_per_foreign, None)
@@ -56,7 +54,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
     let config = converter.config().unwrap();
     let virtual_staking_addr = Addr::unchecked(config.virtual_staking);
     let virtual_staking =
-        contract::multitest_utils::VirtualStakingContractProxy::new(virtual_staking_addr, app);
+        contract::sv::mt::VirtualStakingContractProxy::new(virtual_staking_addr, app);
 
     SetupResponse {
         price_feed,

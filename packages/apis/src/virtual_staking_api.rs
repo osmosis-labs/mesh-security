@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Coin, Response, StdError, Uint128, Validator};
-use sylvia::types::ExecCtx;
+use sylvia::types::{ExecCtx, SudoCtx};
 use sylvia::{interface, schemars};
 
 /// The Virtual Staking API is called from the converter contract to bond and (instantly) unbond tokens.
@@ -37,16 +37,15 @@ pub trait VirtualStakingApi {
         validators: Vec<String>,
         amount: Coin,
     ) -> Result<Response, Self::Error>;
-}
 
-#[cw_serde]
-pub enum SudoMsg {
     /// SudoMsg::HandleEpoch{} should be called once per epoch by the sdk (in EndBlock).
     /// It allows the virtual staking contract to bond or unbond any pending requests, as well
     /// as to perform a rebalance if needed (over the max cap).
     ///
     /// It should also withdraw all pending rewards here, and send them to the converter contract.
-    HandleEpoch {},
+    #[sv::msg(sudo)]
+    fn handle_epoch(&self, ctx: SudoCtx) -> Result<Response, Self::Error>;
+
     /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update:
     ///  - Addition of a new validator to the active validator set.
     ///  - Temporary removal of a validator from the active set. (i.e. `unbonded` state).
@@ -54,7 +53,10 @@ pub enum SudoMsg {
     ///  - Temporary removal of a validator from the active set due to jailing. Implies slashing.
     ///  - Addition of an existing validator to the active validator set.
     ///  - Permanent removal (i.e. tombstoning) of a validator from the active set. Implies slashing
-    ValsetUpdate {
+    #[sv::msg(sudo)]
+    fn handle_valset_update(
+        &self,
+        ctx: SudoCtx,
         additions: Option<Vec<Validator>>,
         removals: Option<Vec<String>>,
         updated: Option<Vec<Validator>>,
@@ -62,7 +64,7 @@ pub enum SudoMsg {
         unjailed: Option<Vec<String>>,
         tombstoned: Option<Vec<String>>,
         slashed: Option<Vec<ValidatorSlash>>,
-    },
+    ) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]

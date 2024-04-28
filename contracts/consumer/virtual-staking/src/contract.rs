@@ -13,10 +13,10 @@ use mesh_apis::converter_api::{self, RewardInfo, ValidatorSlashInfo};
 use mesh_bindings::{
     TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
 };
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
-use mesh_apis::virtual_staking_api::{self, SudoMsg, ValidatorSlash, VirtualStakingApi};
+use mesh_apis::virtual_staking_api::{self, ValidatorSlash, VirtualStakingApi};
 
 use crate::error::ContractError;
 use crate::msg::ConfigResponse;
@@ -53,8 +53,10 @@ pub struct VirtualStakingContract<'a> {
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
-#[error(ContractError)]
-#[messages(virtual_staking_api as VirtualStakingApi)]
+#[sv::error(ContractError)]
+#[sv::messages(virtual_staking_api as VirtualStakingApi)]
+// FIXME: how to handle custom messages for sudo?
+#[sv::custom(query=VirtualStakeCustomQuery, msg=VirtualStakeCustomMsg)]
 // #[sv::override_entry_point(sudo=sudo(SudoMsg))] // Disabled because lack of custom query support
 impl VirtualStakingContract<'_> {
     pub const fn new() -> Self {
@@ -69,7 +71,7 @@ impl VirtualStakingContract<'_> {
     }
 
     /// The caller of the instantiation will be the converter contract
-    #[msg(instantiate)]
+    #[sv::msg(instantiate)]
     pub fn instantiate(&self, ctx: InstantiateCtx) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
         let denom = ctx.deps.querier.query_bonded_denom()?;
@@ -88,90 +90,9 @@ impl VirtualStakingContract<'_> {
         Ok(Response::new())
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         Ok(self.config.load(ctx.deps.storage)?.into())
-    }
-
-    /**
-     * This is called once per epoch to withdraw all rewards and rebalance the bonded tokens.
-     * Note: the current implementation may (repeatedly) fail if any validator was slashed or fell out
-     * of the active set.
-     *
-     * The basic logic for calculating rebalance is:
-     * 1. Get all bond requests
-     * 2. Sum the total amount
-     * 3. If the sum <= max_cap then use collected requests as is
-     * 4. If the sum > max_cap,
-     *   a. calculate multiplier Decimal(max_cap / sum)
-     *   b. multiply every element of the collected requests in place.
-     * 5. Find diff between collected (normalized) requests and last bonding amounts (which go up, which down).
-     * 6. Transform diff into unbond and bond requests, sorting so all unbond happen first
-     */
-    fn handle_epoch(
-        &self,
-        mut deps: DepsMut<VirtualStakeCustomQuery>,
-        env: Env,
-    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        // withdraw rewards
-        let bonded = self.bonded.load(deps.storage)?;
-        let inactive = self.inactive.load(deps.storage)?;
-        let withdraw = withdraw_reward_msgs(deps.branch(), &bonded, &inactive);
-        let mut resp = Response::new().add_submessages(withdraw);
-
-        let bond =
-            TokenQuerier::new(&deps.querier).bond_status(env.contract.address.to_string())?;
-        let max_cap = bond.cap.amount;
-        // If 0 max cap, then we assume all tokens were force unbonded already, and just return the withdraw rewards
-        // call and set bonded to empty
-        // TODO: verify this behavior with SDK module (otherwise we send unbond message)
-        if max_cap.is_zero() {
-            self.bonded.save(deps.storage, &vec![])?;
-            return Ok(resp);
-        }
-
-        let config = self.config.load(deps.storage)?;
-        // Make current bonded mutable
-        let mut current = bonded;
-        // Process slashes due to tombstoning (unbonded) or jailing, over bond_requests and current
-        let slash = self.slash_requests.load(deps.storage)?;
-        if !slash.is_empty() {
-            self.adjust_slashings(deps.branch(), &mut current, &slash)?;
-            // Update inactive list. Defensive, as it should already been updated in handle_valset_update, due to removals
-            self.inactive.update(deps.branch().storage, |mut old| {
-                old.extend_from_slice(&slash.iter().map(|v| v.address.clone()).collect::<Vec<_>>());
-                old.dedup();
-                Ok::<_, ContractError>(old)
-            })?;
-            // Clear up slash requests
-            self.slash_requests.save(deps.storage, &vec![])?;
-        }
-
-        // calculate what the delegations should be when we are done
-        let mut requests: Vec<(String, Uint128)> = self
-            .bond_requests
-            .range(
-                deps.as_ref().storage,
-                None,
-                None,
-                cosmwasm_std::Order::Ascending,
-            )
-            .collect::<Result<_, _>>()?;
-        let total_requested: Uint128 = requests.iter().map(|(_, v)| v).sum();
-        if total_requested > max_cap {
-            for (_, v) in requests.iter_mut() {
-                *v = (*v * max_cap) / total_requested;
-            }
-        }
-
-        // Save the future values
-        self.bonded.save(deps.branch().storage, &requests)?;
-
-        // Compare these two to make bond/unbond calls as needed
-        let rebalance = calculate_rebalance(current, requests, &config.denom);
-        resp = resp.add_messages(rebalance);
-
-        Ok(resp)
     }
 
     fn adjust_slashings(
@@ -203,73 +124,7 @@ impl VirtualStakingContract<'_> {
         Ok(())
     }
 
-    /**
-     * This is called every time there's a change of the active validator set.
-     *
-     */
-    #[allow(clippy::too_many_arguments)]
-    fn handle_valset_update(
-        &self,
-        deps: DepsMut<VirtualStakeCustomQuery>,
-        additions: &[Validator],
-        removals: &[String],
-        updated: &[Validator],
-        jailed: &[String],
-        unjailed: &[String],
-        tombstoned: &[String],
-        slashed: &[ValidatorSlash],
-    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        // Account for slashed validators. Will be processed in handle_epoch
-        if !slashed.is_empty() {
-            self.slash_requests.update(deps.storage, |mut old| {
-                old.extend_from_slice(slashed);
-                Ok::<_, ContractError>(old)
-            })?;
-        }
-
-        // Update inactive list.
-        // We ignore `unjailed` as it's not clear they make the validator active again or not.
-        if !removals.is_empty() || !additions.is_empty() {
-            self.inactive.update(deps.storage, |mut old| {
-                // Add removals
-                old.extend_from_slice(removals);
-                // Filter additions
-                old.retain(|v| !additions.iter().any(|a| a.address == *v));
-                old.dedup();
-                Ok::<_, ContractError>(old)
-            })?;
-        }
-        // Send all updates to the converter.
-        let cfg = self.config.load(deps.storage)?;
-        let msg = converter_api::ExecMsg::ValsetUpdate {
-            additions: additions.to_vec(),
-            removals: removals.to_vec(),
-            updated: updated.to_vec(),
-            jailed: jailed.to_vec(),
-            unjailed: unjailed.to_vec(),
-            tombstoned: tombstoned.to_vec(),
-            slashed: slashed
-                .iter()
-                .map(|s| ValidatorSlashInfo {
-                    address: s.address.clone(),
-                    infraction_height: s.infraction_height,
-                    infraction_time: s.infraction_time,
-                    power: s.power,
-                    slash_amount: coin(s.slash_amount.u128(), cfg.denom.clone()),
-                    slash_ratio: s.slash_ratio.clone(),
-                })
-                .collect(),
-        };
-        let msg = WasmMsg::Execute {
-            contract_addr: cfg.converter.to_string(),
-            msg: to_json_binary(&msg)?,
-            funds: vec![],
-        };
-        let resp = Response::new().add_message(msg);
-        Ok(resp)
-    }
-
-    #[msg(reply)]
+    #[sv::msg(reply)]
     fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match (reply.id, reply.result.into_result()) {
             (REPLY_REWARDS_ID, Ok(_)) => self.reply_rewards(ctx.deps, ctx.env),
@@ -333,7 +188,7 @@ impl VirtualStakingContract<'_> {
             let all_rewards = all_rewards(deps.storage)?;
             BATCH.wipe(deps.storage)?;
 
-            let msg = converter_api::ExecMsg::DistributeRewards {
+            let msg = converter_api::sv::ExecMsg::DistributeRewards {
                 payments: all_rewards,
             };
             let msg = WasmMsg::Execute {
@@ -481,15 +336,12 @@ fn withdraw_reward_msgs<T: CustomQuery>(
         .collect()
 }
 
-#[contract]
-#[messages(virtual_staking_api as VirtualStakingApi)]
 impl VirtualStakingApi for VirtualStakingContract<'_> {
     type Error = ContractError;
 
     /// Requests to bond tokens to a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance.
     /// If the max cap is 0, then this will immediately return an error.
-    #[msg(exec)]
     fn bond(&self, ctx: ExecCtx, validator: String, amount: Coin) -> Result<Response, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
@@ -515,7 +367,6 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
     /// If the virtual staking contract doesn't have at least amount tokens staked to the given validator, this will return an error.
-    #[msg(exec)]
     fn unbond(
         &self,
         ctx: ExecCtx,
@@ -545,7 +396,6 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     /// Requests to unbond and burn tokens from a list of validators. Unbonding will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
     /// If the virtual staking contract doesn't have at least amount tokens staked over the given validators, this will return an error.
-    #[msg(exec)]
     fn burn(
         &self,
         ctx: ExecCtx,
@@ -604,34 +454,165 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
 
         Ok(Response::new())
     }
-}
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(
-    deps: DepsMut<VirtualStakeCustomQuery>,
-    env: Env,
-    msg: SudoMsg,
-) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-    match msg {
-        SudoMsg::HandleEpoch {} => VirtualStakingContract::new().handle_epoch(deps, env),
-        SudoMsg::ValsetUpdate {
-            additions,
-            removals,
-            updated,
-            jailed,
-            unjailed,
-            tombstoned,
-            slashed,
-        } => VirtualStakingContract::new().handle_valset_update(
-            deps,
-            &additions.unwrap_or_default(),
-            &removals.unwrap_or_default(),
-            &updated.unwrap_or_default(),
-            &jailed.unwrap_or_default(),
-            &unjailed.unwrap_or_default(),
-            &tombstoned.unwrap_or_default(),
-            &slashed.unwrap_or_default(),
-        ),
+    // FIXME: need to handle custom message types and queries
+    /**
+     * This is called once per epoch to withdraw all rewards and rebalance the bonded tokens.
+     * Note: the current implementation may (repeatedly) fail if any validator was slashed or fell out
+     * of the active set.
+     *
+     * The basic logic for calculating rebalance is:
+     * 1. Get all bond requests
+     * 2. Sum the total amount
+     * 3. If the sum <= max_cap then use collected requests as is
+     * 4. If the sum > max_cap,
+     *   a. calculate multiplier Decimal(max_cap / sum)
+     *   b. multiply every element of the collected requests in place.
+     * 5. Find diff between collected (normalized) requests and last bonding amounts (which go up, which down).
+     * 6. Transform diff into unbond and bond requests, sorting so all unbond happen first
+     */
+    fn handle_epoch(
+        &self,
+        ctx: SudoCtx<VirtualStakeCustomQuery>,
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
+        let SudoCtx { deps, env, .. } = ctx;
+
+        // withdraw rewards
+        let bonded = self.bonded.load(deps.storage)?;
+        let inactive = self.inactive.load(deps.storage)?;
+        let withdraw = withdraw_reward_msgs(deps.branch(), &bonded, &inactive);
+        let mut resp = Response::new().add_submessages(withdraw);
+
+        let bond =
+            TokenQuerier::new(&deps.querier).bond_status(env.contract.address.to_string())?;
+        let max_cap = bond.cap.amount;
+        // If 0 max cap, then we assume all tokens were force unbonded already, and just return the withdraw rewards
+        // call and set bonded to empty
+        // TODO: verify this behavior with SDK module (otherwise we send unbond message)
+        if max_cap.is_zero() {
+            self.bonded.save(deps.storage, &vec![])?;
+            return Ok(resp);
+        }
+
+        let config = self.config.load(deps.storage)?;
+        // Make current bonded mutable
+        let mut current = bonded;
+        // Process slashes due to tombstoning (unbonded) or jailing, over bond_requests and current
+        let slash = self.slash_requests.load(deps.storage)?;
+        if !slash.is_empty() {
+            self.adjust_slashings(deps.branch(), &mut current, &slash)?;
+            // Update inactive list. Defensive, as it should already been updated in handle_valset_update, due to removals
+            self.inactive.update(deps.branch().storage, |mut old| {
+                old.extend_from_slice(&slash.iter().map(|v| v.address.clone()).collect::<Vec<_>>());
+                old.dedup();
+                Ok::<_, ContractError>(old)
+            })?;
+            // Clear up slash requests
+            self.slash_requests.save(deps.storage, &vec![])?;
+        }
+
+        // calculate what the delegations should be when we are done
+        let mut requests: Vec<(String, Uint128)> = self
+            .bond_requests
+            .range(
+                deps.as_ref().storage,
+                None,
+                None,
+                cosmwasm_std::Order::Ascending,
+            )
+            .collect::<Result<_, _>>()?;
+        let total_requested: Uint128 = requests.iter().map(|(_, v)| v).sum();
+        if total_requested > max_cap {
+            for (_, v) in requests.iter_mut() {
+                *v = (*v * max_cap) / total_requested;
+            }
+        }
+
+        // Save the future values
+        self.bonded.save(deps.branch().storage, &requests)?;
+
+        // Compare these two to make bond/unbond calls as needed
+        let rebalance = calculate_rebalance(current, requests, &config.denom);
+        resp = resp.add_messages(rebalance);
+
+        Ok(resp)
+    }
+
+    // FIXME: need to handle custom message types and queries
+    /**
+     * This is called every time there's a change of the active validator set.
+     *
+     */
+    #[allow(clippy::too_many_arguments)]
+    fn handle_valset_update(
+        &self,
+        ctx: SudoCtx,
+        additions: Option<Vec<Validator>>,
+        removals: Option<Vec<String>>,
+        updated: Option<Vec<Validator>>,
+        jailed: Option<Vec<String>>,
+        unjailed: Option<Vec<String>>,
+        tombstoned: Option<Vec<String>>,
+        slashed: Option<Vec<ValidatorSlash>>,
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
+        let SudoCtx { deps, .. } = ctx;
+
+        let additions = &additions.unwrap_or_default();
+        let removals = &removals.unwrap_or_default();
+        let updated = &updated.unwrap_or_default();
+        let jailed = &jailed.unwrap_or_default();
+        let unjailed = &unjailed.unwrap_or_default();
+        let tombstoned = &tombstoned.unwrap_or_default();
+        let slashed = &slashed.unwrap_or_default();
+
+        // Account for slashed validators. Will be processed in handle_epoch
+        if !slashed.is_empty() {
+            self.slash_requests.update(deps.storage, |mut old| {
+                old.extend_from_slice(slashed);
+                Ok::<_, ContractError>(old)
+            })?;
+        }
+
+        // Update inactive list.
+        // We ignore `unjailed` as it's not clear they make the validator active again or not.
+        if !removals.is_empty() || !additions.is_empty() {
+            self.inactive.update(deps.storage, |mut old| {
+                // Add removals
+                old.extend_from_slice(removals);
+                // Filter additions
+                old.retain(|v| !additions.iter().any(|a| a.address == *v));
+                old.dedup();
+                Ok::<_, ContractError>(old)
+            })?;
+        }
+        // Send all updates to the converter.
+        let cfg = self.config.load(deps.storage)?;
+        let msg = converter_api::sv::ExecMsg::ValsetUpdate {
+            additions: additions.to_vec(),
+            removals: removals.to_vec(),
+            updated: updated.to_vec(),
+            jailed: jailed.to_vec(),
+            unjailed: unjailed.to_vec(),
+            tombstoned: tombstoned.to_vec(),
+            slashed: slashed
+                .iter()
+                .map(|s| ValidatorSlashInfo {
+                    address: s.address.clone(),
+                    infraction_height: s.infraction_height,
+                    infraction_time: s.infraction_time,
+                    power: s.power,
+                    slash_amount: coin(s.slash_amount.u128(), cfg.denom.clone()),
+                    slash_ratio: s.slash_ratio.clone(),
+                })
+                .collect(),
+        };
+        let msg = WasmMsg::Execute {
+            contract_addr: cfg.converter.to_string(),
+            msg: to_json_binary(&msg)?,
+            funds: vec![],
+        };
+        let resp = Response::new().add_message(msg);
+        Ok(resp)
     }
 }
 
