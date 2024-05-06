@@ -1,11 +1,11 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure_eq, Addr, Coin, Response, StdError, StdResult, Uint128};
+use cosmwasm_std::{ensure_eq, Addr, Coin, Response, StdError, StdResult, Uint128, Validator};
 
 use cw_storage_plus::{Item, Map};
 use cw_utils::{nonpayable, PaymentError};
-use mesh_apis::virtual_staking_api::{self, VirtualStakingApi};
+use mesh_apis::virtual_staking_api::{self, ValidatorSlash, VirtualStakingApi};
 use sylvia::contract;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 
 #[cw_serde]
 pub struct Config {
@@ -41,7 +41,7 @@ pub struct VirtualStakingMock<'a> {
 }
 
 #[contract]
-#[error(ContractError)]
+#[sv::error(ContractError)]
 #[sv::messages(virtual_staking_api as VirtualStakingApi)]
 impl VirtualStakingMock<'_> {
     pub const fn new() -> Self {
@@ -106,15 +106,12 @@ pub struct ConfigResponse {
     pub converter: String,
 }
 
-#[contract]
-#[sv::messages(virtual_staking_api as VirtualStakingApi)]
 impl VirtualStakingApi for VirtualStakingMock<'_> {
     type Error = ContractError;
 
     /// Requests to bond tokens to a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance.
     /// If the max cap is 0, then this will immediately return an error.
-    #[sv::msg(exec)]
     fn bond(&self, ctx: ExecCtx, validator: String, amount: Coin) -> Result<Response, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
@@ -137,7 +134,6 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
     /// If the virtual staking contract doesn't have at least amount tokens staked to the given validator, this will return an error.
-    #[sv::msg(exec)]
     fn unbond(
         &self,
         ctx: ExecCtx,
@@ -165,7 +161,6 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     /// Requests to unbond and burn tokens from a lists of validators (one or more). This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
     /// If the virtual staking contract doesn't have at least amount tokens staked over the given validators, this will return an error.
-    #[sv::msg(exec)]
     fn burn(
         &self,
         ctx: ExecCtx,
@@ -221,5 +216,35 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
         }
 
         Ok(Response::new())
+    }
+
+    /// SudoMsg::HandleEpoch{} should be called once per epoch by the sdk (in EndBlock).
+    /// It allows the virtual staking contract to bond or unbond any pending requests, as well
+    /// as to perform a rebalance if needed (over the max cap).
+    ///
+    /// It should also withdraw all pending rewards here, and send them to the converter contract.
+    fn handle_epoch(&self, ctx: SudoCtx) -> Result<Response, Self::Error> {
+        unimplemented!()
+    }
+
+    /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update:
+    ///  - Addition of a new validator to the active validator set.
+    ///  - Temporary removal of a validator from the active set. (i.e. `unbonded` state).
+    ///  - Update of validator data.
+    ///  - Temporary removal of a validator from the active set due to jailing. Implies slashing.
+    ///  - Addition of an existing validator to the active validator set.
+    ///  - Permanent removal (i.e. tombstoning) of a validator from the active set. Implies slashing
+    fn handle_valset_update(
+        &self,
+        ctx: SudoCtx,
+        additions: Option<Vec<Validator>>,
+        removals: Option<Vec<String>>,
+        updated: Option<Vec<Validator>>,
+        jailed: Option<Vec<String>>,
+        unjailed: Option<Vec<String>>,
+        tombstoned: Option<Vec<String>>,
+        slashed: Option<Vec<ValidatorSlash>>,
+    ) -> Result<Response, Self::Error> {
+        unimplemented!()
     }
 }

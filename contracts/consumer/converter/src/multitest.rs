@@ -2,13 +2,20 @@ mod virtual_staking_mock;
 
 use cosmwasm_std::{coin, coins, Addr, Decimal, StdError, Uint128, Validator};
 use cw_multi_test::App as MtApp;
+use mesh_apis::converter_api::sv::mt::ConverterApiProxy;
 use mesh_apis::converter_api::RewardInfo;
-use sylvia::multitest::App;
+use mesh_simple_price_feed::contract::sv::mt::CodeId as PriceFeedCodeId;
+use mesh_simple_price_feed::contract::SimplePriceFeedContract;
+use sylvia::multitest::{App, Proxy};
+use virtual_staking_mock::sv::mt::CodeId as VirtualStakingCodeId;
+use virtual_staking_mock::VirtualStakingMock;
 
-use crate::contract;
-use crate::contract::test_utils::ConverterApi;
+use crate::contract::sv::mt::CodeId as ConverterCodeId;
+use crate::contract::sv::mt::ConverterContractProxy;
+use crate::contract::ConverterContract;
 use crate::error::ContractError;
 use crate::error::ContractError::Unauthorized;
+use crate::multitest::virtual_staking_mock::sv::mt::VirtualStakingMockProxy;
 
 const JUNO: &str = "ujuno";
 
@@ -20,10 +27,9 @@ struct SetupArgs<'a> {
 }
 
 struct SetupResponse<'a> {
-    price_feed:
-        mesh_simple_price_feed::contract::multitest_utils::SimplePriceFeedContractProxy<'a, MtApp>,
-    converter: contract::multitest_utils::ConverterContractProxy<'a, MtApp>,
-    virtual_staking: virtual_staking_mock::multitest_utils::VirtualStakingMockProxy<'a, MtApp>,
+    price_feed: Proxy<'a, MtApp, SimplePriceFeedContract<'a>>,
+    converter: Proxy<'a, MtApp, ConverterContract<'a>>,
+    virtual_staking: Proxy<'a, MtApp, VirtualStakingMock<'a>>,
 }
 
 fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
@@ -34,10 +40,9 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
         native_per_foreign,
     } = args;
 
-    let price_feed_code =
-        mesh_simple_price_feed::contract::multitest_utils::CodeId::store_code(app);
-    let virtual_staking_code = virtual_staking_mock::multitest_utils::CodeId::store_code(app);
-    let converter_code = contract::multitest_utils::CodeId::store_code(app);
+    let price_feed_code = PriceFeedCodeId::store_code(app);
+    let virtual_staking_code = VirtualStakingCodeId::store_code(app);
+    let converter_code = ConverterCodeId::store_code(app);
 
     let price_feed = price_feed_code
         .instantiate(native_per_foreign, None)
@@ -60,10 +65,11 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
 
     let config = converter.config().unwrap();
     let virtual_staking_addr = Addr::unchecked(config.virtual_staking);
-    let virtual_staking = virtual_staking_mock::multitest_utils::VirtualStakingMockProxy::new(
-        virtual_staking_addr,
-        app,
-    );
+    // Ideally this should be initialized via `CodeId`.
+    // Consider bellow approach
+    //
+    // let virtual_staking = virtual_staking_code.instantiate().call(owner).unwrap();
+    let virtual_staking = Proxy::new(virtual_staking_addr, app);
 
     SetupResponse {
         price_feed,
@@ -328,13 +334,11 @@ fn valset_update_works() {
 
     // Check that only the virtual staking contract can call this handler
     let res = converter
-        .converter_api_proxy()
         .valset_update(vec![], vec![], vec![], vec![], vec![], vec![], vec![])
         .call(owner);
     assert_eq!(res.unwrap_err(), Unauthorized {});
 
     let res = converter
-        .converter_api_proxy()
         .valset_update(
             add_validators,
             rem_validators,
@@ -374,7 +378,6 @@ fn unauthorized() {
     );
 
     let err = converter
-        .converter_api_proxy()
         .distribute_rewards(vec![
             RewardInfo {
                 validator: "alice".to_string(),
@@ -391,7 +394,6 @@ fn unauthorized() {
     assert_eq!(err, ContractError::Unauthorized);
 
     let err = converter
-        .converter_api_proxy()
         .distribute_reward("validator".to_string())
         .call("mallory")
         .unwrap_err();
@@ -399,7 +401,6 @@ fn unauthorized() {
     assert_eq!(err, ContractError::Unauthorized);
 
     let err = converter
-        .converter_api_proxy()
         .valset_update(vec![], vec![], vec![], vec![], vec![], vec![], vec![])
         .call("mallory")
         .unwrap_err();
@@ -442,7 +443,6 @@ fn distribute_rewards_invalid_amount_is_rejected() {
     });
 
     let err = converter
-        .converter_api_proxy()
         .distribute_rewards(vec![
             RewardInfo {
                 validator: "alice".to_string(),
@@ -466,7 +466,6 @@ fn distribute_rewards_invalid_amount_is_rejected() {
     );
 
     let err = converter
-        .converter_api_proxy()
         .distribute_rewards(vec![
             RewardInfo {
                 validator: "alice".to_string(),
@@ -526,7 +525,6 @@ fn distribute_rewards_valid_amount() {
     });
 
     converter
-        .converter_api_proxy()
         .distribute_rewards(vec![
             RewardInfo {
                 validator: "alice".to_string(),
