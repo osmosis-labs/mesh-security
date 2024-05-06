@@ -1,6 +1,5 @@
 use cosmwasm_std::{
-    ensure_eq, to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event,
-    Fraction, MessageInfo, Reply, Response, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg,
+    ensure_eq, to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Fraction, MessageInfo, Reply, Response, StdError, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -275,8 +274,11 @@ impl ConverterContract<'_> {
         // FIXME not sure how to get this to compile with latest sylvia
         // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
-        use price_feed_api::Querier;
-        let remote = price_feed_api::Remote::new(config.price_feed);
+        use price_feed_api::sv::Querier;
+        use sylvia::types::Remote;
+        // NOTE: Jan, this feels hacky... I'm not sure if this is the right way to do it
+        // Also, I am sticking in a random error type here, not what I will get (which is unknown)
+        let remote = Remote::<&dyn price_feed_api::PriceFeedApi<Error=StdError>>::new(config.price_feed);
         let price = remote.querier(&deps.querier).price()?.native_per_foreign;
         let converted = (amount.amount * price) * config.price_adjustment;
 
@@ -299,8 +301,11 @@ impl ConverterContract<'_> {
 
         // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
-        use price_feed_api::Querier;
-        let remote = price_feed_api::Remote::new(config.price_feed);
+        use price_feed_api::sv::Querier;
+        use sylvia::types::Remote;
+        // NOTE: Jan, this feels hacky... I'm not sure if this is the right way to do it
+        // Also, I am sticking in a random error type here, not what I will get (which is unknown)
+        let remote = Remote::<&dyn price_feed_api::PriceFeedApi<Error=StdError>>::new(config.price_feed);
         let price = remote.querier(&deps.querier).price()?.native_per_foreign;
         let converted = (amount.amount * price.inv().ok_or(ContractError::InvalidPrice {})?)
             * config
