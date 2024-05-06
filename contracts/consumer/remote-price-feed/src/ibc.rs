@@ -125,7 +125,7 @@ pub fn ibc_packet_ack(
     _env: Env,
     msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let ack: PriceFeedProviderAck = from_json(&msg.acknowledgement.data)?;
+    let ack: PriceFeedProviderAck = from_json(msg.acknowledgement.data)?;
     let PriceFeedProviderAck::Update { time, twap } = ack;
     let contract = RemotePriceFeedContract::new();
     contract.update_twap(deps, time, twap)?;

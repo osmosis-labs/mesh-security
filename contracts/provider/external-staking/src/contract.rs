@@ -865,6 +865,7 @@ impl ExternalStakingContract<'_> {
     /// In test code, this is called from `test_handle_slashing`.
     /// In non-test code, this is being called from `ibc_packet_receive` (in the `ConsumerPacket::RemoveValidators`
     /// handler)
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_slashing(
         &self,
         env: &Env,
@@ -1236,7 +1237,7 @@ pub mod cross_staking {
             let owner = ctx.deps.api.addr_validate(&owner)?;
 
             // parse and validate message
-            let msg: ReceiveVirtualStake = from_json(&msg)?;
+            let msg: ReceiveVirtualStake = from_json(msg)?;
             if !self
                 .val_set
                 .is_active_validator(ctx.deps.storage, &msg.validator)?

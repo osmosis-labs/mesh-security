@@ -188,7 +188,7 @@ pub fn ibc_packet_receive(
     _env: Env,
     msg: IbcPacketReceiveMsg,
 ) -> Result<IbcReceiveResponse, ContractError> {
-    let packet: ProviderPacket = from_json(&msg.packet.data)?;
+    let packet: ProviderPacket = from_json(msg.packet.data)?;
     let contract = ConverterContract::new();
     let res = match packet {
         ProviderPacket::Stake {

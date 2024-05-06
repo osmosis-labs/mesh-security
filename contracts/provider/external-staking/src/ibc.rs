@@ -123,7 +123,7 @@ pub fn ibc_packet_receive(
     // If a validator is in more than one of the events, the end result will depend on the
     // processing order below.
     let contract = ExternalStakingContract::new();
-    let packet: ConsumerPacket = from_json(&msg.packet.data)?;
+    let packet: ConsumerPacket = from_json(msg.packet.data)?;
     let resp = match packet {
         ConsumerPacket::ValsetUpdate {
             height,
@@ -251,7 +251,7 @@ pub fn ibc_packet_timeout(
     _env: Env,
     msg: IbcPacketTimeoutMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let packet: ProviderPacket = from_json(&msg.packet.data)?;
+    let packet: ProviderPacket = from_json(msg.packet.data)?;
     let contract = ExternalStakingContract::new();
     let mut resp = IbcBasicResponse::new().add_attribute("action", "ibc_packet_timeout");
     match packet {

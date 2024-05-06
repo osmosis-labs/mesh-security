@@ -37,7 +37,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         let _paid = must_pay(&ctx.info, &cfg.denom)?;
 
         // Parse message to find validator to stake on
-        let StakeMsg { validator } = from_json(&msg)?;
+        let StakeMsg { validator } = from_json(msg)?;
 
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 

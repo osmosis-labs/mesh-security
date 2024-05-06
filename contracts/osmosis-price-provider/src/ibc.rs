@@ -124,7 +124,7 @@ pub fn ibc_packet_receive(
         pool_id,
         base_asset,
         quote_asset,
-    } = from_json(&msg.packet.data)?;
+    } = from_json(msg.packet.data)?;
     let contract = OsmosisPriceProvider::new();
 
     let time = env.block.time;
