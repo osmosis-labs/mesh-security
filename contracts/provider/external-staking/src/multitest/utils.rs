@@ -1,4 +1,4 @@
-use cosmwasm_std::{to_binary, Addr, Coin};
+use cosmwasm_std::{to_json_binary, Addr, Coin};
 use cw_multi_test::{App as MtApp, AppResponse};
 use mesh_apis::{converter_api::RewardInfo, ibc::AddValidator};
 use mesh_sync::Tx;
@@ -136,7 +136,7 @@ impl VaultExt for Vault<'_> {
         self.stake_remote(
             contract.contract_addr.to_string(),
             coin,
-            to_binary(&ReceiveVirtualStake {
+            to_json_binary(&ReceiveVirtualStake {
                 validator: validator.into(),
             })
             .unwrap(),

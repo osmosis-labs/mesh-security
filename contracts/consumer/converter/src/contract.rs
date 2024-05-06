@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    ensure_eq, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Fraction,
-    MessageInfo, Reply, Response, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg,
+    ensure_eq, to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event,
+    Fraction, MessageInfo, Reply, Response, SubMsg, SubMsgResponse, Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -203,7 +203,7 @@ impl ConverterContract<'_> {
         let msg = virtual_staking_api::ExecMsg::Bond { validator, amount };
         let msg = WasmMsg::Execute {
             contract_addr: self.virtual_stake.load(deps.storage)?.into(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
 
@@ -227,7 +227,7 @@ impl ConverterContract<'_> {
         let msg = virtual_staking_api::ExecMsg::Unbond { validator, amount };
         let msg = WasmMsg::Execute {
             contract_addr: self.virtual_stake.load(deps.storage)?.into(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
 
@@ -254,7 +254,7 @@ impl ConverterContract<'_> {
         };
         let msg = WasmMsg::Execute {
             contract_addr: self.virtual_stake.load(deps.storage)?.into(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
 

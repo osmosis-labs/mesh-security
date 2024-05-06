@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cosmwasm_std::{
-    coin, ensure_eq, entry_point, to_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
+    coin, ensure_eq, entry_point, to_json_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
     DistributionMsg, Env, Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator,
     WasmMsg,
 };
@@ -262,7 +262,7 @@ impl VirtualStakingContract<'_> {
         };
         let msg = WasmMsg::Execute {
             contract_addr: cfg.converter.to_string(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
         let resp = Response::new().add_message(msg);
@@ -338,7 +338,7 @@ impl VirtualStakingContract<'_> {
             };
             let msg = WasmMsg::Execute {
                 contract_addr: cfg.converter.into_string(),
-                msg: to_binary(&msg)?,
+                msg: to_json_binary(&msg)?,
                 funds: vec![coin(total.into(), cfg.denom)],
             };
             Ok(Response::new().add_message(msg))
@@ -644,7 +644,7 @@ mod tests {
     };
 
     use cosmwasm_std::{
-        coins, from_binary,
+        coins, from_json,
         testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
         Decimal,
     };
@@ -1221,12 +1221,12 @@ mod tests {
                 match msg {
                     mesh_bindings::VirtualStakeQuery::BondStatus { .. } => {
                         cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
-                            to_binary(&*bs_copy.borrow()).unwrap(),
+                            to_json_binary(&*bs_copy.borrow()).unwrap(),
                         ))
                     }
                     mesh_bindings::VirtualStakeQuery::SlashRatio {} => {
                         cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
-                            to_binary(&*slash_ratio.borrow()).unwrap(),
+                            to_json_binary(&*slash_ratio.borrow()).unwrap(),
                         ))
                     }
                 }
@@ -1515,7 +1515,7 @@ mod tests {
                     ..
                 }] => {
                     if let converter_api::ExecMsg::DistributeRewards { mut payments } =
-                        from_binary(bin_msg).unwrap()
+                        from_json(bin_msg).unwrap()
                     {
                         payments.sort();
                         Self::Batch(payments)

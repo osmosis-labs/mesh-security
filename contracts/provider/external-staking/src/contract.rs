@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    coin, ensure, ensure_eq, to_binary, Coin, Decimal, DepsMut, Env, Event, IbcMsg, Order,
+    coin, ensure, ensure_eq, to_json_binary, Coin, Decimal, DepsMut, Env, Event, IbcMsg, Order,
     Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -306,7 +306,7 @@ impl ExternalStakingContract<'_> {
         };
         let msg = IbcMsg::SendPacket {
             channel_id: channel.endpoint.channel_id,
-            data: to_binary(&packet)?,
+            data: to_json_binary(&packet)?,
             timeout: packet_timeout(&env),
         };
         // send packet if we are ibc enabled
@@ -783,7 +783,7 @@ impl ExternalStakingContract<'_> {
         let channel_id = IBC_CHANNEL.load(ctx.deps.storage)?.endpoint.channel_id;
         let send_msg = IbcMsg::SendPacket {
             channel_id,
-            data: to_binary(&packet)?,
+            data: to_json_binary(&packet)?,
             timeout: packet_timeout(&ctx.env),
         };
 
@@ -865,6 +865,7 @@ impl ExternalStakingContract<'_> {
     /// In test code, this is called from `test_handle_slashing`.
     /// In non-test code, this is being called from `ibc_packet_receive` (in the `ConsumerPacket::RemoveValidators`
     /// handler)
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_slashing(
         &self,
         env: &Env,
@@ -1206,7 +1207,7 @@ pub mod cross_staking {
     use crate::msg::ReceiveVirtualStake;
 
     use super::*;
-    use cosmwasm_std::{from_binary, Binary};
+    use cosmwasm_std::{from_json, Binary};
     use mesh_apis::{cross_staking_api::CrossStakingApi, local_staking_api::SlashRatioResponse};
 
     #[contract(module=crate::contract)]
@@ -1236,7 +1237,7 @@ pub mod cross_staking {
             let owner = ctx.deps.api.addr_validate(&owner)?;
 
             // parse and validate message
-            let msg: ReceiveVirtualStake = from_binary(&msg)?;
+            let msg: ReceiveVirtualStake = from_json(msg)?;
             if !self
                 .val_set
                 .is_active_validator(ctx.deps.storage, &msg.validator)?
@@ -1276,7 +1277,7 @@ pub mod cross_staking {
             };
             let msg = IbcMsg::SendPacket {
                 channel_id: channel.endpoint.channel_id,
-                data: to_binary(&packet)?,
+                data: to_json_binary(&packet)?,
                 timeout: packet_timeout(&ctx.env),
             };
             // add ibc packet if we are ibc enabled (skip in tests)
@@ -1402,7 +1403,7 @@ pub mod cross_staking {
             };
             let msg = IbcMsg::SendPacket {
                 channel_id: channel.endpoint.channel_id,
-                data: to_binary(&packet)?,
+                data: to_json_binary(&packet)?,
                 timeout: packet_timeout(&ctx.env),
             };
             let mut resp = Response::new();
@@ -1620,7 +1621,7 @@ mod tests {
                 OWNER.to_string(),
                 coin(100, "uosmo"),
                 1,
-                to_binary(&ReceiveVirtualStake {
+                to_json_binary(&ReceiveVirtualStake {
                     validator: "bob".to_string(),
                 })
                 .unwrap(),
@@ -1670,7 +1671,7 @@ mod tests {
             msgs[0],
             WasmMsg::Execute {
                 contract_addr: "vault_addr".to_string(),
-                msg: to_binary(&CrossSlash {
+                msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10),
@@ -1751,7 +1752,7 @@ mod tests {
                 OWNER.to_string(),
                 coin(100, "uosmo"),
                 1,
-                to_binary(&ReceiveVirtualStake {
+                to_json_binary(&ReceiveVirtualStake {
                     validator: "bob".to_string(),
                 })
                 .unwrap(),
@@ -1800,7 +1801,7 @@ mod tests {
             msgs[0],
             WasmMsg::Execute {
                 contract_addr: "vault_addr".to_string(),
-                msg: to_binary(&CrossSlash {
+                msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10),
@@ -1881,7 +1882,7 @@ mod tests {
                 OWNER.to_string(),
                 coin(100, "uosmo"),
                 1,
-                to_binary(&ReceiveVirtualStake {
+                to_json_binary(&ReceiveVirtualStake {
                     validator: "bob".to_string(),
                 })
                 .unwrap(),
@@ -1944,7 +1945,7 @@ mod tests {
             msgs[0],
             WasmMsg::Execute {
                 contract_addr: "vault_addr".to_string(),
-                msg: to_binary(&CrossSlash {
+                msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10), // Owner is slashed over the full stake, including pending
@@ -2295,7 +2296,7 @@ mod tests {
                 OWNER.to_string(),
                 coin(100, "uosmo"),
                 1,
-                to_binary(&ReceiveVirtualStake {
+                to_json_binary(&ReceiveVirtualStake {
                     validator: "bob".to_string(),
                 })
                 .unwrap(),
@@ -2345,7 +2346,7 @@ mod tests {
             msgs[0],
             WasmMsg::Execute {
                 contract_addr: "vault_addr".to_string(),
-                msg: to_binary(&CrossSlash {
+                msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
                         user: OWNER.to_string(),
                         slash: Uint128::new(10),

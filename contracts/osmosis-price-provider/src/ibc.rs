@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_slice, to_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse,
+    from_json, to_json_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse,
     IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse,
     IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
     StdError, Timestamp,
@@ -46,7 +46,7 @@ pub fn ibc_channel_open(
             version: SUPPORTED_IBC_PROTOCOL_VERSION.to_string(),
         }
     } else {
-        let v: ProtocolVersion = from_slice(channel.version.as_bytes())?;
+        let v: ProtocolVersion = from_json(channel.version.as_bytes())?;
         // if we can build a response to this, then it is compatible. And we use the highest version there
         v.build_response(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?
     };
@@ -77,7 +77,7 @@ pub fn ibc_channel_connect(
 
     // Ensure the counterparty responded with a version we support.
     // Note: here, we error if it is higher than what we proposed originally
-    let v: ProtocolVersion = from_slice(counterparty_version.as_bytes())?;
+    let v: ProtocolVersion = from_json(counterparty_version.as_bytes())?;
     v.verify_compatibility(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?;
 
     let contract = OsmosisPriceProvider::new();
@@ -124,12 +124,17 @@ pub fn ibc_packet_receive(
         pool_id,
         base_asset,
         quote_asset,
-    } = from_slice(&msg.packet.data)?;
+    } = from_json(msg.packet.data)?;
     let contract = OsmosisPriceProvider::new();
 
     let time = env.block.time;
     let twap = contract.query_twap(deps, pool_id, base_asset, quote_asset)?;
-    Ok(IbcReceiveResponse::new().set_ack(to_binary(&PriceFeedProviderAck::Update { time, twap })?))
+    Ok(
+        IbcReceiveResponse::new().set_ack(to_json_binary(&PriceFeedProviderAck::Update {
+            time,
+            twap,
+        })?),
+    )
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

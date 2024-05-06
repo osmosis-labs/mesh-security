@@ -2,8 +2,8 @@ use anyhow::Result as AnyResult;
 use cosmwasm_std::{
     coin,
     testing::{MockApi, MockStorage},
-    to_binary, Addr, Api, Binary, BlockInfo, CustomQuery, Empty, Querier, QuerierWrapper, Storage,
-    Uint128,
+    to_json_binary, Addr, Api, Binary, BlockInfo, CustomQuery, Empty, Querier, QuerierWrapper,
+    Storage, Uint128,
 };
 use cw_multi_test::{AppResponse, BankKeeper, Module, WasmKeeper};
 use cw_storage_plus::{Item, Map};
@@ -173,16 +173,16 @@ impl Module for VirtualStakingModule {
                 let cap = self.caps.load(storage, Addr::unchecked(&contract))?;
                 let bonded = self.bonded_for_contract(storage, Addr::unchecked(contract))?;
 
-                to_binary(&BondStatusResponse {
+                to_json_binary(&BondStatusResponse {
                     cap: coin(cap.u128(), &denom),
                     delegated: coin(bonded.u128(), denom),
                 })?
             }
             mesh_bindings::VirtualStakeQuery::SlashRatio {} => {
-                to_binary(&self.slash_ratio.load(storage)?)?
+                to_json_binary(&self.slash_ratio.load(storage)?)?
             }
         };
 
-        Ok(to_binary(&result)?)
+        Ok(to_json_binary(&result)?)
     }
 }

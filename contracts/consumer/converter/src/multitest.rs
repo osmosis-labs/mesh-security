@@ -352,7 +352,9 @@ fn valset_update_works() {
     assert_eq!(
         res.unwrap_err(),
         ContractError::Std(StdError::NotFound {
-            kind: "cosmwasm_std::ibc::IbcChannel".to_string()
+            kind:
+                "type: cosmwasm_std::ibc::IbcChannel; key: [69, 62, 63, 5F, 63, 68, 61, 6E, 6E, 65, 6C]"
+                    .to_string()
         })
     );
 }

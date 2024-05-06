@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_slice, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
+    from_json, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
     IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse,
     IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
 };
@@ -69,7 +69,7 @@ pub fn ibc_channel_open(
     }
 
     // we handshake with the counterparty version, it must not be empty
-    let v: ProtocolVersion = from_slice(counterparty_version.as_bytes())?;
+    let v: ProtocolVersion = from_json(counterparty_version.as_bytes())?;
     // if we can build a response to this, then it is compatible. And we use the highest version there
     let version = v.build_response(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?;
 
@@ -123,7 +123,7 @@ pub fn ibc_packet_receive(
     // If a validator is in more than one of the events, the end result will depend on the
     // processing order below.
     let contract = ExternalStakingContract::new();
-    let packet: ConsumerPacket = from_slice(&msg.packet.data)?;
+    let packet: ConsumerPacket = from_json(msg.packet.data)?;
     let resp = match packet {
         ConsumerPacket::ValsetUpdate {
             height,
@@ -178,9 +178,9 @@ pub fn ibc_packet_ack(
     env: Env,
     msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let packet: ProviderPacket = from_slice(&msg.original_packet.data)?;
+    let packet: ProviderPacket = from_json(&msg.original_packet.data)?;
     let contract = ExternalStakingContract::new();
-    let ack: AckWrapper = from_slice(&msg.acknowledgement.data)?;
+    let ack: AckWrapper = from_json(&msg.acknowledgement.data)?;
     let mut resp = IbcBasicResponse::new();
 
     match (packet, ack) {
@@ -251,7 +251,7 @@ pub fn ibc_packet_timeout(
     _env: Env,
     msg: IbcPacketTimeoutMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let packet: ProviderPacket = from_slice(&msg.packet.data)?;
+    let packet: ProviderPacket = from_json(msg.packet.data)?;
     let contract = ExternalStakingContract::new();
     let mut resp = IbcBasicResponse::new().add_attribute("action", "ibc_packet_timeout");
     match packet {

@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_binary, Addr, Coin, Response, StdError, Uint128, WasmMsg};
+use cosmwasm_std::{to_json_binary, Addr, Coin, Response, StdError, Uint128, WasmMsg};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -90,7 +90,7 @@ impl VaultApiHelper {
         let msg = VaultApiExecMsg::ReleaseCrossStake { owner, amount };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds,
         };
         Ok(wasm)
@@ -106,7 +106,7 @@ impl VaultApiHelper {
         let msg = VaultApiExecMsg::ReleaseLocalStake { owner };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds,
         };
         Ok(wasm)
@@ -123,7 +123,7 @@ impl VaultApiHelper {
         };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
         Ok(wasm)
@@ -140,7 +140,7 @@ impl VaultApiHelper {
         };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
         Ok(wasm)
@@ -150,7 +150,7 @@ impl VaultApiHelper {
         let msg = VaultApiExecMsg::CommitTx { tx_id };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
         Ok(wasm)
@@ -160,7 +160,7 @@ impl VaultApiHelper {
         let msg = VaultApiExecMsg::RollbackTx { tx_id };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
         Ok(wasm)

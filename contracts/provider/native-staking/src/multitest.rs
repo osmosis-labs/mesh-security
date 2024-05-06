@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    coin, coins, to_binary, Addr, Decimal, Delegation, StdError, Uint128, Validator,
+    coin, coins, to_json_binary, Addr, Decimal, Delegation, StdError, Uint128, Validator,
 };
 
 use cw_multi_test::{App as MtApp, StakingInfo};
@@ -162,7 +162,7 @@ fn receiving_stake() {
     ));
 
     // Receive some stake on behalf of user1 for validator
-    let stake_msg = to_binary(&msg::StakeMsg {
+    let stake_msg = to_json_binary(&msg::StakeMsg {
         validator: validator.to_owned(),
     })
     .unwrap();
@@ -186,7 +186,7 @@ fn receiving_stake() {
     assert_delegations(&app, &proxy1, &[(validator, 100)]);
 
     // Stake some more
-    let stake_msg = to_binary(&msg::StakeMsg {
+    let stake_msg = to_json_binary(&msg::StakeMsg {
         validator: validator.to_owned(),
     })
     .unwrap();
@@ -217,7 +217,7 @@ fn receiving_stake() {
     assert_delegations(&app, &proxy1, &[(validator, 150)]);
 
     // Receive some stake on behalf of user2 for validator
-    let stake_msg = to_binary(&msg::StakeMsg {
+    let stake_msg = to_json_binary(&msg::StakeMsg {
         validator: validator.to_owned(),
     })
     .unwrap();
@@ -264,7 +264,7 @@ fn releasing_proxy_stake() {
     let staking_init_info = mesh_vault::msg::StakingInitInfo {
         admin: None,
         code_id: staking_code.code_id(),
-        msg: to_binary(&crate::contract::InstantiateMsg {
+        msg: to_json_binary(&crate::contract::InstantiateMsg {
             denom: OSMO.to_owned(),
             proxy_code_id: staking_proxy_code.code_id(),
             slash_ratio_dsign: slashing_rate_dsign(),
@@ -308,7 +308,7 @@ fn releasing_proxy_stake() {
     vault
         .stake_local(
             coin(100, OSMO),
-            to_binary(&msg::StakeMsg {
+            to_json_binary(&msg::StakeMsg {
                 validator: validator.to_owned(),
             })
             .unwrap(),
