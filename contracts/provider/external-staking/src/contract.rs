@@ -1454,7 +1454,7 @@ mod tests {
     use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, ValidatorState};
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
     use mesh_apis::cross_staking_api::CrossStakingApi;
-    use mesh_apis::vault_api::VaultApiExecMsg::CrossSlash;
+    use mesh_apis::vault_api::sv::VaultApiExecMsg::CrossSlash;
 
     static OSMO: &str = "uosmo";
     static CREATOR: &str = "creator";

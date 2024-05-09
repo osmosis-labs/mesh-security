@@ -2,12 +2,16 @@ use cosmwasm_std::{to_json_binary, Addr, Coin};
 use cw_multi_test::{App as MtApp, AppResponse};
 use mesh_apis::{converter_api::RewardInfo, ibc::AddValidator};
 use mesh_sync::Tx;
-use mesh_vault::contract::multitest_utils::VaultContractProxy;
-use sylvia::multitest::App;
+use mesh_vault::contract::{sv::mt::VaultContractProxy, VaultContract};
+use sylvia::multitest::{App, Proxy};
 
 use crate::{
-    contract::multitest_utils::ExternalStakingContractProxy, error::ContractError,
-    msg::ReceiveVirtualStake, test_methods_impl::test_utils::TestMethods as _,
+    contract::sv::mt::ExternalStakingContractProxy,
+    contract::ExternalStakingContract,
+    error::ContractError,
+    msg::ReceiveVirtualStake,
+    test_methods::sv::mt::TestMethodsProxy,
+    //test_methods_impl::test_utils::TestMethods as _,
 };
 
 macro_rules! assert_rewards {
@@ -29,8 +33,8 @@ macro_rules! assert_rewards {
 pub(crate) use assert_rewards;
 
 #[track_caller]
-pub(crate) fn get_last_external_staking_pending_tx_id(
-    contract: &ExternalStakingContractProxy<MtApp>,
+pub(crate) fn get_last_external_staking_pending_tx_id<'a>(
+    contract: &Proxy<'a, MtApp, ExternalStakingContract<'a>>,
 ) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(Tx::id)
@@ -55,8 +59,8 @@ impl AppExt for App<MtApp> {
     }
 }
 
-type Vault<'app> = VaultContractProxy<'app, MtApp>;
-type Contract<'app> = ExternalStakingContractProxy<'app, MtApp>;
+type Vault<'app> = Proxy<'app, MtApp, VaultContract<'app>>;
+type Contract<'app> = Proxy<'app, MtApp, ExternalStakingContract<'app>>;
 
 pub(crate) trait ContractExt {
     fn activate_validators<const N: usize>(
@@ -83,8 +87,7 @@ impl ContractExt for Contract<'_> {
     ) -> [&'static str; N] {
         for val in validators {
             let activate = AddValidator::mock(val);
-            self.test_methods_proxy()
-                .test_set_active_validator(activate, 100, 1234)
+            self.test_set_active_validator(activate, 100, 1234)
                 .call("test")
                 .unwrap();
         }
@@ -94,16 +97,14 @@ impl ContractExt for Contract<'_> {
 
     #[track_caller]
     fn remove_validator(&self, validator: &'static str) {
-        self.test_methods_proxy()
-            .test_remove_validator(validator.to_string(), 101, 1234)
+        self.test_remove_validator(validator.to_string(), 101, 1234)
             .call("test")
             .unwrap();
     }
 
     #[track_caller]
     fn tombstone_validator(&self, validator: &'static str) {
-        self.test_methods_proxy()
-            .test_tombstone_validator(validator.to_string(), 101, 1234)
+        self.test_tombstone_validator(validator.to_string(), 101, 1234)
             .call("test")
             .unwrap();
     }
@@ -120,8 +121,7 @@ impl ContractExt for Contract<'_> {
             .map(|(validator, amount)| reward_info(*validator, *amount))
             .collect();
 
-        self.test_methods_proxy()
-            .test_distribute_rewards_batch(denom.into(), rewards)
+        self.test_distribute_rewards_batch(denom.into(), rewards)
             .call(caller.as_ref())
     }
 }
@@ -148,7 +148,6 @@ impl VaultExt for Vault<'_> {
         // This should be through `IbcPacketAckMsg`
         let last_external_staking_tx = get_last_external_staking_pending_tx_id(contract).unwrap();
         contract
-            .test_methods_proxy()
             .test_commit_stake(last_external_staking_tx)
             .call("test")
             .unwrap();

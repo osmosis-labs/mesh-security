@@ -1,6 +1,3 @@
-#[cfg(not(feature = "library"))]
-use cosmwasm_std::entry_point;
-
 use cosmwasm_std::Order::Ascending;
 use cosmwasm_std::{
     from_json, Addr, Decimal, DepsMut, Reply, Response, StdResult, SubMsgResponse, WasmMsg,
@@ -8,7 +5,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::types::{InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;

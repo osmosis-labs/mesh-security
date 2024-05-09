@@ -3,12 +3,13 @@ use cosmwasm_std::{
 };
 
 use cw_multi_test::{App as MtApp, StakingInfo};
-use sylvia::multitest::App;
+use sylvia::multitest::{App, Proxy};
 
 use mesh_apis::local_staking_api::sv::mt::LocalStakingApiProxy;
 use mesh_native_staking_proxy::contract::sv::mt::{
     CodeId as NativeStakingProxyCodeId, NativeStakingProxyContractProxy,
 };
+use mesh_native_staking_proxy::contract::NativeStakingProxyContract;
 use mesh_sync::ValueRange;
 use mesh_vault::contract::sv::mt::VaultContractProxy;
 
@@ -286,7 +287,8 @@ fn releasing_proxy_stake() {
     );
 
     // Access staking instance
-    let staking_proxy = NativeStakingProxyContractProxy::new(Addr::unchecked(proxy_addr), &app);
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+        Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // User bonds some funds to the vault
     vault
