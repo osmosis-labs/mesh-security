@@ -1,4 +1,5 @@
 use cosmwasm_std::{Addr, Decimal, Validator};
+use cw_multi_test::no_init;
 use sylvia::multitest::Proxy;
 
 use mesh_converter::contract::sv::mt::ConverterContractProxy;
@@ -15,6 +16,11 @@ type MtApp = cw_multi_test::BasicApp<
     mesh_bindings::VirtualStakeCustomQuery,
 >;
 type App = sylvia::multitest::App<MtApp>;
+
+fn new_app() -> App {
+    // Ideally there is a shorter way to do this
+    App::new(cw_multi_test::custom_app(no_init))
+}
 
 struct SetupArgs<'a> {
     owner: &'a str,
@@ -73,7 +79,7 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
 
 #[test]
 fn instantiation() {
-    let app = App::default();
+    let app = new_app();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
     let admin = "theman";
@@ -116,7 +122,8 @@ fn instantiation() {
 #[test]
 #[ignore] // FIXME: Enable / finish this test once custom query support is added to sylvia
 fn valset_update_sudo() {
-    let app = App::<MtApp>::default();
+
+    let app = new_app();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
     let admin = "theman";
