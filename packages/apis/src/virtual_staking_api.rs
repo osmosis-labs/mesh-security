@@ -53,6 +53,7 @@ pub trait VirtualStakingApi {
     ///  - Temporary removal of a validator from the active set due to jailing. Implies slashing.
     ///  - Addition of an existing validator to the active validator set.
     ///  - Permanent removal (i.e. tombstoning) of a validator from the active set. Implies slashing
+    #[allow(clippy::too_many_arguments)]
     #[sv::msg(sudo)]
     fn handle_valset_update(
         &self,

@@ -223,7 +223,7 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     /// as to perform a rebalance if needed (over the max cap).
     ///
     /// It should also withdraw all pending rewards here, and send them to the converter contract.
-    fn handle_epoch(&self, ctx: SudoCtx) -> Result<Response, Self::Error> {
+    fn handle_epoch(&self, _ctx: SudoCtx) -> Result<Response, Self::Error> {
         unimplemented!()
     }
 
@@ -236,14 +236,14 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     ///  - Permanent removal (i.e. tombstoning) of a validator from the active set. Implies slashing
     fn handle_valset_update(
         &self,
-        ctx: SudoCtx,
-        additions: Option<Vec<Validator>>,
-        removals: Option<Vec<String>>,
-        updated: Option<Vec<Validator>>,
-        jailed: Option<Vec<String>>,
-        unjailed: Option<Vec<String>>,
-        tombstoned: Option<Vec<String>>,
-        slashed: Option<Vec<ValidatorSlash>>,
+        _ctx: SudoCtx,
+        _additions: Option<Vec<Validator>>,
+        _removals: Option<Vec<String>>,
+        _updated: Option<Vec<Validator>>,
+        _jailed: Option<Vec<String>>,
+        _unjailed: Option<Vec<String>>,
+        _tombstoned: Option<Vec<String>>,
+        _slashed: Option<Vec<ValidatorSlash>>,
     ) -> Result<Response, Self::Error> {
         unimplemented!()
     }

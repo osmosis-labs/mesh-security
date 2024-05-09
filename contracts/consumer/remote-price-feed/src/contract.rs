@@ -1,4 +1,4 @@
-use cosmwasm_std::{entry_point, Decimal, DepsMut, Env, IbcChannel, Response, Timestamp};
+use cosmwasm_std::{Decimal, DepsMut, Env, IbcChannel, Response, Timestamp};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
@@ -97,7 +97,7 @@ impl PriceFeedApi for RemotePriceFeedContract {
     }
 
     fn handle_epoch(&self, ctx: SudoCtx) -> Result<Response, Self::Error> {
-        Ok(self.scheduler.trigger(ctx.deps, &ctx.env)?)
+        self.scheduler.trigger(ctx.deps, &ctx.env)
     }
 }
 
