@@ -651,7 +651,6 @@ mod tests {
         Decimal,
     };
     use mesh_bindings::{BondStatusResponse, SlashRatioResponse};
-    use serde::de::DeserializeOwned;
 
     use super::*;
 
@@ -1291,12 +1290,8 @@ mod tests {
     }
 
     trait VirtualStakingExt {
-        fn quick_inst<C: CustomQuery>(&self, deps: DepsMut<C>);
-        fn push_rewards<C: CustomQuery + DeserializeOwned>(
-            &self,
-            deps: &mut OwnedDeps<C>,
-            amount: u128,
-        ) -> PushRewardsResult;
+        fn quick_inst(&self, deps: DepsMut);
+        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult;
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult;
         fn quick_bond(&self, deps: DepsMut, validator: &str, amount: u128);
         fn quick_unbond(&self, deps: DepsMut, validator: &str, amount: u128);
@@ -1305,7 +1300,7 @@ mod tests {
             deps: DepsMut,
             validator: &[&str],
             amount: u128,
-        ) -> Result<Response, ContractError>;
+        ) -> Result<Response<VirtualStakeCustomMsg>, ContractError>;
         fn jail(
             &self,
             deps: DepsMut,
@@ -1326,20 +1321,16 @@ mod tests {
     }
 
     impl VirtualStakingExt for VirtualStakingContract<'_> {
-        fn quick_inst<C: CustomQuery>(&self, deps: DepsMut<C>) {
+        fn quick_inst(&self, deps: DepsMut) {
             self.instantiate(InstantiateCtx {
-                deps: deps.into_empty(),
+                deps: deps,
                 env: mock_env(),
                 info: mock_info("me", &[]),
             })
             .unwrap();
         }
 
-        fn push_rewards<C: CustomQuery + DeserializeOwned>(
-            &self,
-            deps: &mut OwnedDeps<C>,
-            amount: u128,
-        ) -> PushRewardsResult {
+        fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult {
             let denom = self.config.load(&deps.storage).unwrap().denom;
             let old_amount = deps
                 .as_ref()
@@ -1354,7 +1345,7 @@ mod tests {
             )]);
 
             let result = PushRewardsResult::new(
-                self.reply_rewards(deps.as_mut().into_empty(), mock_env())
+                self.reply_rewards(deps.as_mut(), mock_env())
                     .unwrap()
                     .messages,
             );
@@ -1369,7 +1360,11 @@ mod tests {
 
         #[track_caller]
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult {
-            HitEpochResult::new(self.handle_epoch(deps, mock_env()).unwrap())
+            let deps = SudoCtx {
+                deps,
+                env: mock_env(),
+            };
+            HitEpochResult::new(self.handle_epoch(deps).unwrap())
         }
 
         fn quick_bond(&self, deps: DepsMut, validator: &str, amount: u128) {
@@ -1377,7 +1372,7 @@ mod tests {
 
             self.bond(
                 ExecCtx {
-                    deps: deps.into_empty(),
+                    deps: deps,
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },
@@ -1392,7 +1387,7 @@ mod tests {
 
             self.unbond(
                 ExecCtx {
-                    deps: deps.into_empty(),
+                    deps: deps,
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },
@@ -1407,12 +1402,12 @@ mod tests {
             deps: DepsMut,
             validators: &[&str],
             amount: u128,
-        ) -> Result<Response, ContractError> {
+        ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.burn(
                 ExecCtx {
-                    deps: deps.into_empty(),
+                    deps: deps,
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },
@@ -1428,16 +1423,20 @@ mod tests {
             nominal_slash_ratio: Decimal,
             slash_amount: Uint128,
         ) {
+            let deps = SudoCtx {
+                deps,
+                env: mock_env(),
+            };
             // We sent a removal and a slash along with the jail, as this is what the blockchain does
             self.handle_valset_update(
                 deps,
-                &[],
-                &[val.to_string()],
-                &[],
-                &[val.to_string()],
-                &[],
-                &[],
-                &[ValidatorSlash {
+                None,
+                Some(vec![val.to_string()]),
+                None,
+                Some(vec![val.to_string()]),
+                None,
+                None,
+                Some(vec![ValidatorSlash {
                     address: val.to_string(),
                     height: 0,
                     time: 0,
@@ -1446,14 +1445,27 @@ mod tests {
                     power: 0,
                     slash_amount,
                     slash_ratio: nominal_slash_ratio.to_string(),
-                }],
+                }]),
             )
             .unwrap();
         }
 
         fn unjail(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[], &[], &[], &[val.to_string()], &[], &[])
-                .unwrap();
+            let deps = SudoCtx {
+                deps,
+                env: mock_env(),
+            };
+            self.handle_valset_update(
+                deps,
+                None,
+                None,
+                None,
+                None,
+                Some(vec![val.to_string()]),
+                None,
+                None,
+            )
+            .unwrap();
         }
 
         fn tombstone(
@@ -1463,16 +1475,20 @@ mod tests {
             nominal_slash_ratio: Decimal,
             slash_amount: Uint128,
         ) {
+            let deps = SudoCtx {
+                deps,
+                env: mock_env(),
+            };
             // We sent a slash along with the tombstone, as this is what the blockchain does
             self.handle_valset_update(
                 deps,
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[val.to_string()],
-                &[ValidatorSlash {
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(vec![val.to_string()]),
+                Some(vec![ValidatorSlash {
                     address: val.to_string(),
                     height: 0,
                     time: 0,
@@ -1481,7 +1497,7 @@ mod tests {
                     power: 0,
                     slash_amount,
                     slash_ratio: nominal_slash_ratio.to_string(),
-                }],
+                }]),
             )
             .unwrap();
         }
@@ -1493,13 +1509,30 @@ mod tests {
                 max_commission: Default::default(),
                 max_change_rate: Default::default(),
             };
-            self.handle_valset_update(deps, &[val], &[], &[], &[], &[], &[], &[])
+            let deps = SudoCtx {
+                deps,
+                env: mock_env(),
+            };
+            self.handle_valset_update(deps, Some(vec![val]), None, None, None, None, None, None)
                 .unwrap();
         }
 
         fn remove_val(&self, deps: DepsMut, val: &str) {
-            self.handle_valset_update(deps, &[], &[val.to_string()], &[], &[], &[], &[], &[])
-                .unwrap();
+            let deps = SudoCtx {
+                deps,
+                env: mock_env(),
+            };
+            self.handle_valset_update(
+                deps,
+                None,
+                Some(vec![val.to_string()]),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
         }
     }
 
@@ -1509,7 +1542,7 @@ mod tests {
     }
 
     impl PushRewardsResult {
-        fn new(data: Vec<SubMsg>) -> Self {
+        fn new<C: cosmwasm_std::CustomMsg>(data: Vec<SubMsg<C>>) -> Self {
             match &data[..] {
                 [] => Self::Empty,
                 [SubMsg {
