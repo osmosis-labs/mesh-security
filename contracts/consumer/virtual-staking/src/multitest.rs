@@ -1,11 +1,20 @@
 use cosmwasm_std::{Addr, Decimal, Validator};
-use cw_multi_test::App as MtApp;
-use mesh_apis::virtual_staking_api::SudoMsg;
-use sylvia::multitest::App;
+use sylvia::multitest::Proxy;
+
+use mesh_converter::contract::sv::mt::ConverterContractProxy;
 
 use crate::contract;
+use crate::contract::sv::mt::VirtualStakingContractProxy;
+use crate::contract::sv::ContractSudoMsg;
 
 const JUNO: &str = "ujuno";
+
+// Trying to figure out how to work with the generic types
+type MtApp = cw_multi_test::BasicApp<
+    mesh_bindings::VirtualStakeCustomMsg,
+    mesh_bindings::VirtualStakeCustomQuery,
+>;
+type App = sylvia::multitest::App<MtApp>;
 
 struct SetupArgs<'a> {
     owner: &'a str,
@@ -15,12 +24,12 @@ struct SetupArgs<'a> {
 }
 
 struct SetupResponse<'a> {
-    price_feed: mesh_simple_price_feed::contract::sv::mt::SimplePriceFeedContractProxy<'a, MtApp>,
-    converter: mesh_converter::contract::sv::mt::ConverterContractProxy<'a, MtApp>,
-    virtual_staking: contract::sv::mt::VirtualStakingContractProxy<'a, MtApp>,
+    price_feed: Proxy<'a, MtApp, mesh_simple_price_feed::contract::SimplePriceFeedContract<'a>>,
+    converter: Proxy<'a, MtApp, mesh_converter::contract::ConverterContract<'a>>,
+    virtual_staking: Proxy<'a, MtApp, contract::VirtualStakingContract<'a>>,
 }
 
-fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
+fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
     let SetupArgs {
         owner,
         admin,
@@ -53,8 +62,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
 
     let config = converter.config().unwrap();
     let virtual_staking_addr = Addr::unchecked(config.virtual_staking);
-    let virtual_staking =
-        contract::sv::mt::VirtualStakingContractProxy::new(virtual_staking_addr, app);
+    let virtual_staking = Proxy::new(virtual_staking_addr, app);
 
     SetupResponse {
         price_feed,
@@ -108,7 +116,7 @@ fn instantiation() {
 #[test]
 #[ignore] // FIXME: Enable / finish this test once custom query support is added to sylvia
 fn valset_update_sudo() {
-    let app = App::default();
+    let app = App::<MtApp>::default();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
     let admin = "theman";
@@ -146,15 +154,17 @@ fn valset_update_sudo() {
     ];
     let rems = vec!["cosmosval2".to_string()];
     let tombs = vec!["cosmosval3".to_string()];
-    let msg = SudoMsg::ValsetUpdate {
-        additions: Some(adds),
-        removals: Some(rems),
-        updated: None,
-        jailed: None,
-        unjailed: None,
-        tombstoned: Some(tombs),
-        slashed: None,
-    };
+    // See this as an example how we can make working directly with these genertaed enums nicer
+    let inner = mesh_apis::virtual_staking_api::sv::VirtualStakingApiSudoMsg::handle_valset_update(
+        Some(adds),
+        Some(rems),
+        None,
+        None,
+        None,
+        Some(tombs),
+        None,
+    );
+    let msg = ContractSudoMsg::VirtualStakingApi(inner);
 
     let res = app
         .app_mut()
