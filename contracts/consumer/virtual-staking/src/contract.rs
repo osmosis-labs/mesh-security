@@ -2,9 +2,8 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cosmwasm_std::{
-    coin, ensure_eq, entry_point, to_json_binary, Coin, CosmosMsg, CustomQuery, DepsMut,
-    DistributionMsg, Env, Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator,
-    WasmMsg,
+    coin, ensure_eq, to_json_binary, Coin, CosmosMsg, CustomQuery, DepsMut, DistributionMsg, Env,
+    Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -72,7 +71,10 @@ impl VirtualStakingContract<'_> {
 
     /// The caller of the instantiation will be the converter contract
     #[sv::msg(instantiate)]
-    pub fn instantiate(&self, ctx: InstantiateCtx) -> Result<Response, ContractError> {
+    pub fn instantiate(
+        &self,
+        ctx: InstantiateCtx<VirtualStakeCustomQuery>,
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
         let denom = ctx.deps.querier.query_bonded_denom()?;
         let config = Config {
@@ -91,7 +93,10 @@ impl VirtualStakingContract<'_> {
     }
 
     #[sv::msg(query)]
-    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+    fn config(
+        &self,
+        ctx: QueryCtx<VirtualStakeCustomQuery>,
+    ) -> Result<ConfigResponse, ContractError> {
         Ok(self.config.load(ctx.deps.storage)?.into())
     }
 
@@ -125,7 +130,11 @@ impl VirtualStakingContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+    fn reply(
+        &self,
+        ctx: ReplyCtx<VirtualStakeCustomQuery>,
+        reply: Reply,
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         match (reply.id, reply.result.into_result()) {
             (REPLY_REWARDS_ID, Ok(_)) => self.reply_rewards(ctx.deps, ctx.env),
             (REPLY_REWARDS_ID, Err(e)) => {
@@ -142,7 +151,11 @@ impl VirtualStakingContract<'_> {
     }
 
     /// This is called on each successful withdrawal
-    fn reply_rewards(&self, mut deps: DepsMut, env: Env) -> Result<Response, ContractError> {
+    fn reply_rewards(
+        &self,
+        mut deps: DepsMut<VirtualStakeCustomQuery>,
+        env: Env,
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         const BATCH: ValidatorRewardsBatch = VALIDATOR_REWARDS_BATCH;
 
         // Find the validator to assign the new reward to
@@ -212,7 +225,7 @@ impl VirtualStakingContract<'_> {
 
 /// Returns a tuple containing the reward target and a boolean value
 /// specifying if we've exhausted the list.
-fn pop_target(deps: DepsMut) -> StdResult<(String, bool)> {
+fn pop_target(deps: DepsMut<VirtualStakeCustomQuery>) -> StdResult<(String, bool)> {
     let mut targets = REWARD_TARGETS.load(deps.storage)?;
     let target = targets.pop().unwrap();
     REWARD_TARGETS.save(deps.storage, &targets)?;
@@ -338,11 +351,19 @@ fn withdraw_reward_msgs<T: CustomQuery>(
 
 impl VirtualStakingApi for VirtualStakingContract<'_> {
     type Error = ContractError;
+    type QueryC = VirtualStakeCustomQuery;
+    type ExecC = VirtualStakeCustomMsg;
 
     /// Requests to bond tokens to a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance.
     /// If the max cap is 0, then this will immediately return an error.
-    fn bond(&self, ctx: ExecCtx, validator: String, amount: Coin) -> Result<Response, Self::Error> {
+    fn bond(
+        &self,
+        ctx: ExecCtx<VirtualStakeCustomQuery>,
+
+        validator: String,
+        amount: Coin,
+    ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized); // only the converter can call this
@@ -369,10 +390,10 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     /// If the virtual staking contract doesn't have at least amount tokens staked to the given validator, this will return an error.
     fn unbond(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<VirtualStakeCustomQuery>,
         validator: String,
         amount: Coin,
-    ) -> Result<Response, Self::Error> {
+    ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized); // only the converter can call this
@@ -398,10 +419,10 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     /// If the virtual staking contract doesn't have at least amount tokens staked over the given validators, this will return an error.
     fn burn(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<VirtualStakeCustomQuery>,
         validators: Vec<String>,
         amount: Coin,
-    ) -> Result<Response, Self::Error> {
+    ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized); // only the converter can call this
@@ -475,7 +496,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         &self,
         ctx: SudoCtx<VirtualStakeCustomQuery>,
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        let SudoCtx { deps, env, .. } = ctx;
+        let SudoCtx { mut deps, env, .. } = ctx;
 
         // withdraw rewards
         let bonded = self.bonded.load(deps.storage)?;
@@ -546,7 +567,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     #[allow(clippy::too_many_arguments)]
     fn handle_valset_update(
         &self,
-        ctx: SudoCtx,
+        ctx: SudoCtx<VirtualStakeCustomQuery>,
         additions: Option<Vec<Validator>>,
         removals: Option<Vec<String>>,
         updated: Option<Vec<Validator>>,
@@ -1495,7 +1516,7 @@ mod tests {
                     msg: CosmosMsg::Wasm(WasmMsg::Execute { msg: bin_msg, .. }),
                     ..
                 }] => {
-                    if let converter_api::ExecMsg::DistributeRewards { mut payments } =
+                    if let converter_api::sv::ExecMsg::DistributeRewards { mut payments } =
                         from_json(bin_msg).unwrap()
                     {
                         payments.sort();

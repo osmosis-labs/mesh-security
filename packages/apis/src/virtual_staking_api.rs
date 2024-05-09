@@ -1,7 +1,10 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Coin, Response, StdError, Uint128, Validator};
+use sylvia::cw_std::{CustomMsg, CustomQuery};
 use sylvia::types::{ExecCtx, SudoCtx};
 use sylvia::{interface, schemars};
+
+// TODO: make these parameters of the trait?
 
 /// The Virtual Staking API is called from the converter contract to bond and (instantly) unbond tokens.
 /// The Virtual Staking contract is responsible for interfacing with the native SDK module, while the converter
@@ -9,12 +12,14 @@ use sylvia::{interface, schemars};
 #[interface]
 pub trait VirtualStakingApi {
     type Error: From<StdError>;
+    type ExecC: CustomMsg;
+    type QueryC: CustomQuery;
 
     /// Requests to bond tokens to a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance.
     /// If the max cap is 0, then this will immediately return an error.
     #[sv::msg(exec)]
-    fn bond(&self, ctx: ExecCtx, validator: String, amount: Coin) -> Result<Response, Self::Error>;
+    fn bond(&self, ctx: ExecCtx<Self::QueryC>, validator: String, amount: Coin) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
@@ -22,10 +27,10 @@ pub trait VirtualStakingApi {
     #[sv::msg(exec)]
     fn unbond(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<Self::QueryC>,
         validator: String,
         amount: Coin,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Burns stake. This is called when the user's collateral is slashed and, as part of slashing
     /// propagation, the virtual staking contract needs to burn / discount the indicated slashing amount.
@@ -33,10 +38,10 @@ pub trait VirtualStakingApi {
     #[sv::msg(exec)]
     fn burn(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<Self::QueryC>,
         validators: Vec<String>,
         amount: Coin,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// SudoMsg::HandleEpoch{} should be called once per epoch by the sdk (in EndBlock).
     /// It allows the virtual staking contract to bond or unbond any pending requests, as well
@@ -44,7 +49,7 @@ pub trait VirtualStakingApi {
     ///
     /// It should also withdraw all pending rewards here, and send them to the converter contract.
     #[sv::msg(sudo)]
-    fn handle_epoch(&self, ctx: SudoCtx) -> Result<Response, Self::Error>;
+    fn handle_epoch(&self, ctx: SudoCtx<Self::QueryC>) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update:
     ///  - Addition of a new validator to the active validator set.
@@ -57,7 +62,7 @@ pub trait VirtualStakingApi {
     #[sv::msg(sudo)]
     fn handle_valset_update(
         &self,
-        ctx: SudoCtx,
+        ctx: SudoCtx<Self::QueryC>,
         additions: Option<Vec<Validator>>,
         removals: Option<Vec<String>>,
         updated: Option<Vec<Validator>>,
@@ -65,7 +70,7 @@ pub trait VirtualStakingApi {
         unjailed: Option<Vec<String>>,
         tombstoned: Option<Vec<String>>,
         slashed: Option<Vec<ValidatorSlash>>,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 }
 
 #[cw_serde]
