@@ -24,6 +24,16 @@ pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const REPLY_ID_INSTANTIATE: u64 = 1;
 
+#[cfg(not(any(test, feature = "mt")))]
+pub type ConverterCustomMsg = cosmwasm_std::Empty;
+#[cfg(any(test, feature = "mt"))]
+pub type ConverterCustomMsg = mesh_bindings::VirtualStakeCustomMsg;
+
+#[cfg(not(any(test, feature = "mt")))]
+pub type ConverterCustomQuery = cosmwasm_std::Empty;
+#[cfg(any(test, feature = "mt"))]
+pub type ConverterCustomQuery = mesh_bindings::VirtualStakeCustomQuery;
+
 pub struct ConverterContract<'a> {
     pub config: Item<'a, Config>,
     pub virtual_stake: Item<'a, Addr>,
@@ -33,6 +43,8 @@ pub struct ConverterContract<'a> {
 #[contract]
 #[sv::error(ContractError)]
 #[sv::messages(converter_api as ConverterApi)]
+/// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
+#[sv::custom(query=ConverterCustomQuery, msg=ConverterCustomMsg)]
 impl ConverterContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -51,7 +63,7 @@ impl ConverterContract<'_> {
     #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
-        ctx: InstantiateCtx,
+        ctx: InstantiateCtx<ConverterCustomQuery>,
         price_feed: String,
         discount: Decimal,
         remote_denom: String,
@@ -94,7 +106,11 @@ impl ConverterContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+    fn reply(
+        &self,
+        ctx: ReplyCtx<ConverterCustomQuery>,
+        reply: Reply,
+    ) -> Result<Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -104,7 +120,7 @@ impl ConverterContract<'_> {
     /// Store virtual staking address
     fn reply_init_callback(
         &self,
-        deps: DepsMut,
+        deps: DepsMut<ConverterCustomQuery>,
         reply: SubMsgResponse,
     ) -> Result<Response, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
@@ -118,7 +134,7 @@ impl ConverterContract<'_> {
     #[sv::msg(exec)]
     fn test_stake(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<ConverterCustomQuery>,
         validator: String,
         stake: Coin,
     ) -> Result<Response, ContractError> {
@@ -139,7 +155,7 @@ impl ConverterContract<'_> {
     #[sv::msg(exec)]
     fn test_unstake(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<ConverterCustomQuery>,
         validator: String,
         unstake: Coin,
     ) -> Result<Response, ContractError> {
@@ -160,7 +176,7 @@ impl ConverterContract<'_> {
     #[sv::msg(exec)]
     fn test_burn(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<ConverterCustomQuery>,
         validators: Vec<String>,
         burn: Coin,
     ) -> Result<Response, ContractError> {
@@ -177,7 +193,7 @@ impl ConverterContract<'_> {
     }
 
     #[sv::msg(query)]
-    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+    fn config(&self, ctx: QueryCtx<ConverterCustomQuery>) -> Result<ConfigResponse, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
         let virtual_staking = self.virtual_stake.load(ctx.deps.storage)?.into_string();
         Ok(ConfigResponse {
@@ -191,7 +207,7 @@ impl ConverterContract<'_> {
     /// It is pulled out into a method, so it can also be called by test_stake for testing
     pub(crate) fn stake(
         &self,
-        deps: DepsMut,
+        deps: DepsMut<ConverterCustomQuery>,
         validator: String,
         stake: Coin,
     ) -> Result<Response, ContractError> {
@@ -215,7 +231,7 @@ impl ConverterContract<'_> {
     /// It is pulled out into a method, so it can also be called by test_unstake for testing
     pub(crate) fn unstake(
         &self,
-        deps: DepsMut,
+        deps: DepsMut<ConverterCustomQuery>,
         validator: String,
         unstake: Coin,
     ) -> Result<Response, ContractError> {
@@ -239,7 +255,7 @@ impl ConverterContract<'_> {
     /// It is pulled out into a method, so it can also be called by test_burn for testing
     pub(crate) fn burn(
         &self,
-        deps: DepsMut,
+        deps: DepsMut<ConverterCustomQuery>,
         validators: &[String],
         burn: Coin,
     ) -> Result<Response, ContractError> {
@@ -262,7 +278,11 @@ impl ConverterContract<'_> {
         Ok(Response::new().add_message(msg).add_event(event))
     }
 
-    fn normalize_price(&self, deps: Deps, amount: Coin) -> Result<Coin, ContractError> {
+    fn normalize_price(
+        &self,
+        deps: Deps<ConverterCustomQuery>,
+        amount: Coin,
+    ) -> Result<Coin, ContractError> {
         let config = self.config.load(deps.storage)?;
         ensure_eq!(
             config.remote_denom,
@@ -291,7 +311,11 @@ impl ConverterContract<'_> {
         })
     }
 
-    fn invert_price(&self, deps: Deps, amount: Coin) -> Result<Coin, ContractError> {
+    fn invert_price(
+        &self,
+        deps: Deps<ConverterCustomQuery>,
+        amount: Coin,
+    ) -> Result<Coin, ContractError> {
         let config = self.config.load(deps.storage)?;
         ensure_eq!(
             config.local_denom,
@@ -325,7 +349,7 @@ impl ConverterContract<'_> {
 
     pub(crate) fn transfer_rewards(
         &self,
-        deps: Deps,
+        deps: Deps<ConverterCustomQuery>,
         recipient: String,
         rewards: Coin,
     ) -> Result<CosmosMsg, ContractError> {
@@ -351,7 +375,11 @@ impl ConverterContract<'_> {
         Ok(msg.into())
     }
 
-    fn ensure_authorized(&self, deps: &DepsMut, info: &MessageInfo) -> Result<(), ContractError> {
+    fn ensure_authorized(
+        &self,
+        deps: &DepsMut<ConverterCustomQuery>,
+        info: &MessageInfo,
+    ) -> Result<(), ContractError> {
         let virtual_stake = self.virtual_stake.load(deps.storage)?;
         ensure_eq!(info.sender, virtual_stake, ContractError::Unauthorized {});
 
@@ -366,7 +394,7 @@ impl ConverterApi for ConverterContract<'_> {
     /// stakers who staked on this validator. This is tracked on the provider, so we send an IBC packet there.
     fn distribute_reward(
         &self,
-        mut ctx: ExecCtx,
+        mut ctx: ExecCtx<ConverterCustomQuery>,
         validator: String,
     ) -> Result<Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
@@ -391,7 +419,7 @@ impl ConverterApi for ConverterContract<'_> {
     /// in the native staking denom.
     fn distribute_rewards(
         &self,
-        mut ctx: ExecCtx,
+        mut ctx: ExecCtx<ConverterCustomQuery>,
         payments: Vec<RewardInfo>,
     ) -> Result<Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
@@ -431,7 +459,7 @@ impl ConverterApi for ConverterContract<'_> {
     #[allow(clippy::too_many_arguments)]
     fn valset_update(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<ConverterCustomQuery>,
         additions: Vec<Validator>,
         removals: Vec<String>,
         updated: Vec<Validator>,

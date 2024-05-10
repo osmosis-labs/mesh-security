@@ -14,6 +14,16 @@ use crate::state::Config;
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[cfg(not(any(test, feature = "mt")))]
+pub type PriceFeedCustomMsg = cosmwasm_std::Empty;
+#[cfg(any(test, feature = "mt"))]
+pub type PriceFeedCustomMsg = mesh_bindings::VirtualStakeCustomMsg;
+
+#[cfg(not(any(test, feature = "mt")))]
+pub type PriceFeedCustomQuery = cosmwasm_std::Empty;
+#[cfg(any(test, feature = "mt"))]
+pub type PriceFeedCustomQuery = mesh_bindings::VirtualStakeCustomQuery;
+
 pub struct SimplePriceFeedContract<'a> {
     pub config: Item<'a, Config>,
 }
@@ -21,7 +31,11 @@ pub struct SimplePriceFeedContract<'a> {
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[sv::error(ContractError)]
-#[sv::messages(price_feed_api as PriceFeedApi)]
+#[sv::messages(price_feed_api as PriceFeedApi: custom(msg, query))]
+// #[cfg_attr(any(test, feature = "mt"), sv::messages(price_feed_api as PriceFeedApi: custom(msg, query)))]
+// #[cfg_attr(not(any(test, feature = "mt")), sv::messages(price_feed_api as PriceFeedApi))]
+/// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
+#[sv::custom(query=PriceFeedCustomQuery, msg=PriceFeedCustomMsg)]
 impl SimplePriceFeedContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -34,10 +48,10 @@ impl SimplePriceFeedContract<'_> {
     #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
-        ctx: InstantiateCtx,
+        ctx: InstantiateCtx<PriceFeedCustomQuery>,
         native_per_foreign: Decimal,
         owner: Option<String>,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<Response<PriceFeedCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
         let owner = match owner {
             Some(owner) => ctx.deps.api.addr_validate(&owner)?,
@@ -56,9 +70,9 @@ impl SimplePriceFeedContract<'_> {
     #[sv::msg(exec)]
     fn update_price(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<PriceFeedCustomQuery>,
         native_per_foreign: Decimal,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<Response<PriceFeedCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let mut config = self.config.load(ctx.deps.storage)?;
@@ -76,7 +90,7 @@ impl SimplePriceFeedContract<'_> {
     }
 
     #[sv::msg(query)]
-    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+    fn config(&self, ctx: QueryCtx<PriceFeedCustomQuery>) -> Result<ConfigResponse, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
         Ok(ConfigResponse {
             owner: config.owner.into_string(),

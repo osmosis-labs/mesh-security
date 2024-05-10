@@ -607,6 +607,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-bindings",
  "mesh-burn",
  "mesh-simple-price-feed",
  "schemars",
@@ -736,6 +737,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-bindings",
  "schemars",
  "serde",
  "sylvia",
@@ -1188,8 +1190,7 @@ checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
 [[package]]
 name = "sylvia"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e64c8e892525ec035e5bdbeceec19309b1534734da7ff7bc69e9f639b077c497"
+source = "git+https://github.com/CosmWasm/sylvia?branch=jawoznia/cosmwasm1/map_err_on_into_response#a5d3546eb287e3e7f003251c529ff3401784e1bb"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -1207,8 +1208,7 @@ dependencies = [
 [[package]]
 name = "sylvia-derive"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae5e0f41752efba2c6895514fa4caae742f69a2a73b4790bb6e365400c563bc1"
+source = "git+https://github.com/CosmWasm/sylvia?branch=jawoznia/cosmwasm1/map_err_on_into_response#a5d3546eb287e3e7f003251c529ff3401784e1bb"
 dependencies = [
  "convert_case",
  "itertools 0.12.1",

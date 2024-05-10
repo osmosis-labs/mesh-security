@@ -360,7 +360,6 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     fn bond(
         &self,
         ctx: ExecCtx<VirtualStakeCustomQuery>,
-
         validator: String,
         amount: Coin,
     ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
