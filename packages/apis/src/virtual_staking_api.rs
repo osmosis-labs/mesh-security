@@ -19,7 +19,12 @@ pub trait VirtualStakingApi {
     /// If the virtual staking module is over the max cap, it will trigger a rebalance.
     /// If the max cap is 0, then this will immediately return an error.
     #[sv::msg(exec)]
-    fn bond(&self, ctx: ExecCtx<Self::QueryC>, validator: String, amount: Coin) -> Result<Response<Self::ExecC>, Self::Error>;
+    fn bond(
+        &self,
+        ctx: ExecCtx<Self::QueryC>,
+        validator: String,
+        amount: Coin,
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
@@ -49,7 +54,10 @@ pub trait VirtualStakingApi {
     ///
     /// It should also withdraw all pending rewards here, and send them to the converter contract.
     #[sv::msg(sudo)]
-    fn handle_epoch(&self, ctx: SudoCtx<Self::QueryC>) -> Result<Response<Self::ExecC>, Self::Error>;
+    fn handle_epoch(
+        &self,
+        ctx: SudoCtx<Self::QueryC>,
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update:
     ///  - Addition of a new validator to the active validator set.

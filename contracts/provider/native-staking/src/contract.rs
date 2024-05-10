@@ -1,11 +1,11 @@
 use cosmwasm_std::Order::Ascending;
 use cosmwasm_std::{
-    from_json, Addr, Decimal, DepsMut, Reply, Response, StdResult, SubMsgResponse, WasmMsg,
+    from_json, Addr, Decimal, DepsMut, Event, Reply, Response, StdResult, SubMsgResponse, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
-use sylvia::types::{InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
@@ -77,6 +77,46 @@ impl NativeStakingContract<'_> {
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         Ok(Response::new())
+    }
+
+    /// This is called every time there's a change of the active validator set that implies slashing.
+    /// In test code, this is called from `test_handle_jailing`.
+    /// In non-test code, this is called from `sudo`.
+    fn handle_jailing(
+        &self,
+        mut deps: DepsMut,
+        jailed: Option<Vec<String>>,
+        tombstoned: Option<Vec<String>>,
+    ) -> Result<Response, ContractError> {
+        let jailed = &jailed.unwrap_or_default();
+        let tombstoned = &tombstoned.unwrap_or_default();
+
+        let cfg = self.config.load(deps.storage)?;
+        let mut msgs = vec![];
+        for validator in tombstoned {
+            // Slash the validator (if bonded)
+            let slash_msg =
+                self.handle_slashing(&mut deps, &cfg, validator, SlashingReason::DoubleSign)?;
+            if let Some(msg) = slash_msg {
+                msgs.push(msg)
+            }
+        }
+        for validator in jailed {
+            // Slash the validator (if bonded)
+            let slash_msg =
+                self.handle_slashing(&mut deps, &cfg, validator, SlashingReason::Offline)?;
+            if let Some(msg) = slash_msg {
+                msgs.push(msg)
+            }
+        }
+        let mut evt = Event::new("jailing");
+        if !jailed.is_empty() {
+            evt = evt.add_attribute("jailed", jailed.join(","));
+        }
+        if !tombstoned.is_empty() {
+            evt = evt.add_attribute("tombstoned", tombstoned.join(","));
+        }
+        Ok(Response::new().add_event(evt).add_messages(msgs))
     }
 
     pub(crate) fn handle_slashing(
@@ -192,5 +232,49 @@ impl NativeStakingContract<'_> {
         Ok(OwnerByProxyResponse {
             owner: owner_addr.to_string(),
         })
+    }
+
+    /// Jails validators temporarily or permanently.
+    /// Method used for test only.
+    #[sv::msg(exec)]
+    fn test_handle_jailing(
+        &self,
+        ctx: ExecCtx,
+        jailed: Vec<String>,
+        tombstoned: Vec<String>,
+    ) -> Result<Response, ContractError> {
+        #[cfg(any(feature = "mt", test))]
+        {
+            let jailed = if jailed.is_empty() {
+                None
+            } else {
+                Some(jailed)
+            };
+            let tombstoned = if tombstoned.is_empty() {
+                None
+            } else {
+                Some(tombstoned)
+            };
+            NativeStakingContract::new().handle_jailing(ctx.deps, jailed, tombstoned)
+        }
+        #[cfg(not(any(feature = "mt", test)))]
+        {
+            let _ = (ctx, jailed, tombstoned);
+            Err(ContractError::Unauthorized {})
+        }
+    }
+
+    /// `SudoMsg::Jailing` should be called every time there's a validator set update that implies
+    /// slashing.
+    ///  - Temporary removal of a validator from the active set due to jailing.
+    ///  - Permanent removal (i.e. tombstoning) of a validator from the active set.
+    #[sv::msg(sudo)]
+    fn jailing(
+        &self,
+        ctx: SudoCtx,
+        jailed: Option<Vec<String>>,
+        tombstoned: Option<Vec<String>>,
+    ) -> Result<Response, ContractError> {
+        self.handle_jailing(ctx.deps, jailed, tombstoned)
     }
 }

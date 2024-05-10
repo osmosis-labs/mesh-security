@@ -2,7 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     to_json_binary, Addr, Binary, Coin, Decimal, Deps, Response, StdError, WasmMsg,
 };
-use sylvia::types::{ExecCtx, QueryCtx, SudoCtx};
+use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
 #[cw_serde]
@@ -49,18 +49,6 @@ pub trait LocalStakingApi {
     /// Returns the maximum percentage that can be slashed
     #[sv::msg(query)]
     fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, Self::Error>;
-
-    /// `SudoMsg::Jailing` should be called every time there's a validator set update that implies
-    /// slashing.
-    ///  - Temporary removal of a validator from the active set due to jailing.
-    ///  - Permanent removal (i.e. tombstoning) of a validator from the active set.
-    #[sv::msg(sudo)]
-    fn jailing(
-        &self,
-        ctx: SudoCtx,
-        jailed: Option<Vec<String>>,
-        tombstoned: Option<Vec<String>>,
-    ) -> Result<Response, Self::Error>;
 }
 
 #[cw_serde]

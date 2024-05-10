@@ -122,7 +122,6 @@ fn instantiation() {
 #[test]
 #[ignore] // FIXME: Enable / finish this test once custom query support is added to sylvia
 fn valset_update_sudo() {
-
     let app = new_app();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)

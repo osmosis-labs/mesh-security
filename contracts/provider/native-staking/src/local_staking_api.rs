@@ -1,13 +1,11 @@
-use cosmwasm_std::{
-    ensure_eq, from_json, to_json_binary, Binary, Coin, Event, Response, SubMsg, WasmMsg,
-};
+use cosmwasm_std::{ensure_eq, from_json, to_json_binary, Binary, Coin, Response, SubMsg, WasmMsg};
 use cw_utils::{must_pay, nonpayable};
-use sylvia::types::{ExecCtx, QueryCtx, SudoCtx};
+use sylvia::types::{ExecCtx, QueryCtx};
 
 #[allow(unused_imports)]
 use mesh_apis::local_staking_api::{self, LocalStakingApi, SlashRatioResponse};
 
-use crate::contract::{NativeStakingContract, SlashingReason, REPLY_ID_INSTANTIATE};
+use crate::contract::{NativeStakingContract, REPLY_ID_INSTANTIATE};
 use crate::error::ContractError;
 use crate::msg::StakeMsg;
 
@@ -120,46 +118,6 @@ impl LocalStakingApi for NativeStakingContract<'_> {
                 Ok(Response::new().add_message(wasm_msg))
             }
         }
-    }
-
-    /// This is called every time there's a change of the active validator set that implies slashing.
-    /// In test code, this is called from `test_handle_jailing`.
-    /// In non-test code, this is called from `sudo`.
-    fn jailing(
-        &self,
-        mut ctx: SudoCtx,
-        jailed: Option<Vec<String>>,
-        tombstoned: Option<Vec<String>>,
-    ) -> Result<Response, ContractError> {
-        let jailed = &jailed.unwrap_or_default();
-        let tombstoned = &tombstoned.unwrap_or_default();
-
-        let cfg = self.config.load(ctx.deps.storage)?;
-        let mut msgs = vec![];
-        for validator in tombstoned {
-            // Slash the validator (if bonded)
-            let slash_msg =
-                self.handle_slashing(&mut ctx.deps, &cfg, validator, SlashingReason::DoubleSign)?;
-            if let Some(msg) = slash_msg {
-                msgs.push(msg)
-            }
-        }
-        for validator in jailed {
-            // Slash the validator (if bonded)
-            let slash_msg =
-                self.handle_slashing(&mut ctx.deps, &cfg, validator, SlashingReason::Offline)?;
-            if let Some(msg) = slash_msg {
-                msgs.push(msg)
-            }
-        }
-        let mut evt = Event::new("jailing");
-        if !jailed.is_empty() {
-            evt = evt.add_attribute("jailed", jailed.join(","));
-        }
-        if !tombstoned.is_empty() {
-            evt = evt.add_attribute("tombstoned", tombstoned.join(","));
-        }
-        Ok(Response::new().add_event(evt).add_messages(msgs))
     }
 
     /// Returns the maximum percentage that can be slashed

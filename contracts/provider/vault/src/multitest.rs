@@ -2599,11 +2599,6 @@ fn cross_slash_pending_unbonding() {
 
 /// Scenario 7:
 /// Same as scenario 1 but with native slashing, because of double-signing.
-///
-/// TODO: re-enable. It requires `test_handle_jailing` to be implemented, which is
-/// also referenced in native-staking::local_staking_apis::jailing but doesn't seem to be
-/// actually implemented anywhere.
-#[cfg(feature = "todo")]
 #[test]
 fn native_slashing_tombstoning() {
     let owner = "owner";
@@ -2728,11 +2723,6 @@ fn native_slashing_tombstoning() {
 
 /// Scenario 8:
 /// Same as scenario 1 but with native slashing, because of offline.
-///
-/// TODO: re-enable. It requires `test_handle_jailing` to be implemented, which is
-/// also referenced in native-staking::local_staking_apis::jailing but doesn't seem to be
-/// actually implemented anywhere.
-#[cfg(feature = "todo")]
 #[test]
 fn native_slashing_jailing() {
     let owner = "owner";

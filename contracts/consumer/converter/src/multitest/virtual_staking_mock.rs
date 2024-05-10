@@ -108,6 +108,8 @@ pub struct ConfigResponse {
 
 impl VirtualStakingApi for VirtualStakingMock<'_> {
     type Error = ContractError;
+    type ExecC = cosmwasm_std::Empty;
+    type QueryC = cosmwasm_std::Empty;
 
     /// Requests to bond tokens to a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance.
