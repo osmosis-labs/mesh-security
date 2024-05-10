@@ -281,10 +281,7 @@ fn unstaking() {
     );
 
     // Advance time until the unbonding period is over
-    app.update_block(|block| {
-        block.height += 1234;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
-    });
+    process_staking_unbondings(&app);
 
     // Check that the contract now has the funds
     assert_eq!(
@@ -295,6 +292,7 @@ fn unstaking() {
         coin(50, OSMO)
     );
 }
+
 
 #[test]
 fn burning() {
@@ -338,11 +336,9 @@ fn burning() {
         coin(0, OSMO)
     );
 
+
     // Advance time until the unbonding period is over
-    app.update_block(|block| {
-        block.height += 1234;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
-    });
+    process_staking_unbondings(&app);
 
     // Check that the contract now has the funds
     assert_eq!(
@@ -424,10 +420,7 @@ fn burning_multiple_delegations() {
     );
 
     // Advance time until the unbonding period is over
-    app.update_block(|block| {
-        block.height += 1234;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
-    });
+    process_staking_unbondings(&app);
 
     // Check that the contract now has the funds
     assert_eq!(
@@ -482,10 +475,7 @@ fn releasing_unbonded() {
     assert!(delegation.is_none());
 
     // Advance time until the unbonding period is over
-    app.update_block(|block| {
-        block.height += 12345;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD + 1);
-    });
+    process_staking_unbondings(&app);
 
     // Release the unbonded funds
     staking_proxy.release_unbonded().call(user).unwrap();
@@ -551,3 +541,18 @@ fn withdrawing_rewards() {
         .unwrap();
     assert_eq!(original_vault_funds, vault_funds);
 }
+
+fn process_staking_unbondings(app: &App<MtApp>) {
+    // Advance unbonding period
+    app.app_mut().update_block(|block| {
+        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
+        block.height += UNBONDING_PERIOD / 5;
+    });
+    // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
+    app.app_mut()
+        .sudo(cw_multi_test::SudoMsg::Staking(
+            cw_multi_test::StakingSudo::ProcessQueue {},
+        ))
+        .unwrap();
+}
+

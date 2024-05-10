@@ -340,6 +340,8 @@ fn releasing_proxy_stake() {
         .unstake(validator.to_string(), coin(100, OSMO))
         .call(user)
         .unwrap();
+    // Important: we need to wait the unbonding period until this is released
+    app.update_block(advance_unbonding_period);
     staking_proxy.release_unbonded().call(user).unwrap();
 
     // Check that the vault has the funds again
@@ -350,4 +352,12 @@ fn releasing_proxy_stake() {
     // And there are no more liens
     let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
     assert_eq!(claims.claims, []);
+}
+
+pub fn advance_unbonding_period(block: &mut cosmwasm_std::BlockInfo) {
+    // Default unbonding time in cw_multi_test is 60, from looking at the code...
+    // Wish I could find this somewhere in this setup somewhere.
+    const UNBONDING_TIME: u64 = 60;
+    block.time = block.time.plus_seconds(5 * UNBONDING_TIME);
+    block.height += UNBONDING_TIME;
 }

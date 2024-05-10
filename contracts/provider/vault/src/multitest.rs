@@ -273,9 +273,16 @@ fn proxy_for_user<'a>(
 }
 
 fn process_staking_unbondings(app: &App<MtApp>) {
-    let mut block_info = app.block_info();
-    block_info.time = block_info.time.plus_seconds(61);
-    app.set_block(block_info);
+    app.app_mut().update_block(|block| {
+        block.time = block.time.plus_seconds(61);
+        block.height += 13;
+    });
+    // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
+    app.app_mut()
+        .sudo(cw_multi_test::SudoMsg::Staking(
+            cw_multi_test::StakingSudo::ProcessQueue {},
+        ))
+        .unwrap();
 }
 
 #[track_caller]
