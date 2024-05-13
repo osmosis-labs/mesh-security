@@ -29,9 +29,8 @@ mesh-converter = { path = "./contracts/consumer/converter" }
 mesh-simple-price-feed = { path = "./contracts/consumer/simple-price-feed" }
 mesh-virtual-staking = { path = "./contracts/consumer/virtual-staking" }
 
-sylvia = { git = "https://github.com/CosmWasm/sylvia", branch = "jawoznia/cosmwasm1/map_err_on_into_response", features = [
-  "mt",
-] }
+sylvia = "0.10.1"
+
 cosmwasm-schema = "1.5.4"
 cosmwasm-std = { version = "1.5.4", features = ["ibc3", "cosmwasm_1_3"] }
 cw-storage-plus = "1.2.0"

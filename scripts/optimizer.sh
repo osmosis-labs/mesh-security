@@ -1,4 +1,6 @@
-:
+#!/bin/bash
+
+set -x
 
 U="cosmwasm"
 V="0.15.0"

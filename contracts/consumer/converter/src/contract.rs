@@ -305,7 +305,7 @@ impl ConverterContract<'_> {
         use price_feed_api::sv::Querier;
         use sylvia::types::Remote;
         let remote = Remote::<
-            dyn price_feed_api::PriceFeedApi<
+            &dyn price_feed_api::PriceFeedApi<
                 Error = StdError,
                 ExecC = custom::ConverterMsg,
                 QueryC = custom::ConverterQuery,
@@ -341,7 +341,7 @@ impl ConverterContract<'_> {
         use sylvia::types::Remote;
         // Note: it doesn't seem to matter which error type goes here...
         let remote = Remote::<
-            dyn price_feed_api::PriceFeedApi<
+            &dyn price_feed_api::PriceFeedApi<
                 Error = StdError,
                 ExecC = custom::ConverterMsg,
                 QueryC = custom::ConverterQuery,
