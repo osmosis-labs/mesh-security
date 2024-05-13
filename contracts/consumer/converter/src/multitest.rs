@@ -1,8 +1,7 @@
 mod virtual_staking_mock;
 
 use cosmwasm_std::{coin, coins, Addr, Decimal, StdError, Uint128, Validator};
-use cw_multi_test::no_init;
-use cw_multi_test::AppBuilder;
+use cw_multi_test::{no_init, AppBuilder};
 use mesh_apis::converter_api::sv::mt::ConverterApiProxy;
 use mesh_apis::converter_api::RewardInfo;
 use mesh_simple_price_feed::contract::sv::mt::CodeId as PriceFeedCodeId;

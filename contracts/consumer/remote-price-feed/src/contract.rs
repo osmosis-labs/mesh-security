@@ -84,6 +84,9 @@ impl RemotePriceFeedContract {
 
 impl PriceFeedApi for RemotePriceFeedContract {
     type Error = ContractError;
+    // FIXME: make these under a feature flag if we need virtual-staking multitest compatibility
+    type ExecC = cosmwasm_std::Empty;
+    type QueryC = cosmwasm_std::Empty;
 
     /// Return the price of the foreign token. That is, how many native tokens
     /// are needed to buy one foreign token.
