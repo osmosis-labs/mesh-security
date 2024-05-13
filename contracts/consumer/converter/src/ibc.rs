@@ -16,7 +16,10 @@ use mesh_apis::ibc::{
 };
 use sylvia::types::ExecCtx;
 
-use crate::{contract::ConverterContract, error::ContractError};
+use crate::{
+    contract::{custom, ConverterContract},
+    error::ContractError,
+};
 
 /// This is the maximum version of the Mesh Security protocol that we support
 const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.11.0";
@@ -184,10 +187,10 @@ pub fn ibc_channel_close(
 /// We cannot return any meaningful response value as we do not know the response value
 /// of execution. We just return ok if we dispatched, error if we failed to dispatch
 pub fn ibc_packet_receive(
-    deps: DepsMut,
+    deps: DepsMut<custom::ConverterQuery>,
     _env: Env,
     msg: IbcPacketReceiveMsg,
-) -> Result<IbcReceiveResponse, ContractError> {
+) -> Result<IbcReceiveResponse<custom::ConverterMsg>, ContractError> {
     let packet: ProviderPacket = from_json(msg.packet.data)?;
     let contract = ConverterContract::new();
     let res = match packet {
@@ -280,7 +283,7 @@ pub fn ibc_packet_timeout(
 }
 
 pub(crate) fn make_ibc_packet(
-    ctx: &mut ExecCtx,
+    ctx: &mut ExecCtx<custom::ConverterQuery>,
     packet: ConsumerPacket,
 ) -> Result<IbcMsg, ContractError> {
     let channel = IBC_CHANNEL.load(ctx.deps.storage)?;

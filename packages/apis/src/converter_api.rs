@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Response, StdError, Uint128, Validator};
+use cosmwasm_std::{Coin, CustomMsg, CustomQuery, Response, StdError, Uint128, Validator};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -9,11 +9,17 @@ use sylvia::{interface, schemars};
 #[interface]
 pub trait ConverterApi {
     type Error: From<StdError>;
+    type ExecC: CustomMsg;
+    type QueryC: CustomQuery;
 
     /// Rewards tokens (in native staking denom) are sent alongside the message, and should be distributed to all
     /// stakers who staked on this validator.
     #[sv::msg(exec)]
-    fn distribute_reward(&self, ctx: ExecCtx, validator: String) -> Result<Response, Self::Error>;
+    fn distribute_reward(
+        &self,
+        ctx: ExecCtx<Self::QueryC>,
+        validator: String,
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// This is a batch for of distribute_reward, including the payment for multiple validators.
     /// This is more efficient than calling distribute_reward multiple times, but also more complex.
@@ -23,18 +29,18 @@ pub trait ConverterApi {
     #[sv::msg(exec)]
     fn distribute_rewards(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<Self::QueryC>,
         payments: Vec<RewardInfo>,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Valset updates.
     ///
     /// TODO: pubkeys need to be part of the Validator struct (requires CosmWasm support).
-    #[allow(clippy::too_many_arguments)]
     #[sv::msg(exec)]
+    #[allow(clippy::too_many_arguments)]
     fn valset_update(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<Self::QueryC>,
         additions: Vec<Validator>,
         removals: Vec<String>,
         updated: Vec<Validator>,
@@ -42,7 +48,7 @@ pub trait ConverterApi {
         unjailed: Vec<String>,
         tombstoned: Vec<String>,
         slashed: Vec<ValidatorSlashInfo>,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 }
 
 #[cw_serde]
