@@ -18,7 +18,7 @@ pub trait CrossStakingApi {
     /// Receives stake from vault contract on behalf of owner and performs the action
     /// specified in msg with it.
     /// Msg is custom to each implementation of the staking contract and opaque to the vault
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn receive_virtual_stake(
         &self,
         ctx: ExecCtx,
@@ -34,7 +34,7 @@ pub trait CrossStakingApi {
     /// If it is not set, undelegate evenly from all validators the user has stake in.
     /// This should be transactional, but it's not. If the transaction fails there isn't much we can
     /// do, besides logging the failure.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn burn_virtual_stake(
         &self,
         ctx: ExecCtx,
@@ -44,7 +44,7 @@ pub trait CrossStakingApi {
     ) -> Result<Response, Self::Error>;
 
     /// Returns the maximum percentage that can be slashed
-    #[msg(query)]
+    #[sv::msg(query)]
     fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, Self::Error>;
 }
 
@@ -64,7 +64,7 @@ impl CrossStakingApiHelper {
         msg: Binary,
         funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {
-        let msg = CrossStakingApiExecMsg::ReceiveVirtualStake {
+        let msg = sv::CrossStakingApiExecMsg::ReceiveVirtualStake {
             owner,
             msg,
             amount,
@@ -84,7 +84,7 @@ impl CrossStakingApiHelper {
         amount: Coin,
         validator: Option<String>,
     ) -> Result<WasmMsg, StdError> {
-        let msg = CrossStakingApiExecMsg::BurnVirtualStake {
+        let msg = sv::CrossStakingApiExecMsg::BurnVirtualStake {
             owner: owner.to_string(),
             validator,
             amount,
@@ -98,7 +98,7 @@ impl CrossStakingApiHelper {
     }
 
     pub fn max_slash(&self, deps: Deps) -> Result<SlashRatioResponse, StdError> {
-        let query = CrossStakingApiQueryMsg::MaxSlash {};
+        let query = sv::CrossStakingApiQueryMsg::MaxSlash {};
         deps.querier.query_wasm_smart(&self.0, &query)
     }
 }

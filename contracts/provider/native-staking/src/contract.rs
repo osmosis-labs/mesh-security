@@ -1,19 +1,14 @@
-#[cfg(not(feature = "library"))]
-use cosmwasm_std::entry_point;
-
 use cosmwasm_std::Order::Ascending;
 use cosmwasm_std::{
-    from_json, Addr, Decimal, DepsMut, Env, Event, Reply, Response, StdResult, SubMsgResponse,
-    WasmMsg,
+    from_json, Addr, Decimal, DepsMut, Event, Reply, Response, StdResult, SubMsgResponse, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
-use mesh_apis::local_staking_api::SudoMsg;
 use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
 use mesh_native_staking_proxy::msg::OwnerMsg;
 use mesh_native_staking_proxy::native_staking_callback;
@@ -45,9 +40,9 @@ pub(crate) enum SlashingReason {
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
-#[error(ContractError)]
-#[messages(local_staking_api as LocalStakingApi)]
-#[messages(native_staking_callback as NativeStakingCallback)]
+#[sv::error(ContractError)]
+#[sv::messages(local_staking_api as LocalStakingApi)]
+#[sv::messages(native_staking_callback as NativeStakingCallback)]
 impl NativeStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -59,7 +54,7 @@ impl NativeStakingContract<'_> {
     }
 
     /// The caller of the instantiation will be the vault contract
-    #[msg(instantiate)]
+    #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx,
@@ -90,9 +85,12 @@ impl NativeStakingContract<'_> {
     fn handle_jailing(
         &self,
         mut deps: DepsMut,
-        jailed: &[String],
-        tombstoned: &[String],
+        jailed: Option<Vec<String>>,
+        tombstoned: Option<Vec<String>>,
     ) -> Result<Response, ContractError> {
+        let jailed = &jailed.unwrap_or_default();
+        let tombstoned = &tombstoned.unwrap_or_default();
+
         let cfg = self.config.load(deps.storage)?;
         let mut msgs = vec![];
         for validator in tombstoned {
@@ -121,7 +119,7 @@ impl NativeStakingContract<'_> {
         Ok(Response::new().add_event(evt).add_messages(msgs))
     }
 
-    fn handle_slashing(
+    pub(crate) fn handle_slashing(
         &self,
         deps: &mut DepsMut,
         config: &Config,
@@ -177,12 +175,12 @@ impl NativeStakingContract<'_> {
         Ok(Some(msg))
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         self.config.load(ctx.deps.storage).map_err(Into::into)
     }
 
-    #[msg(reply)]
+    #[sv::msg(reply)]
     fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
@@ -210,7 +208,7 @@ impl NativeStakingContract<'_> {
         Ok(Response::new())
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn proxy_by_owner(
         &self,
         ctx: QueryCtx,
@@ -223,7 +221,7 @@ impl NativeStakingContract<'_> {
         })
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn owner_by_proxy(
         &self,
         ctx: QueryCtx,
@@ -238,7 +236,7 @@ impl NativeStakingContract<'_> {
 
     /// Jails validators temporarily or permanently.
     /// Method used for test only.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_handle_jailing(
         &self,
         ctx: ExecCtx,
@@ -247,7 +245,17 @@ impl NativeStakingContract<'_> {
     ) -> Result<Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
-            NativeStakingContract::new().handle_jailing(ctx.deps, &jailed, &tombstoned)
+            let jailed = if jailed.is_empty() {
+                None
+            } else {
+                Some(jailed)
+            };
+            let tombstoned = if tombstoned.is_empty() {
+                None
+            } else {
+                Some(tombstoned)
+            };
+            NativeStakingContract::new().handle_jailing(ctx.deps, jailed, tombstoned)
         }
         #[cfg(not(any(feature = "mt", test)))]
         {
@@ -255,15 +263,18 @@ impl NativeStakingContract<'_> {
             Err(ContractError::Unauthorized {})
         }
     }
-}
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(deps: DepsMut, _env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
-    match msg {
-        SudoMsg::Jailing { jailed, tombstoned } => NativeStakingContract::new().handle_jailing(
-            deps,
-            &jailed.unwrap_or_default(),
-            &tombstoned.unwrap_or_default(),
-        ),
+    /// `SudoMsg::Jailing` should be called every time there's a validator set update that implies
+    /// slashing.
+    ///  - Temporary removal of a validator from the active set due to jailing.
+    ///  - Permanent removal (i.e. tombstoning) of a validator from the active set.
+    #[sv::msg(sudo)]
+    fn jailing(
+        &self,
+        ctx: SudoCtx,
+        jailed: Option<Vec<String>>,
+        tombstoned: Option<Vec<String>>,
+    ) -> Result<Response, ContractError> {
+        self.handle_jailing(ctx.deps, jailed, tombstoned)
     }
 }

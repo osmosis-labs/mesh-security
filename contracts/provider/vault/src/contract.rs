@@ -9,7 +9,7 @@ use std::cmp::min;
 
 use mesh_apis::cross_staking_api::CrossStakingApiHelper;
 use mesh_apis::local_staking_api::{
-    LocalStakingApiHelper, LocalStakingApiQueryMsg, SlashRatioResponse,
+    sv::LocalStakingApiQueryMsg, LocalStakingApiHelper, SlashRatioResponse,
 };
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
 use mesh_sync::Tx::InFlightStaking;
@@ -64,8 +64,8 @@ pub struct VaultContract<'a> {
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
-#[error(ContractError)]
-#[messages(vault_api as VaultApi)]
+#[sv::error(ContractError)]
+#[sv::messages(vault_api as VaultApi)]
 impl VaultContract<'_> {
     pub fn new() -> Self {
         Self {
@@ -85,7 +85,7 @@ impl VaultContract<'_> {
         Ok(id)
     }
 
-    #[msg(instantiate)]
+    #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx,
@@ -117,7 +117,7 @@ impl VaultContract<'_> {
         }
     }
 
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn bond(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let amount = must_pay(&ctx.info, &denom)?;
@@ -137,7 +137,7 @@ impl VaultContract<'_> {
         Ok(resp)
     }
 
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
@@ -174,7 +174,7 @@ impl VaultContract<'_> {
     }
 
     /// This assigns a claim of amount tokens to the remote contract, which can take some action with it
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn stake_remote(
         &self,
         mut ctx: ExecCtx,
@@ -223,7 +223,7 @@ impl VaultContract<'_> {
     }
 
     /// This sends actual tokens to the local staking contract
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn stake_local(
         &self,
         mut ctx: ExecCtx,
@@ -263,7 +263,7 @@ impl VaultContract<'_> {
         }
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn account(&self, ctx: QueryCtx, account: String) -> Result<AccountResponse, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let account = ctx.deps.api.addr_validate(&account)?;
@@ -279,7 +279,7 @@ impl VaultContract<'_> {
         })
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn account_details(
         &self,
         ctx: QueryCtx,
@@ -301,7 +301,7 @@ impl VaultContract<'_> {
         })
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
         let local_staking = self.local_staking.load(ctx.deps.storage)?;
@@ -314,7 +314,7 @@ impl VaultContract<'_> {
         Ok(resp)
     }
 
-    #[msg(query)]
+    #[sv::msg(query)]
     fn active_external_staking(
         &self,
         ctx: QueryCtx,
@@ -332,7 +332,7 @@ impl VaultContract<'_> {
     }
 
     /// Returns a single claim between the user and lienholder
-    #[msg(query)]
+    #[sv::msg(query)]
     fn claim(
         &self,
         ctx: QueryCtx,
@@ -350,7 +350,7 @@ impl VaultContract<'_> {
     /// Returns paginated claims list for an user
     ///
     /// `start_after` is a last lienholder of the previous page, and it will not be included
-    #[msg(query)]
+    #[sv::msg(query)]
     fn account_claims(
         &self,
         ctx: QueryCtx,
@@ -388,7 +388,7 @@ impl VaultContract<'_> {
     /// `start_after` is the last account included in previous page
     ///
     /// `with_collateral` flag filters out users with no collateral, defaulted to false
-    #[msg(query)]
+    #[sv::msg(query)]
     fn all_accounts(
         &self,
         ctx: QueryCtx,
@@ -432,7 +432,7 @@ impl VaultContract<'_> {
     }
 
     /// Queries a pending tx.
-    #[msg(query)]
+    #[sv::msg(query)]
     fn pending_tx(&self, ctx: QueryCtx, tx_id: u64) -> Result<TxResponse, ContractError> {
         let resp = self.pending.txs.load(ctx.deps.storage, tx_id)?;
         Ok(resp)
@@ -441,7 +441,7 @@ impl VaultContract<'_> {
     /// Queries for all pending txs.
     /// Reports txs in descending order (newest first).
     /// `start_after` is the last tx id included in previous page
-    #[msg(query)]
+    #[sv::msg(query)]
     fn all_pending_txs_desc(
         &self,
         ctx: QueryCtx,
@@ -467,7 +467,7 @@ impl VaultContract<'_> {
         Ok(resp)
     }
 
-    #[msg(reply)]
+    #[sv::msg(reply)]
     fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
@@ -957,13 +957,10 @@ impl Default for VaultContract<'_> {
     }
 }
 
-#[contract]
-#[messages(vault_api as VaultApi)]
 impl VaultApi for VaultContract<'_> {
     type Error = ContractError;
 
     /// This must be called by the remote staking contract to release this claim
-    #[msg(exec)]
     fn release_cross_stake(
         &self,
         mut ctx: ExecCtx,
@@ -987,7 +984,6 @@ impl VaultApi for VaultContract<'_> {
 
     /// This must be called by the local staking contract to release this claim
     /// Amount of tokens unstaked are those included in ctx.info.funds
-    #[msg(exec)]
     fn release_local_stake(
         &self,
         mut ctx: ExecCtx,
@@ -1009,7 +1005,6 @@ impl VaultApi for VaultContract<'_> {
     }
 
     /// This must be called by the native staking contract to process a misbehaviour
-    #[msg(exec)]
     fn local_slash(
         &self,
         mut ctx: ExecCtx,
@@ -1038,7 +1033,6 @@ impl VaultApi for VaultContract<'_> {
     }
 
     /// This must be called by the external staking contract to process a misbehaviour
-    #[msg(exec)]
     fn cross_slash(
         &self,
         mut ctx: ExecCtx,
@@ -1066,7 +1060,6 @@ impl VaultApi for VaultContract<'_> {
         Ok(resp)
     }
 
-    #[msg(exec)]
     fn commit_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         self.commit_stake(&mut ctx, tx_id)?;
 
@@ -1078,7 +1071,6 @@ impl VaultApi for VaultContract<'_> {
         Ok(resp)
     }
 
-    #[msg(exec)]
     fn rollback_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         self.rollback_stake(&mut ctx, tx_id)?;
 

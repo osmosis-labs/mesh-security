@@ -21,7 +21,7 @@ pub struct OsmosisPriceProvider {
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
-#[error(ContractError)]
+#[sv::error(ContractError)]
 impl OsmosisPriceProvider {
     pub const fn new() -> Self {
         Self {
@@ -30,7 +30,7 @@ impl OsmosisPriceProvider {
         }
     }
 
-    #[msg(instantiate)]
+    #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx,

@@ -3,13 +3,16 @@ use anyhow::Result as AnyResult;
 use cosmwasm_std::testing::mock_env;
 use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Validator};
 
-use cw_multi_test::{App as MtApp, StakingInfo, StakingSudo, SudoMsg};
+use cw_multi_test::{App as MtApp, StakingInfo};
 
-use sylvia::multitest::App;
+use sylvia::multitest::{App, Proxy};
 
-use mesh_vault::contract::multitest_utils::VaultContractProxy;
+use mesh_vault::contract::sv::mt::VaultContractProxy;
+use mesh_vault::contract::VaultContract;
 
 use crate::contract;
+use crate::contract::sv::mt::NativeStakingProxyContractProxy;
+use crate::contract::NativeStakingProxyContract;
 use crate::msg::ConfigResponse;
 
 const OSMO: &str = "uosmo";
@@ -53,19 +56,19 @@ fn init_app(owner: &str, validators: &[&str]) -> App<MtApp> {
 
 fn setup<'app>(
     app: &'app App<MtApp>,
-    owner: &str,
+    owner: &'app str,
     user: &str,
     validators: &[&str],
-) -> AnyResult<VaultContractProxy<'app, MtApp>> {
-    let vault_code = mesh_vault::contract::multitest_utils::CodeId::store_code(app);
-    let staking_code = mesh_native_staking::contract::multitest_utils::CodeId::store_code(app);
-    let staking_proxy_code = contract::multitest_utils::CodeId::store_code(app);
+) -> AnyResult<Proxy<'app, MtApp, VaultContract<'app>>> {
+    let vault_code = mesh_vault::contract::sv::mt::CodeId::store_code(app);
+    let staking_code = mesh_native_staking::contract::sv::mt::CodeId::store_code(app);
+    let staking_proxy_code = contract::sv::mt::CodeId::store_code(app);
 
     // Instantiate vault msg
     let staking_init_info = mesh_vault::msg::StakingInitInfo {
         admin: None,
         code_id: staking_code.code_id(),
-        msg: to_json_binary(&mesh_native_staking::contract::InstantiateMsg {
+        msg: to_json_binary(&mesh_native_staking::contract::sv::InstantiateMsg {
             denom: OSMO.to_owned(),
             proxy_code_id: staking_proxy_code.code_id(),
             slash_ratio_dsign: Decimal::percent(5),
@@ -120,10 +123,8 @@ fn instantiation() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
-        Addr::unchecked(proxy_addr),
-        &app,
-    );
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+        Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Check config
     let config = staking_proxy.config().unwrap();
@@ -166,10 +167,8 @@ fn staking() {
     let vault = setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
-        Addr::unchecked(proxy_addr),
-        &app,
-    );
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+        Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Stake some more
     vault
@@ -214,10 +213,8 @@ fn restaking() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
-        Addr::unchecked(proxy_addr),
-        &app,
-    );
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+        Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Restake 30% to a different validator
     staking_proxy
@@ -255,10 +252,8 @@ fn unstaking() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
-        Addr::unchecked(proxy_addr),
-        &app,
-    );
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+        Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Unstake 50%
     staking_proxy
@@ -277,10 +272,6 @@ fn unstaking() {
 
     // And that they are now held, until the unbonding period
     // First, check that the contract has no funds
-    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
-    app.app_mut()
-        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
-        .unwrap();
     assert_eq!(
         app.app()
             .wrap()
@@ -290,14 +281,7 @@ fn unstaking() {
     );
 
     // Advance time until the unbonding period is over
-    app.update_block(|block| {
-        block.height += 1234;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
-    });
-    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
-    app.app_mut()
-        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
-        .unwrap();
+    process_staking_unbondings(&app);
 
     // Check that the contract now has the funds
     assert_eq!(
@@ -323,10 +307,8 @@ fn burning() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
-        Addr::unchecked(proxy_addr),
-        &app,
-    );
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+        Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Burn 10%, from validator
     staking_proxy
@@ -345,10 +327,6 @@ fn burning() {
 
     // And that they are now held, until the unbonding period
     // First, check that the contract has no funds
-    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
-    app.app_mut()
-        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
-        .unwrap();
     assert_eq!(
         app.app()
             .wrap()
@@ -358,14 +336,7 @@ fn burning() {
     );
 
     // Advance time until the unbonding period is over
-    app.update_block(|block| {
-        block.height += 1234;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
-    });
-    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
-    app.app_mut()
-        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
-        .unwrap();
+    process_staking_unbondings(&app);
 
     // Check that the contract now has the funds
     assert_eq!(
@@ -403,10 +374,8 @@ fn burning_multiple_delegations() {
     setup(&app, owner, user, &validators).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
-        Addr::unchecked(proxy_addr),
-        &app,
-    );
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+        Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Burn 15%, no validator specified
     let burn_amount = 15;
@@ -440,10 +409,6 @@ fn burning_multiple_delegations() {
 
     // And that they are now held, until the unbonding period
     // First, check that the contract has no funds
-    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
-    app.app_mut()
-        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
-        .unwrap();
     assert_eq!(
         app.app()
             .wrap()
@@ -453,14 +418,7 @@ fn burning_multiple_delegations() {
     );
 
     // Advance time until the unbonding period is over
-    app.update_block(|block| {
-        block.height += 1234;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
-    });
-    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
-    app.app_mut()
-        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
-        .unwrap();
+    process_staking_unbondings(&app);
 
     // Check that the contract now has the funds
     assert_eq!(
@@ -497,10 +455,8 @@ fn releasing_unbonded() {
     let vault = setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
-        Addr::unchecked(proxy_addr),
-        &app,
-    );
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+        Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Unstake 100%
     staking_proxy
@@ -517,14 +473,7 @@ fn releasing_unbonded() {
     assert!(delegation.is_none());
 
     // Advance time until the unbonding period is over
-    app.update_block(|block| {
-        block.height += 12345;
-        block.time = block.time.plus_seconds(UNBONDING_PERIOD + 1);
-    });
-    // Manually cause queue to get processed. TODO: Handle automatically in sylvia mt or cw-mt
-    app.app_mut()
-        .sudo(SudoMsg::Staking(StakingSudo::ProcessQueue {}))
-        .unwrap();
+    process_staking_unbondings(&app);
 
     // Release the unbonded funds
     staking_proxy.release_unbonded().call(user).unwrap();
@@ -562,10 +511,8 @@ fn withdrawing_rewards() {
     let original_user_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy = contract::multitest_utils::NativeStakingProxyContractProxy::new(
-        Addr::unchecked(proxy_addr),
-        &app,
-    );
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+        Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Advance time enough for rewards to accrue
     app.update_block(|block| {
@@ -591,4 +538,19 @@ fn withdrawing_rewards() {
         .query_balance(vault.contract_addr, OSMO)
         .unwrap();
     assert_eq!(original_vault_funds, vault_funds);
+}
+
+fn process_staking_unbondings(app: &App<MtApp>) {
+    // Advance unbonding period
+    app.app_mut().update_block(|block| {
+        block.time = block.time.plus_seconds(UNBONDING_PERIOD);
+        block.height += UNBONDING_PERIOD / 5;
+    });
+    // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
+    app.app_mut()
+        .sudo(cw_multi_test::SudoMsg::Staking(
+            #[allow(deprecated)]
+            cw_multi_test::StakingSudo::ProcessQueue {},
+        ))
+        .unwrap();
 }

@@ -1,6 +1,5 @@
 use cosmwasm_std::Response;
 use cw_utils::must_pay;
-use sylvia::contract;
 use sylvia::types::ExecCtx;
 
 #[allow(unused_imports)]
@@ -9,18 +8,12 @@ use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCall
 use crate::contract::NativeStakingContract;
 use crate::error::ContractError;
 
-// FIXME: Move to sylvia contract macro
-use crate::contract::BoundQuerier;
-
-#[contract]
-#[messages(native_staking_callback as NativeStakingCallback)]
 impl NativeStakingCallback for NativeStakingContract<'_> {
     type Error = ContractError;
 
     /// This sends tokens back from the proxy to native-staking. (See info.funds)
     /// The native-staking contract can determine which user it belongs to via an internal Map.
     /// The native-staking contract will then send those tokens back to vault and release the claim.
-    #[msg(exec)]
     fn release_proxy_stake(&self, ctx: ExecCtx) -> Result<Response, Self::Error> {
         let cfg = self.config.load(ctx.deps.storage)?;
 

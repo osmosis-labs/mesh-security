@@ -1,11 +1,26 @@
 use cosmwasm_std::{Addr, Decimal, Validator};
-use cw_multi_test::App as MtApp;
-use mesh_apis::virtual_staking_api::SudoMsg;
-use sylvia::multitest::App;
+use cw_multi_test::no_init;
+use mesh_apis::virtual_staking_api::sv::mt::VirtualStakingApiProxy;
+use sylvia::multitest::Proxy;
+
+use mesh_converter::contract::sv::mt::ConverterContractProxy;
 
 use crate::contract;
+use crate::contract::sv::mt::VirtualStakingContractProxy;
 
 const JUNO: &str = "ujuno";
+
+// Trying to figure out how to work with the generic types
+type MtApp = cw_multi_test::BasicApp<
+    mesh_bindings::VirtualStakeCustomMsg,
+    mesh_bindings::VirtualStakeCustomQuery,
+>;
+type App = sylvia::multitest::App<MtApp>;
+
+fn new_app() -> App {
+    // Ideally there is a shorter way to do this
+    App::new(cw_multi_test::custom_app(no_init))
+}
 
 struct SetupArgs<'a> {
     owner: &'a str,
@@ -15,13 +30,12 @@ struct SetupArgs<'a> {
 }
 
 struct SetupResponse<'a> {
-    price_feed:
-        mesh_simple_price_feed::contract::multitest_utils::SimplePriceFeedContractProxy<'a, MtApp>,
-    converter: mesh_converter::contract::multitest_utils::ConverterContractProxy<'a, MtApp>,
-    virtual_staking: contract::multitest_utils::VirtualStakingContractProxy<'a, MtApp>,
+    price_feed: Proxy<'a, MtApp, mesh_simple_price_feed::contract::SimplePriceFeedContract<'a>>,
+    converter: Proxy<'a, MtApp, mesh_converter::contract::ConverterContract<'a>>,
+    virtual_staking: Proxy<'a, MtApp, contract::VirtualStakingContract<'a>>,
 }
 
-fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
+fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
     let SetupArgs {
         owner,
         admin,
@@ -29,10 +43,9 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
         native_per_foreign,
     } = args;
 
-    let price_feed_code =
-        mesh_simple_price_feed::contract::multitest_utils::CodeId::store_code(app);
-    let virtual_staking_code = contract::multitest_utils::CodeId::store_code(app);
-    let converter_code = mesh_converter::contract::multitest_utils::CodeId::store_code(app);
+    let price_feed_code = mesh_simple_price_feed::contract::sv::mt::CodeId::store_code(app);
+    let virtual_staking_code = contract::sv::mt::CodeId::store_code(app);
+    let converter_code = mesh_converter::contract::sv::mt::CodeId::store_code(app);
 
     let price_feed = price_feed_code
         .instantiate(native_per_foreign, None)
@@ -55,8 +68,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
 
     let config = converter.config().unwrap();
     let virtual_staking_addr = Addr::unchecked(config.virtual_staking);
-    let virtual_staking =
-        contract::multitest_utils::VirtualStakingContractProxy::new(virtual_staking_addr, app);
+    let virtual_staking = Proxy::new(virtual_staking_addr, app);
 
     SetupResponse {
         price_feed,
@@ -67,7 +79,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
 
 #[test]
 fn instantiation() {
-    let app = App::default();
+    let app = new_app();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
     let admin = "theman";
@@ -108,9 +120,10 @@ fn instantiation() {
 }
 
 #[test]
-#[ignore] // FIXME: Enable / finish this test once custom query support is added to sylvia
+// FIXME: Enable / finish this test once custom query support is added to sylvia
+#[ignore = "IBC Messages not supported yet"]
 fn valset_update_sudo() {
-    let app = App::default();
+    let app = new_app();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
     let admin = "theman";
@@ -148,20 +161,16 @@ fn valset_update_sudo() {
     ];
     let rems = vec!["cosmosval2".to_string()];
     let tombs = vec!["cosmosval3".to_string()];
-    let msg = SudoMsg::ValsetUpdate {
-        additions: Some(adds),
-        removals: Some(rems),
-        updated: None,
-        jailed: None,
-        unjailed: None,
-        tombstoned: Some(tombs),
-        slashed: None,
-    };
 
-    let res = app
-        .app_mut()
-        .wasm_sudo(virtual_staking.contract_addr, &msg)
-        .unwrap();
-
+    let res = virtual_staking.handle_valset_update(
+        Some(adds),
+        Some(rems),
+        None,
+        None,
+        None,
+        Some(tombs),
+        None,
+    );
     println!("res: {:?}", res);
+    res.unwrap();
 }

@@ -1,9 +1,8 @@
-use cosmwasm_std::{entry_point, Decimal, DepsMut, Env, IbcChannel, Response, Timestamp};
+use cosmwasm_std::{Decimal, DepsMut, Env, IbcChannel, Response, Timestamp};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
-use mesh_apis::price_feed_api::SudoMsg;
-use sylvia::types::{InstantiateCtx, QueryCtx};
+use sylvia::types::{InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
@@ -33,8 +32,8 @@ impl Default for RemotePriceFeedContract {
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
-#[error(ContractError)]
-#[messages(price_feed_api as PriceFeedApi)]
+#[sv::error(ContractError)]
+#[sv::messages(price_feed_api as PriceFeedApi)]
 impl RemotePriceFeedContract {
     pub fn new() -> Self {
         Self {
@@ -50,7 +49,7 @@ impl RemotePriceFeedContract {
         }
     }
 
-    #[msg(instantiate)]
+    #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
         mut ctx: InstantiateCtx,
@@ -83,14 +82,14 @@ impl RemotePriceFeedContract {
     }
 }
 
-#[contract]
-#[messages(price_feed_api as PriceFeedApi)]
 impl PriceFeedApi for RemotePriceFeedContract {
     type Error = ContractError;
+    // FIXME: make these under a feature flag if we need virtual-staking multitest compatibility
+    type ExecC = cosmwasm_std::Empty;
+    type QueryC = cosmwasm_std::Empty;
 
     /// Return the price of the foreign token. That is, how many native tokens
     /// are needed to buy one foreign token.
-    #[msg(query)]
     fn price(&self, ctx: QueryCtx) -> Result<PriceResponse, Self::Error> {
         Ok(self
             .price_keeper
@@ -99,14 +98,9 @@ impl PriceFeedApi for RemotePriceFeedContract {
                 native_per_foreign: rate,
             })?)
     }
-}
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
-    let contract = RemotePriceFeedContract::new();
-
-    match msg {
-        SudoMsg::HandleEpoch {} => contract.scheduler.trigger(deps, &env),
+    fn handle_epoch(&self, ctx: SudoCtx) -> Result<Response, Self::Error> {
+        self.scheduler.trigger(ctx.deps, &ctx.env)
     }
 }
 

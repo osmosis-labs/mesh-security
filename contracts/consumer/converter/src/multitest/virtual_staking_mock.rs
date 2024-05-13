@@ -1,11 +1,13 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure_eq, Addr, Coin, Response, StdError, StdResult, Uint128};
+use cosmwasm_std::{ensure_eq, Addr, Coin, Response, StdError, StdResult, Uint128, Validator};
 
 use cw_storage_plus::{Item, Map};
 use cw_utils::{nonpayable, PaymentError};
-use mesh_apis::virtual_staking_api::{self, VirtualStakingApi};
+use mesh_apis::virtual_staking_api::{self, ValidatorSlash, VirtualStakingApi};
 use sylvia::contract;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
+
+use crate::contract::custom;
 
 #[cw_serde]
 pub struct Config {
@@ -41,8 +43,9 @@ pub struct VirtualStakingMock<'a> {
 }
 
 #[contract]
-#[error(ContractError)]
-#[messages(virtual_staking_api as VirtualStakingApi)]
+#[sv::error(ContractError)]
+#[sv::messages(virtual_staking_api as VirtualStakingApi)]
+#[sv::custom(query=custom::ConverterQuery, msg=custom::ConverterMsg)]
 impl VirtualStakingMock<'_> {
     pub const fn new() -> Self {
         Self {
@@ -51,8 +54,11 @@ impl VirtualStakingMock<'_> {
         }
     }
 
-    #[msg(instantiate)]
-    pub fn instantiate(&self, ctx: InstantiateCtx) -> Result<Response, ContractError> {
+    #[sv::msg(instantiate)]
+    pub fn instantiate(
+        &self,
+        ctx: InstantiateCtx<custom::ConverterQuery>,
+    ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
         let denom = ctx.deps.querier.query_bonded_denom()?;
         let config = Config {
@@ -63,16 +69,23 @@ impl VirtualStakingMock<'_> {
         Ok(Response::new())
     }
 
-    #[msg(query)]
-    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+    #[sv::msg(query)]
+    fn config(
+        &self,
+        ctx: QueryCtx<custom::ConverterQuery>,
+    ) -> Result<ConfigResponse, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         let denom = cfg.denom;
         let converter = cfg.converter.into_string();
         Ok(ConfigResponse { denom, converter })
     }
 
-    #[msg(query)]
-    fn stake(&self, ctx: QueryCtx, validator: String) -> Result<StakeResponse, ContractError> {
+    #[sv::msg(query)]
+    fn stake(
+        &self,
+        ctx: QueryCtx<custom::ConverterQuery>,
+        validator: String,
+    ) -> Result<StakeResponse, ContractError> {
         let stake = self
             .stake
             .may_load(ctx.deps.storage, &validator)?
@@ -80,8 +93,11 @@ impl VirtualStakingMock<'_> {
         Ok(StakeResponse { stake })
     }
 
-    #[msg(query)]
-    fn all_stake(&self, ctx: QueryCtx) -> Result<AllStakeResponse, ContractError> {
+    #[sv::msg(query)]
+    fn all_stake(
+        &self,
+        ctx: QueryCtx<custom::ConverterQuery>,
+    ) -> Result<AllStakeResponse, ContractError> {
         let stakes = self
             .stake
             .range(ctx.deps.storage, None, None, cosmwasm_std::Order::Ascending)
@@ -106,16 +122,20 @@ pub struct ConfigResponse {
     pub converter: String,
 }
 
-#[contract]
-#[messages(virtual_staking_api as VirtualStakingApi)]
 impl VirtualStakingApi for VirtualStakingMock<'_> {
     type Error = ContractError;
+    type ExecC = custom::ConverterMsg;
+    type QueryC = custom::ConverterQuery;
 
     /// Requests to bond tokens to a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance.
     /// If the max cap is 0, then this will immediately return an error.
-    #[msg(exec)]
-    fn bond(&self, ctx: ExecCtx, validator: String, amount: Coin) -> Result<Response, Self::Error> {
+    fn bond(
+        &self,
+        ctx: ExecCtx<Self::QueryC>,
+        validator: String,
+        amount: Coin,
+    ) -> Result<Response<Self::ExecC>, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized); // only the converter can call this
@@ -137,13 +157,12 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
     /// If the virtual staking contract doesn't have at least amount tokens staked to the given validator, this will return an error.
-    #[msg(exec)]
     fn unbond(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<Self::QueryC>,
         validator: String,
         amount: Coin,
-    ) -> Result<Response, Self::Error> {
+    ) -> Result<Response<Self::ExecC>, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized); // only the converter can call this
@@ -165,13 +184,12 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     /// Requests to unbond and burn tokens from a lists of validators (one or more). This will be actually handled at the next epoch.
     /// If the virtual staking module is over the max cap, it will trigger a rebalance in addition to unbond.
     /// If the virtual staking contract doesn't have at least amount tokens staked over the given validators, this will return an error.
-    #[msg(exec)]
     fn burn(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<Self::QueryC>,
         validators: Vec<String>,
         amount: Coin,
-    ) -> Result<Response, Self::Error> {
+    ) -> Result<Response<Self::ExecC>, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
         // only the converter can call this
@@ -221,5 +239,38 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
         }
 
         Ok(Response::new())
+    }
+
+    /// SudoMsg::HandleEpoch{} should be called once per epoch by the sdk (in EndBlock).
+    /// It allows the virtual staking contract to bond or unbond any pending requests, as well
+    /// as to perform a rebalance if needed (over the max cap).
+    ///
+    /// It should also withdraw all pending rewards here, and send them to the converter contract.
+    fn handle_epoch(
+        &self,
+        _ctx: SudoCtx<Self::QueryC>,
+    ) -> Result<Response<Self::ExecC>, Self::Error> {
+        unimplemented!()
+    }
+
+    /// SudoMsg::ValsetUpdate{} should be called every time there's a validator set update:
+    ///  - Addition of a new validator to the active validator set.
+    ///  - Temporary removal of a validator from the active set. (i.e. `unbonded` state).
+    ///  - Update of validator data.
+    ///  - Temporary removal of a validator from the active set due to jailing. Implies slashing.
+    ///  - Addition of an existing validator to the active validator set.
+    ///  - Permanent removal (i.e. tombstoning) of a validator from the active set. Implies slashing
+    fn handle_valset_update(
+        &self,
+        _ctx: SudoCtx<Self::QueryC>,
+        _additions: Option<Vec<Validator>>,
+        _removals: Option<Vec<String>>,
+        _updated: Option<Vec<Validator>>,
+        _jailed: Option<Vec<String>>,
+        _unjailed: Option<Vec<String>>,
+        _tombstoned: Option<Vec<String>>,
+        _slashed: Option<Vec<ValidatorSlash>>,
+    ) -> Result<Response<Self::ExecC>, Self::Error> {
+        unimplemented!()
     }
 }

@@ -1,7 +1,6 @@
 use cosmwasm_std::{ensure_eq, from_json, to_json_binary, Binary, Coin, Response, SubMsg, WasmMsg};
 use cw_utils::{must_pay, nonpayable};
-use sylvia::types::QueryCtx;
-use sylvia::{contract, types::ExecCtx};
+use sylvia::types::{ExecCtx, QueryCtx};
 
 #[allow(unused_imports)]
 use mesh_apis::local_staking_api::{self, LocalStakingApi, SlashRatioResponse};
@@ -10,19 +9,14 @@ use crate::contract::{NativeStakingContract, REPLY_ID_INSTANTIATE};
 use crate::error::ContractError;
 use crate::msg::StakeMsg;
 
-// FIXME: Move to sylvia contract macro
-use crate::contract::BoundQuerier;
 use crate::state::Config;
 
-#[contract]
-#[messages(local_staking_api as LocalStakingApi)]
 impl LocalStakingApi for NativeStakingContract<'_> {
     type Error = ContractError;
 
     /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
     /// specified in msg with it.
     /// Msg is custom to each implementation of the staking contract and opaque to the vault
-    #[msg(exec)]
     fn receive_stake(
         &self,
         ctx: ExecCtx,
@@ -52,11 +46,12 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         {
             None => {
                 // Instantiate proxy contract and send funds to stake, with reply handling on success
-                let msg = to_json_binary(&mesh_native_staking_proxy::contract::InstantiateMsg {
-                    denom: cfg.denom,
-                    owner: owner.clone(),
-                    validator,
-                })?;
+                let msg =
+                    to_json_binary(&mesh_native_staking_proxy::contract::sv::InstantiateMsg {
+                        denom: cfg.denom,
+                        owner: owner.clone(),
+                        validator,
+                    })?;
                 let wasm_msg = WasmMsg::Instantiate {
                     admin: Some(ctx.env.contract.address.into()),
                     code_id: cfg.proxy_code_id,
@@ -69,9 +64,10 @@ impl LocalStakingApi for NativeStakingContract<'_> {
             }
             Some(proxy_addr) => {
                 // Send stake message with funds to the proxy contract
-                let msg = to_json_binary(&mesh_native_staking_proxy::contract::ExecMsg::Stake {
-                    validator,
-                })?;
+                let msg =
+                    to_json_binary(&mesh_native_staking_proxy::contract::sv::ExecMsg::Stake {
+                        validator,
+                    })?;
                 let wasm_msg = WasmMsg::Execute {
                     contract_addr: proxy_addr.into(),
                     msg,
@@ -86,7 +82,6 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     /// propagation, the native staking contract needs to burn / discount the indicated slashing amount.
     /// If `validator` is set, undelegate preferentially from it first.
     /// If it is not set, undelegate evenly from all validators the user has stake in.
-    #[msg(exec)]
     fn burn_stake(
         &self,
         ctx: ExecCtx,
@@ -110,10 +105,11 @@ impl LocalStakingApi for NativeStakingContract<'_> {
             None => Err(ContractError::NoProxy(owner)),
             Some(proxy_addr) => {
                 // Send burn message to the proxy contract
-                let msg = to_json_binary(&mesh_native_staking_proxy::contract::ExecMsg::Burn {
-                    validator,
-                    amount,
-                })?;
+                let msg =
+                    to_json_binary(&mesh_native_staking_proxy::contract::sv::ExecMsg::Burn {
+                        validator,
+                        amount,
+                    })?;
                 let wasm_msg = WasmMsg::Execute {
                     contract_addr: proxy_addr.into(),
                     msg,
@@ -125,7 +121,6 @@ impl LocalStakingApi for NativeStakingContract<'_> {
     }
 
     /// Returns the maximum percentage that can be slashed
-    #[msg(query)]
     fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, Self::Error> {
         let Config {
             slash_ratio_dsign,

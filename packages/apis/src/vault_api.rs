@@ -10,7 +10,7 @@ pub trait VaultApi {
     type Error: From<StdError>;
 
     /// This must be called by the remote staking contract to release this claim
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn release_cross_stake(
         &self,
         ctx: ExecCtx,
@@ -22,7 +22,7 @@ pub trait VaultApi {
 
     /// This must be called by the local staking contract to release this claim
     /// Amount of tokens unstaked are those included in ctx.info.funds
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn release_local_stake(
         &self,
         ctx: ExecCtx,
@@ -32,19 +32,19 @@ pub trait VaultApi {
 
     /// This must be called by the remote staking contract to commit the remote staking call on success.
     /// Transaction ID is used to identify the original (vault contract originated) transaction.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn commit_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
 
     /// This must be called by the remote staking contract to rollback the remote staking call on failure.
     /// Transaction ID is used to identify the original (vault contract originated) transaction.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn rollback_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
 
     /// This must be called by the native staking contract to process a slashing event
     /// because of a misbehaviour on the Provider chain.
     /// `validator` is the misbehaving validator address. Used during slashing propagation to
     /// preferentially burn stakes from this validator.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn local_slash(
         &self,
         ctx: ExecCtx,
@@ -56,7 +56,7 @@ pub trait VaultApi {
     /// because of a misbehaviour on the Consumer chain.
     /// `validator` is the misbehaving validator address. Used during slashing propagation to
     /// preferentially burn stakes from this validator.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn cross_slash(
         &self,
         ctx: ExecCtx,
@@ -87,7 +87,7 @@ impl VaultApiHelper {
         amount: Coin,
         funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {
-        let msg = VaultApiExecMsg::ReleaseCrossStake { owner, amount };
+        let msg = sv::VaultApiExecMsg::ReleaseCrossStake { owner, amount };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_json_binary(&msg)?,
@@ -103,7 +103,7 @@ impl VaultApiHelper {
         // tokens to send along with this
         funds: Vec<Coin>,
     ) -> Result<WasmMsg, StdError> {
-        let msg = VaultApiExecMsg::ReleaseLocalStake { owner };
+        let msg = sv::VaultApiExecMsg::ReleaseLocalStake { owner };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_json_binary(&msg)?,
@@ -117,7 +117,7 @@ impl VaultApiHelper {
         slashes: Vec<SlashInfo>,
         slashed_validator: &str,
     ) -> Result<WasmMsg, StdError> {
-        let msg = VaultApiExecMsg::LocalSlash {
+        let msg = sv::VaultApiExecMsg::LocalSlash {
             slashes,
             validator: slashed_validator.to_string(),
         };
@@ -134,7 +134,7 @@ impl VaultApiHelper {
         slashes: Vec<SlashInfo>,
         slashed_validator: &str,
     ) -> Result<WasmMsg, StdError> {
-        let msg = VaultApiExecMsg::CrossSlash {
+        let msg = sv::VaultApiExecMsg::CrossSlash {
             slashes,
             validator: slashed_validator.to_string(),
         };
@@ -147,7 +147,7 @@ impl VaultApiHelper {
     }
 
     pub fn commit_tx(&self, tx_id: u64) -> Result<WasmMsg, StdError> {
-        let msg = VaultApiExecMsg::CommitTx { tx_id };
+        let msg = sv::VaultApiExecMsg::CommitTx { tx_id };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_json_binary(&msg)?,
@@ -157,7 +157,7 @@ impl VaultApiHelper {
     }
 
     pub fn rollback_tx(&self, tx_id: u64) -> Result<WasmMsg, StdError> {
-        let msg = VaultApiExecMsg::RollbackTx { tx_id };
+        let msg = sv::VaultApiExecMsg::RollbackTx { tx_id };
         let wasm = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_json_binary(&msg)?,

@@ -1,6 +1,6 @@
 use cosmwasm_schema::write_api;
 
-use mesh_vault::contract::{ContractExecMsg, ContractQueryMsg, InstantiateMsg};
+use mesh_vault::contract::sv::{ContractExecMsg, ContractQueryMsg, InstantiateMsg};
 
 #[cfg(not(tarpaulin_include))]
 fn main() {

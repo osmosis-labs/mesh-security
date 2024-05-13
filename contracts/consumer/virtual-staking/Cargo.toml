@@ -35,8 +35,8 @@ serde            = { workspace = true }
 thiserror        = { workspace = true }
 
 [dev-dependencies]
-mesh-simple-price-feed = { workspace = true, features = ["mt"] }
-mesh-converter         = { workspace = true, features = ["mt"] }
+mesh-simple-price-feed = { workspace = true, features = ["mt", "fake-custom"] }
+mesh-converter         = { workspace = true, features = ["mt", "fake-custom"] }
 cw-multi-test          = { workspace = true }
 test-case              = { workspace = true }
 derivative             = { workspace = true }

@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Decimal, StdError};
-use sylvia::types::QueryCtx;
+use cosmwasm_std::{CustomMsg, CustomQuery, Decimal, Response, StdError};
+use sylvia::types::{QueryCtx, SudoCtx};
 use sylvia::{interface, schemars};
 
 /// This is a common interface to any price feed provider.
@@ -12,19 +12,22 @@ use sylvia::{interface, schemars};
 #[interface]
 pub trait PriceFeedApi {
     type Error: From<StdError>;
+    type ExecC: CustomMsg;
+    type QueryC: CustomQuery;
 
     /// Return the price of the foreign token. That is, how many native tokens
     /// are needed to buy one foreign token.
-    #[msg(query)]
-    fn price(&self, ctx: QueryCtx) -> Result<PriceResponse, Self::Error>;
+    #[sv::msg(query)]
+    fn price(&self, ctx: QueryCtx<Self::QueryC>) -> Result<PriceResponse, Self::Error>;
+
+    #[sv::msg(sudo)]
+    fn handle_epoch(
+        &self,
+        ctx: SudoCtx<Self::QueryC>,
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 }
 
 #[cw_serde]
 pub struct PriceResponse {
     pub native_per_foreign: Decimal,
-}
-
-#[cw_serde]
-pub enum SudoMsg {
-    HandleEpoch {},
 }

@@ -10,12 +10,12 @@ use sylvia::types::ExecCtx;
 
 /// These methods are for test usage only
 #[contract(module=crate::contract)]
-#[messages(crate::test_methods as TestMethods)]
+#[sv::messages(crate::test_methods as TestMethods)]
 impl TestMethods for ExternalStakingContract<'_> {
     type Error = ContractError;
 
     /// Commits a pending stake.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
@@ -30,7 +30,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Rollbacks a pending stake.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
@@ -45,7 +45,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Updates the active validator set.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_set_active_validator(
         &self,
         ctx: ExecCtx,
@@ -68,7 +68,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Sets validator as `unbonded`.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_remove_validator(
         &self,
         ctx: ExecCtx,
@@ -90,7 +90,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Sets validator as `unbonded`.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_tombstone_validator(
         &self,
         ctx: ExecCtx,
@@ -112,7 +112,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Commits a pending unstake.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
@@ -127,7 +127,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Rollbacks a pending unstake.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
@@ -142,7 +142,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Distribute rewards.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_distribute_rewards(
         &self,
         ctx: ExecCtx,
@@ -162,7 +162,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Batch distribute rewards.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_distribute_rewards_batch(
         &self,
         ctx: ExecCtx,
@@ -182,7 +182,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Commits a withdraw rewards transaction.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_commit_withdraw_rewards(
         &self,
         ctx: ExecCtx,
@@ -201,7 +201,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Rollbacks a withdraw rewards transaction.
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_rollback_withdraw_rewards(
         &self,
         ctx: ExecCtx,
@@ -220,7 +220,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     }
 
     /// Slashes a validator
-    #[msg(exec)]
+    #[sv::msg(exec)]
     fn test_handle_slashing(
         &self,
         ctx: ExecCtx,

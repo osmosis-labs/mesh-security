@@ -1,19 +1,17 @@
 [package]
-name = "mesh-apis"
+name    = "mesh-apis"
 version = { workspace = true }
 edition = { workspace = true }
-license       = { workspace = true }
+license = { workspace = true }
 
 [features]
 mt = ["sylvia/mt"]
 
 [dependencies]
-sylvia = { workspace = true }
 cosmwasm-std     = { workspace = true }
 cosmwasm-schema  = { workspace = true }
-
-thiserror        = { workspace = true }
+schemars         = { workspace = true }
+semver           = { workspace = true }
 serde            = { workspace = true }
-
-semver = { workspace = true }
-schemars = { workspace = true } 
+sylvia           = { workspace = true }
+thiserror        = { workspace = true }
