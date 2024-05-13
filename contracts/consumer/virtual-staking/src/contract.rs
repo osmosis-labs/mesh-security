@@ -1322,7 +1322,7 @@ mod tests {
     impl VirtualStakingExt for VirtualStakingContract<'_> {
         fn quick_inst(&self, deps: DepsMut) {
             self.instantiate(InstantiateCtx {
-                deps: deps,
+                deps,
                 env: mock_env(),
                 info: mock_info("me", &[]),
             })
@@ -1371,7 +1371,7 @@ mod tests {
 
             self.bond(
                 ExecCtx {
-                    deps: deps,
+                    deps,
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },
@@ -1386,7 +1386,7 @@ mod tests {
 
             self.unbond(
                 ExecCtx {
-                    deps: deps,
+                    deps,
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },
@@ -1406,7 +1406,7 @@ mod tests {
 
             self.burn(
                 ExecCtx {
-                    deps: deps,
+                    deps,
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },

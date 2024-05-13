@@ -111,6 +111,7 @@ fn setup_without_local_staking<'app>(
     (vault, external)
 }
 
+#[allow(clippy::type_complexity)]
 fn setup_inner<'app>(
     app: &'app App<MtApp>,
     owner: &'app str,
