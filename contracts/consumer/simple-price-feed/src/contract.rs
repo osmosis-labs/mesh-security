@@ -14,6 +14,19 @@ use crate::state::Config;
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[cfg(not(feature = "fake-custom"))]
+pub mod custom {
+    pub type PriceFeedMsg = cosmwasm_std::Empty;
+    pub type PriceFeedQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<cosmwasm_std::Empty>;
+}
+#[cfg(feature = "fake-custom")]
+pub mod custom {
+    pub type PriceFeedMsg = mesh_bindings::VirtualStakeCustomMsg;
+    pub type PriceFeedQuery = mesh_bindings::VirtualStakeCustomQuery;
+    pub type Response = cosmwasm_std::Response<PriceFeedMsg>;
+}
+
 pub struct SimplePriceFeedContract<'a> {
     pub config: Item<'a, Config>,
 }
@@ -22,6 +35,10 @@ pub struct SimplePriceFeedContract<'a> {
 #[contract]
 #[sv::error(ContractError)]
 #[sv::messages(price_feed_api as PriceFeedApi)]
+// #[cfg_attr(any(test, feature = "mt"), sv::messages(price_feed_api as PriceFeedApi: custom(msg, query)))]
+// #[cfg_attr(not(any(test, feature = "mt")), sv::messages(price_feed_api as PriceFeedApi))]
+/// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
+#[sv::custom(query=custom::PriceFeedQuery, msg=custom::PriceFeedMsg)]
 impl SimplePriceFeedContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -34,10 +51,10 @@ impl SimplePriceFeedContract<'_> {
     #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
-        ctx: InstantiateCtx,
+        ctx: InstantiateCtx<custom::PriceFeedQuery>,
         native_per_foreign: Decimal,
         owner: Option<String>,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
         let owner = match owner {
             Some(owner) => ctx.deps.api.addr_validate(&owner)?,
@@ -56,9 +73,9 @@ impl SimplePriceFeedContract<'_> {
     #[sv::msg(exec)]
     fn update_price(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<custom::PriceFeedQuery>,
         native_per_foreign: Decimal,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let mut config = self.config.load(ctx.deps.storage)?;
@@ -76,7 +93,10 @@ impl SimplePriceFeedContract<'_> {
     }
 
     #[sv::msg(query)]
-    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+    fn config(
+        &self,
+        ctx: QueryCtx<custom::PriceFeedQuery>,
+    ) -> Result<ConfigResponse, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
         Ok(ConfigResponse {
             owner: config.owner.into_string(),
@@ -87,10 +107,12 @@ impl SimplePriceFeedContract<'_> {
 
 impl PriceFeedApi for SimplePriceFeedContract<'_> {
     type Error = ContractError;
+    type ExecC = custom::PriceFeedMsg;
+    type QueryC = custom::PriceFeedQuery;
 
     /// Return the price of the foreign token. That is, how many native tokens
     /// are needed to buy one foreign token.
-    fn price(&self, ctx: QueryCtx) -> Result<PriceResponse, Self::Error> {
+    fn price(&self, ctx: QueryCtx<Self::QueryC>) -> Result<PriceResponse, Self::Error> {
         let config = self.config.load(ctx.deps.storage)?;
         Ok(PriceResponse {
             native_per_foreign: config.native_per_foreign,
@@ -98,7 +120,10 @@ impl PriceFeedApi for SimplePriceFeedContract<'_> {
     }
 
     /// Nothing needs to be done on the epoch
-    fn handle_epoch(&self, _ctx: SudoCtx) -> Result<Response, Self::Error> {
+    fn handle_epoch(
+        &self,
+        _ctx: SudoCtx<Self::QueryC>,
+    ) -> Result<Response<Self::ExecC>, Self::Error> {
         Ok(Response::new())
     }
 }

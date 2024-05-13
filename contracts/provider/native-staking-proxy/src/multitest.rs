@@ -293,7 +293,6 @@ fn unstaking() {
     );
 }
 
-
 #[test]
 fn burning() {
     let owner = "vault_admin";
@@ -335,7 +334,6 @@ fn burning() {
             .unwrap(),
         coin(0, OSMO)
     );
-
 
     // Advance time until the unbonding period is over
     process_staking_unbondings(&app);
@@ -551,8 +549,8 @@ fn process_staking_unbondings(app: &App<MtApp>) {
     // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
     app.app_mut()
         .sudo(cw_multi_test::SudoMsg::Staking(
+            #[allow(deprecated)]
             cw_multi_test::StakingSudo::ProcessQueue {},
         ))
         .unwrap();
 }
-

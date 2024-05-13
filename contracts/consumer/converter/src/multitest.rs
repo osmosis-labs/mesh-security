@@ -1,7 +1,7 @@
 mod virtual_staking_mock;
 
 use cosmwasm_std::{coin, coins, Addr, Decimal, StdError, Uint128, Validator};
-use cw_multi_test::App as MtApp;
+use cw_multi_test::{no_init, AppBuilder};
 use mesh_apis::converter_api::sv::mt::ConverterApiProxy;
 use mesh_apis::converter_api::RewardInfo;
 use mesh_simple_price_feed::contract::sv::mt::CodeId as PriceFeedCodeId;
@@ -12,12 +12,14 @@ use virtual_staking_mock::VirtualStakingMock;
 
 use crate::contract::sv::mt::CodeId as ConverterCodeId;
 use crate::contract::sv::mt::ConverterContractProxy;
-use crate::contract::ConverterContract;
+use crate::contract::{custom, ConverterContract};
 use crate::error::ContractError;
 use crate::error::ContractError::Unauthorized;
 use crate::multitest::virtual_staking_mock::sv::mt::VirtualStakingMockProxy;
 
 const JUNO: &str = "ujuno";
+
+pub type MtApp = cw_multi_test::BasicApp<custom::ConverterMsg, custom::ConverterQuery>;
 
 struct SetupArgs<'a> {
     owner: &'a str,
@@ -30,6 +32,10 @@ struct SetupResponse<'a> {
     price_feed: Proxy<'a, MtApp, SimplePriceFeedContract<'a>>,
     converter: Proxy<'a, MtApp, ConverterContract<'a>>,
     virtual_staking: Proxy<'a, MtApp, VirtualStakingMock<'a>>,
+}
+
+fn new_app() -> App<MtApp> {
+    App::new(AppBuilder::new_custom().build(no_init))
 }
 
 fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
@@ -80,7 +86,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
 
 #[test]
 fn instantiation() {
-    let app = App::default();
+    let app = new_app();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
     let admin = "theman";
@@ -122,7 +128,7 @@ fn instantiation() {
 
 #[test]
 fn ibc_stake_and_unstake() {
-    let app = App::default();
+    let app = new_app();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
     let admin = "theman";
@@ -208,7 +214,7 @@ fn ibc_stake_and_unstake() {
 
 #[test]
 fn ibc_stake_and_burn() {
-    let app = App::default();
+    let app = new_app();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
     let admin = "theman";
@@ -294,7 +300,7 @@ fn ibc_stake_and_burn() {
 
 #[test]
 fn valset_update_works() {
-    let app = App::default();
+    let app = new_app();
 
     let owner = "sunny"; // Owner of the staking contract (i. e. the vault contract)
     let admin = "theman";
@@ -365,7 +371,7 @@ fn valset_update_works() {
 
 #[test]
 fn unauthorized() {
-    let app = App::default();
+    let app = new_app();
 
     let SetupResponse { converter, .. } = setup(
         &app,
@@ -415,7 +421,7 @@ fn distribute_rewards_invalid_amount_is_rejected() {
     let discount = Decimal::percent(10); // 1 OSMO worth of JUNO should give 0.9 OSMO of stake
     let native_per_foreign = Decimal::percent(40); // 1 JUNO is worth 0.4 OSMO
 
-    let app = App::default();
+    let app = new_app();
 
     let SetupResponse {
         price_feed: _,
@@ -490,14 +496,14 @@ fn distribute_rewards_invalid_amount_is_rejected() {
 }
 
 #[test]
-#[ignore = "unsupported by Sylvia"]
+#[ignore = "IBC unsupported by Sylvia"]
 fn distribute_rewards_valid_amount() {
     let owner = "sunny";
     let admin = "theman";
     let discount = Decimal::percent(10); // 1 OSMO worth of JUNO should give 0.9 OSMO of stake
     let native_per_foreign = Decimal::percent(40); // 1 JUNO is worth 0.4 OSMO
 
-    let app = App::default();
+    let app = new_app();
 
     let SetupResponse {
         price_feed: _,

@@ -1,12 +1,12 @@
 use cosmwasm_std::{Addr, Decimal, Validator};
 use cw_multi_test::no_init;
+use mesh_apis::virtual_staking_api::sv::mt::VirtualStakingApiProxy;
 use sylvia::multitest::Proxy;
 
 use mesh_converter::contract::sv::mt::ConverterContractProxy;
 
 use crate::contract;
 use crate::contract::sv::mt::VirtualStakingContractProxy;
-use crate::contract::sv::ContractSudoMsg;
 
 const JUNO: &str = "ujuno";
 
@@ -120,7 +120,8 @@ fn instantiation() {
 }
 
 #[test]
-#[ignore] // FIXME: Enable / finish this test once custom query support is added to sylvia
+// FIXME: Enable / finish this test once custom query support is added to sylvia
+#[ignore = "IBC Messages not supported yet"]
 fn valset_update_sudo() {
     let app = new_app();
 
@@ -160,8 +161,8 @@ fn valset_update_sudo() {
     ];
     let rems = vec!["cosmosval2".to_string()];
     let tombs = vec!["cosmosval3".to_string()];
-    // See this as an example how we can make working directly with these genertaed enums nicer
-    let inner = mesh_apis::virtual_staking_api::sv::VirtualStakingApiSudoMsg::handle_valset_update(
+
+    let res = virtual_staking.handle_valset_update(
         Some(adds),
         Some(rems),
         None,
@@ -170,12 +171,6 @@ fn valset_update_sudo() {
         Some(tombs),
         None,
     );
-    let msg = ContractSudoMsg::VirtualStakingApi(inner);
-
-    let res = app
-        .app_mut()
-        .wasm_sudo(virtual_staking.contract_addr, &msg)
-        .unwrap();
-
     println!("res: {:?}", res);
+    res.unwrap();
 }

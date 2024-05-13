@@ -111,6 +111,7 @@ fn setup_without_local_staking<'app>(
     (vault, external)
 }
 
+#[allow(clippy::type_complexity)]
 fn setup_inner<'app>(
     app: &'app App<MtApp>,
     owner: &'app str,
@@ -280,6 +281,7 @@ fn process_staking_unbondings(app: &App<MtApp>) {
     // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
     app.app_mut()
         .sudo(cw_multi_test::SudoMsg::Staking(
+            #[allow(deprecated)]
             cw_multi_test::StakingSudo::ProcessQueue {},
         ))
         .unwrap();

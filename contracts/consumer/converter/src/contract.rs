@@ -24,6 +24,19 @@ pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const REPLY_ID_INSTANTIATE: u64 = 1;
 
+#[cfg(not(feature = "fake-custom"))]
+pub mod custom {
+    pub type ConverterMsg = cosmwasm_std::Empty;
+    pub type ConverterQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<cosmwasm_std::Empty>;
+}
+#[cfg(feature = "fake-custom")]
+pub mod custom {
+    pub type ConverterMsg = mesh_bindings::VirtualStakeCustomMsg;
+    pub type ConverterQuery = mesh_bindings::VirtualStakeCustomQuery;
+    pub type Response = cosmwasm_std::Response<ConverterMsg>;
+}
+
 pub struct ConverterContract<'a> {
     pub config: Item<'a, Config>,
     pub virtual_stake: Item<'a, Addr>,
@@ -33,6 +46,8 @@ pub struct ConverterContract<'a> {
 #[contract]
 #[sv::error(ContractError)]
 #[sv::messages(converter_api as ConverterApi)]
+/// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
+#[sv::custom(query=custom::ConverterQuery, msg=custom::ConverterMsg)]
 impl ConverterContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -51,13 +66,13 @@ impl ConverterContract<'_> {
     #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
-        ctx: InstantiateCtx,
+        ctx: InstantiateCtx<custom::ConverterQuery>,
         price_feed: String,
         discount: Decimal,
         remote_denom: String,
         virtual_staking_code_id: u64,
         admin: Option<String>,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
         // validate args
         if discount >= Decimal::one() {
@@ -94,7 +109,11 @@ impl ConverterContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+    fn reply(
+        &self,
+        ctx: ReplyCtx<custom::ConverterQuery>,
+        reply: Reply,
+    ) -> Result<custom::Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -104,9 +123,9 @@ impl ConverterContract<'_> {
     /// Store virtual staking address
     fn reply_init_callback(
         &self,
-        deps: DepsMut,
+        deps: DepsMut<custom::ConverterQuery>,
         reply: SubMsgResponse,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let virtual_staking = Addr::unchecked(init_data.contract_address);
         self.virtual_stake.save(deps.storage, &virtual_staking)?;
@@ -118,10 +137,10 @@ impl ConverterContract<'_> {
     #[sv::msg(exec)]
     fn test_stake(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<custom::ConverterQuery>,
         validator: String,
         stake: Coin,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             // This can only ever be called in tests
@@ -139,10 +158,10 @@ impl ConverterContract<'_> {
     #[sv::msg(exec)]
     fn test_unstake(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<custom::ConverterQuery>,
         validator: String,
         unstake: Coin,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             // This can only ever be called in tests
@@ -160,10 +179,10 @@ impl ConverterContract<'_> {
     #[sv::msg(exec)]
     fn test_burn(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<custom::ConverterQuery>,
         validators: Vec<String>,
         burn: Coin,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             // This can only ever be called in tests
@@ -177,7 +196,10 @@ impl ConverterContract<'_> {
     }
 
     #[sv::msg(query)]
-    fn config(&self, ctx: QueryCtx) -> Result<ConfigResponse, ContractError> {
+    fn config(
+        &self,
+        ctx: QueryCtx<custom::ConverterQuery>,
+    ) -> Result<ConfigResponse, ContractError> {
         let config = self.config.load(ctx.deps.storage)?;
         let virtual_staking = self.virtual_stake.load(ctx.deps.storage)?.into_string();
         Ok(ConfigResponse {
@@ -191,10 +213,10 @@ impl ConverterContract<'_> {
     /// It is pulled out into a method, so it can also be called by test_stake for testing
     pub(crate) fn stake(
         &self,
-        deps: DepsMut,
+        deps: DepsMut<custom::ConverterQuery>,
         validator: String,
         stake: Coin,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         let amount = self.normalize_price(deps.as_ref(), stake)?;
 
         let event = Event::new("mesh-bond")
@@ -215,10 +237,10 @@ impl ConverterContract<'_> {
     /// It is pulled out into a method, so it can also be called by test_unstake for testing
     pub(crate) fn unstake(
         &self,
-        deps: DepsMut,
+        deps: DepsMut<custom::ConverterQuery>,
         validator: String,
         unstake: Coin,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         let amount = self.normalize_price(deps.as_ref(), unstake)?;
 
         let event = Event::new("mesh-unbond")
@@ -239,10 +261,10 @@ impl ConverterContract<'_> {
     /// It is pulled out into a method, so it can also be called by test_burn for testing
     pub(crate) fn burn(
         &self,
-        deps: DepsMut,
+        deps: DepsMut<custom::ConverterQuery>,
         validators: &[String],
         burn: Coin,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         let amount = self.normalize_price(deps.as_ref(), burn)?;
 
         let event = Event::new("mesh-burn")
@@ -262,7 +284,11 @@ impl ConverterContract<'_> {
         Ok(Response::new().add_message(msg).add_event(event))
     }
 
-    fn normalize_price(&self, deps: Deps, amount: Coin) -> Result<Coin, ContractError> {
+    fn normalize_price(
+        &self,
+        deps: Deps<custom::ConverterQuery>,
+        amount: Coin,
+    ) -> Result<Coin, ContractError> {
         let config = self.config.load(deps.storage)?;
         ensure_eq!(
             config.remote_denom,
@@ -278,10 +304,13 @@ impl ConverterContract<'_> {
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
         use price_feed_api::sv::Querier;
         use sylvia::types::Remote;
-        // NOTE: Jan, this feels hacky... I'm not sure if this is the right way to do it
-        // Also, I am sticking in a random error type here, not what I will get (which is unknown)
-        let remote =
-            Remote::<&dyn price_feed_api::PriceFeedApi<Error = StdError>>::new(config.price_feed);
+        let remote = Remote::<
+            &dyn price_feed_api::PriceFeedApi<
+                Error = StdError,
+                ExecC = custom::ConverterMsg,
+                QueryC = custom::ConverterQuery,
+            >,
+        >::new(config.price_feed);
         let price = remote.querier(&deps.querier).price()?.native_per_foreign;
         let converted = (amount.amount * price) * config.price_adjustment;
 
@@ -291,7 +320,11 @@ impl ConverterContract<'_> {
         })
     }
 
-    fn invert_price(&self, deps: Deps, amount: Coin) -> Result<Coin, ContractError> {
+    fn invert_price(
+        &self,
+        deps: Deps<custom::ConverterQuery>,
+        amount: Coin,
+    ) -> Result<Coin, ContractError> {
         let config = self.config.load(deps.storage)?;
         ensure_eq!(
             config.local_denom,
@@ -306,10 +339,14 @@ impl ConverterContract<'_> {
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
         use price_feed_api::sv::Querier;
         use sylvia::types::Remote;
-        // NOTE: Jan, this feels hacky... I'm not sure if this is the right way to do it
-        // Also, I am sticking in a random error type here, not what I will get (which is unknown)
-        let remote =
-            Remote::<&dyn price_feed_api::PriceFeedApi<Error = StdError>>::new(config.price_feed);
+        // Note: it doesn't seem to matter which error type goes here...
+        let remote = Remote::<
+            &dyn price_feed_api::PriceFeedApi<
+                Error = StdError,
+                ExecC = custom::ConverterMsg,
+                QueryC = custom::ConverterQuery,
+            >,
+        >::new(config.price_feed);
         let price = remote.querier(&deps.querier).price()?.native_per_foreign;
         let converted = (amount.amount * price.inv().ok_or(ContractError::InvalidPrice {})?)
             * config
@@ -325,10 +362,10 @@ impl ConverterContract<'_> {
 
     pub(crate) fn transfer_rewards(
         &self,
-        deps: Deps,
+        deps: Deps<custom::ConverterQuery>,
         recipient: String,
         rewards: Coin,
-    ) -> Result<CosmosMsg, ContractError> {
+    ) -> Result<CosmosMsg<custom::ConverterMsg>, ContractError> {
         // ensure the address is proper
         let recipient = deps.api.addr_validate(&recipient)?;
 
@@ -351,7 +388,11 @@ impl ConverterContract<'_> {
         Ok(msg.into())
     }
 
-    fn ensure_authorized(&self, deps: &DepsMut, info: &MessageInfo) -> Result<(), ContractError> {
+    fn ensure_authorized(
+        &self,
+        deps: &DepsMut<custom::ConverterQuery>,
+        info: &MessageInfo,
+    ) -> Result<(), ContractError> {
         let virtual_stake = self.virtual_stake.load(deps.storage)?;
         ensure_eq!(info.sender, virtual_stake, ContractError::Unauthorized {});
 
@@ -361,14 +402,16 @@ impl ConverterContract<'_> {
 
 impl ConverterApi for ConverterContract<'_> {
     type Error = ContractError;
+    type ExecC = custom::ConverterMsg;
+    type QueryC = custom::ConverterQuery;
 
     /// Rewards tokens (in native staking denom) are sent alongside the message, and should be distributed to all
     /// stakers who staked on this validator. This is tracked on the provider, so we send an IBC packet there.
     fn distribute_reward(
         &self,
-        mut ctx: ExecCtx,
+        mut ctx: ExecCtx<custom::ConverterQuery>,
         validator: String,
-    ) -> Result<Response, Self::Error> {
+    ) -> Result<custom::Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -391,9 +434,9 @@ impl ConverterApi for ConverterContract<'_> {
     /// in the native staking denom.
     fn distribute_rewards(
         &self,
-        mut ctx: ExecCtx,
+        mut ctx: ExecCtx<custom::ConverterQuery>,
         payments: Vec<RewardInfo>,
-    ) -> Result<Response, Self::Error> {
+    ) -> Result<custom::Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -431,7 +474,7 @@ impl ConverterApi for ConverterContract<'_> {
     #[allow(clippy::too_many_arguments)]
     fn valset_update(
         &self,
-        ctx: ExecCtx,
+        ctx: ExecCtx<custom::ConverterQuery>,
         additions: Vec<Validator>,
         removals: Vec<String>,
         updated: Vec<Validator>,
@@ -439,7 +482,7 @@ impl ConverterApi for ConverterContract<'_> {
         unjailed: Vec<String>,
         tombstoned: Vec<String>,
         mut slashed: Vec<ValidatorSlashInfo>,
-    ) -> Result<Response, Self::Error> {
+    ) -> Result<custom::Response, Self::Error> {
         self.ensure_authorized(&ctx.deps, &ctx.info)?;
 
         // Send over IBC to the Consumer
