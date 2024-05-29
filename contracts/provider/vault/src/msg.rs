@@ -15,6 +15,23 @@ pub struct StakingInitInfo {
     pub label: Option<String>,
 }
 
+/// Information about the local staking contract used during vault instantiation
+/// We use untagged so older clients that just used JSON encoded StakingInitInfo
+/// will continue to work with no changes.
+#[cw_serde]
+pub enum LocalStakingInfo {
+    #[serde(untagged)]
+    Existing(ExistingContract),
+    #[serde(untagged)]
+    New(StakingInitInfo),
+}
+
+#[cw_serde]
+pub struct ExistingContract {
+    /// Address of the local staking contract
+    pub existing: String,
+}
+
 #[cw_serde]
 pub struct AccountResponse {
     // Everything is denom, changing all Uint128 to coin with the same denom seems very inefficient

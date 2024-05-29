@@ -12,6 +12,7 @@ use mesh_native_staking_proxy::contract::sv::mt::{
 use mesh_native_staking_proxy::contract::NativeStakingProxyContract;
 use mesh_sync::ValueRange;
 use mesh_vault::contract::sv::mt::VaultContractProxy;
+use mesh_vault::msg::LocalStakingInfo;
 
 use crate::contract;
 use crate::contract::sv::mt::NativeStakingContractProxy;
@@ -275,7 +276,10 @@ fn releasing_proxy_stake() {
 
     // Instantiates vault and staking contracts
     let vault = vault_code
-        .instantiate(OSMO.to_owned(), Some(staking_init_info))
+        .instantiate(
+            OSMO.to_owned(),
+            Some(LocalStakingInfo::New(staking_init_info)),
+        )
         .with_label("Vault")
         .call(owner)
         .unwrap();
