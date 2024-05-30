@@ -15,3 +15,5 @@ semver           = { workspace = true }
 serde            = { workspace = true }
 sylvia           = { workspace = true }
 thiserror        = { workspace = true }
+
+cw-orch = { workspace = true }

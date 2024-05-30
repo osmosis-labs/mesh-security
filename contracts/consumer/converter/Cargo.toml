@@ -35,6 +35,8 @@ schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
+cw-orch = { workspace = true}
+
 [dev-dependencies]
 mesh-burn = { workspace = true }
 mesh-simple-price-feed = { workspace = true, features = ["mt"] }

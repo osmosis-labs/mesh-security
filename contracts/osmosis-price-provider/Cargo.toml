@@ -29,3 +29,5 @@ serde           = { workspace = true }
 sylvia          = { workspace = true }
 thiserror       = { workspace = true }
 osmosis-std     = { workspace = true }
+
+cw-orch = { workspace = true}

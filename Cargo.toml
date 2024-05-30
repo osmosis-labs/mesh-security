@@ -29,7 +29,12 @@ mesh-converter = { path = "./contracts/consumer/converter" }
 mesh-simple-price-feed = { path = "./contracts/consumer/simple-price-feed" }
 mesh-virtual-staking = { path = "./contracts/consumer/virtual-staking" }
 
-sylvia = "0.10.1"
+# sylvia = "0.10.1"
+# from branch update/clean-add-cw-orch
+sylvia = { git = "https://github.com/AbstractSDK/sylvia.git", rev = "76ed9ace11ce79f541d94e5d03eb9d0b9deed509", features = ["orch"] }
+# need this fork of cw-orch as well...
+cw-orch = { git = "https://github.com/abstractsdk/cw-orchestrator", branch = "update/relax-bound-on-derive" }
+# cw-orch = "0.22.1"
 
 cosmwasm-schema = "1.5.4"
 cosmwasm-std = { version = "1.5.4", features = ["ibc3", "cosmwasm_1_3"] }
@@ -42,6 +47,7 @@ serde = { version = "1.0.199", default-features = false, features = ["derive"] }
 thiserror = "1.0.59"
 semver = "1.0.22"
 itertools = "0.12.1"
+
 
 # dev deps
 anyhow = "1"

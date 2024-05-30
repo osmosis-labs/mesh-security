@@ -96,6 +96,12 @@ pub struct CrdtState<'a> {
     validators: Map<'a, &'a str, ValidatorState>,
 }
 
+impl<'a> Default for CrdtState<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> CrdtState<'a> {
     pub const fn new() -> Self {
         CrdtState {

@@ -33,6 +33,9 @@ schemars         = { workspace = true }
 serde            = { workspace = true }
 thiserror        = { workspace = true }
 
+cw-orch = { workspace = true}
+anyhow                    = { workspace = true }
+
 [dev-dependencies]
 sylvia                    = { workspace = true, features = ["mt"] }
 cw-multi-test             = { workspace = true }
