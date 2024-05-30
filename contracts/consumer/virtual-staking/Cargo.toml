@@ -33,6 +33,7 @@ cw-utils         = { workspace = true }
 schemars         = { workspace = true }
 serde            = { workspace = true }
 thiserror        = { workspace = true }
+cw-orch = { workspace = true}
 
 [dev-dependencies]
 mesh-simple-price-feed = { workspace = true, features = ["mt", "fake-custom"] }

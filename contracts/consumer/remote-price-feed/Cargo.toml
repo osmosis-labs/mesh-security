@@ -31,6 +31,8 @@ schemars         = { workspace = true }
 serde            = { workspace = true }
 thiserror        = { workspace = true }
 
+cw-orch = { workspace = true}
+
 [dev-dependencies]
 cw-multi-test = { workspace = true }
 test-case     = { workspace = true }
