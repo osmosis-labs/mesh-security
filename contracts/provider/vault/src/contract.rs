@@ -21,7 +21,7 @@ use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountDetailsResponse, AccountResponse, AllAccountsResponse,
     AllAccountsResponseItem, AllActiveExternalStakingResponse, AllTxsResponse, AllTxsResponseItem,
-    ConfigResponse, LienResponse, StakingInitInfo, TxResponse,
+    ConfigResponse, LienResponse, LocalStakingInfo, TxResponse,
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
@@ -90,7 +90,7 @@ impl VaultContract<'_> {
         &self,
         ctx: InstantiateCtx,
         denom: String,
-        local_staking: Option<StakingInitInfo>,
+        local_staking: Option<LocalStakingInfo>,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
@@ -99,18 +99,40 @@ impl VaultContract<'_> {
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
         if let Some(local_staking) = local_staking {
-            // instantiate local_staking and handle reply
-            let msg = WasmMsg::Instantiate {
-                admin: local_staking.admin,
-                code_id: local_staking.code_id,
-                msg: local_staking.msg,
-                funds: vec![],
-                label: local_staking
-                    .label
-                    .unwrap_or_else(|| "Mesh Security Local Staking".to_string()),
-            };
-            let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
-            Ok(Response::new().add_submessage(sub_msg))
+            match local_staking {
+                LocalStakingInfo::Existing(exist) => {
+                    let addr = exist.existing;
+
+                    // Query for max slashing percentage
+                    let query = LocalStakingApiQueryMsg::MaxSlash {};
+                    let SlashRatioResponse {
+                        slash_ratio_dsign, ..
+                    } = ctx.deps.querier.query_wasm_smart(&addr, &query)?;
+
+                    let local_staking = LocalStaking {
+                        contract: LocalStakingApiHelper(ctx.deps.api.addr_validate(&addr)?),
+                        max_slash: slash_ratio_dsign,
+                    };
+
+                    self.local_staking
+                        .save(ctx.deps.storage, &Some(local_staking))?;
+                    Ok(Response::new())
+                }
+                LocalStakingInfo::New(local_staking) => {
+                    // instantiate local_staking and handle reply
+                    let msg = WasmMsg::Instantiate {
+                        admin: local_staking.admin,
+                        code_id: local_staking.code_id,
+                        msg: local_staking.msg,
+                        funds: vec![],
+                        label: local_staking
+                            .label
+                            .unwrap_or_else(|| "Mesh Security Local Staking".to_string()),
+                    };
+                    let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
+                    Ok(Response::new().add_submessage(sub_msg))
+                }
+            }
         } else {
             self.local_staking.save(ctx.deps.storage, &None)?;
             Ok(Response::new())

@@ -23,7 +23,7 @@ use crate::contract::VaultContract;
 use crate::error::ContractError;
 use crate::msg::{
     AccountResponse, AllAccountsResponseItem, AllActiveExternalStakingResponse, LienResponse,
-    StakingInitInfo,
+    LocalStakingInfo, StakingInitInfo,
 };
 
 const OSMO: &str = "OSMO";
@@ -137,12 +137,12 @@ fn setup_inner<'app>(
             proxy_code_id: native_staking_proxy_code.code_id(),
         };
 
-        Some(StakingInitInfo {
+        Some(LocalStakingInfo::New(StakingInitInfo {
             admin: None,
             code_id: native_staking_code.code_id(),
             msg: to_json_binary(&native_staking_inst_msg).unwrap(),
             label: None,
-        })
+        }))
     } else {
         None
     };

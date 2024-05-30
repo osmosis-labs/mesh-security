@@ -8,7 +8,7 @@ use mesh_native_staking::contract::sv::InstantiateMsg as NativeStakingInstantiat
 use mesh_native_staking_proxy::contract::sv::mt::CodeId as NativeStakingProxyCodeId;
 use mesh_vault::contract::sv::mt::CodeId as VaultCodeId;
 use mesh_vault::contract::VaultContract;
-use mesh_vault::msg::StakingInitInfo;
+use mesh_vault::msg::{LocalStakingInfo, StakingInitInfo};
 
 use mesh_sync::ValueRange;
 
@@ -70,7 +70,7 @@ fn setup<'app>(
     };
 
     let vault = vault_code
-        .instantiate(OSMO.to_owned(), Some(staking_init))
+        .instantiate(OSMO.to_owned(), Some(LocalStakingInfo::New(staking_init)))
         .call(owner)?;
 
     let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
