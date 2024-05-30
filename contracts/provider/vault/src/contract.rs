@@ -63,6 +63,7 @@ pub struct VaultContract<'a> {
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
+// #[sylvia::entry_points]
 #[contract]
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
