@@ -9,6 +9,12 @@ pub struct PriceKeeper {
     pub price_info_ttl_in_secs: Item<'static, u64>,
 }
 
+impl Default for PriceKeeper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PriceKeeper {
     pub const fn new() -> Self {
         Self {

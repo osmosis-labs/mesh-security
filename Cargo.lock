@@ -1509,7 +1509,7 @@ dependencies = [
 [[package]]
 name = "sylvia"
 version = "0.10.1"
-source = "git+https://github.com/AbstractSDK/sylvia.git?rev=a4168a242d444cc97d6a6363304d99d630dcbef3#a4168a242d444cc97d6a6363304d99d630dcbef3"
+source = "git+https://github.com/AbstractSDK/sylvia.git?rev=76ed9ace11ce79f541d94e5d03eb9d0b9deed509#76ed9ace11ce79f541d94e5d03eb9d0b9deed509"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
@@ -1528,7 +1528,7 @@ dependencies = [
 [[package]]
 name = "sylvia-derive"
 version = "0.10.1"
-source = "git+https://github.com/AbstractSDK/sylvia.git?rev=a4168a242d444cc97d6a6363304d99d630dcbef3#a4168a242d444cc97d6a6363304d99d630dcbef3"
+source = "git+https://github.com/AbstractSDK/sylvia.git?rev=76ed9ace11ce79f541d94e5d03eb9d0b9deed509#76ed9ace11ce79f541d94e5d03eb9d0b9deed509"
 dependencies = [
  "convert_case",
  "itertools 0.12.1",
