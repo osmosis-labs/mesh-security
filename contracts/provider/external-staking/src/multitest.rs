@@ -126,13 +126,13 @@ fn staking() {
 
     // Bond tokens
     vault
-        .bond()
+        .bond(users[0].to_owned())
         .with_funds(&coins(300, OSMO))
         .call(users[0])
         .unwrap();
 
     vault
-        .bond()
+        .bond(users[1].to_owned())
         .with_funds(&coins(300, OSMO))
         .call(users[1])
         .unwrap();
@@ -233,13 +233,13 @@ fn unstaking() {
     let validators = contract.activate_validators(["validator1", "validator2"]);
 
     vault
-        .bond()
+        .bond(users[0].to_owned())
         .with_funds(&coins(300, OSMO))
         .call(users[0])
         .unwrap();
 
     vault
-        .bond()
+        .bond(users[1].to_owned())
         .with_funds(&coins(300, OSMO))
         .call(users[1])
         .unwrap();
@@ -475,7 +475,7 @@ fn immediate_unstake_if_unbonded_validator() {
     let validators = contract.activate_validators(["validator1"]);
 
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(200, OSMO))
         .call(user)
         .unwrap();
@@ -514,7 +514,7 @@ fn immediate_unstake_if_tombstoned_validator() {
     let validators = contract.activate_validators(["validator1"]);
 
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(200, OSMO))
         .call(user)
         .unwrap();
@@ -561,13 +561,13 @@ fn distribution() {
     // 3/5 of validators[0] to users[1]
     // all of validators[1] to users[1]
     vault
-        .bond()
+        .bond(users[0].to_owned())
         .with_funds(&coins(600, OSMO))
         .call(users[0])
         .unwrap();
 
     vault
-        .bond()
+        .bond(users[1].to_owned())
         .with_funds(&coins(600, OSMO))
         .call(users[1])
         .unwrap();
@@ -1165,12 +1165,12 @@ fn batch_distribution() {
     let validators = contract.activate_validators(["validator1", "validator2"]);
 
     vault
-        .bond()
+        .bond(users[0].to_owned())
         .with_funds(&coins(600, OSMO))
         .call(users[0])
         .unwrap();
     vault
-        .bond()
+        .bond(users[1].to_owned())
         .with_funds(&coins(600, OSMO))
         .call(users[1])
         .unwrap();
@@ -1210,7 +1210,7 @@ fn batch_distribution_invalid_token() {
     let validator = contract.activate_validators(["validator1"])[0];
 
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(600, OSMO))
         .call(user)
         .unwrap();
@@ -1236,7 +1236,7 @@ fn slashing() {
     let validators = contract.activate_validators(["validator1", "validator2"]);
 
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(300, OSMO))
         .call(user)
         .unwrap();
@@ -1381,7 +1381,7 @@ fn slashing_pending_tx_partial_unbond() {
     let validators = contract.activate_validators(["validator1", "validator2"]);
 
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(300, OSMO))
         .call(user)
         .unwrap();
@@ -1468,7 +1468,7 @@ fn slashing_pending_tx_full_unbond() {
     let validators = contract.activate_validators(["validator1", "validator2"]);
 
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(200, OSMO))
         .call(user)
         .unwrap();
@@ -1551,7 +1551,7 @@ fn slashing_pending_tx_full_unbond_rolled_back() {
     let validators = contract.activate_validators(["validator1"]);
 
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(200, OSMO))
         .call(user)
         .unwrap();
@@ -1632,7 +1632,7 @@ fn slashing_pending_tx_bond() {
     let validators = contract.activate_validators(["validator1", "validator2"]);
 
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(300, OSMO))
         .call(user)
         .unwrap();
@@ -1717,7 +1717,7 @@ fn slashing_pending_tx_bond_rolled_back() {
     let validators = contract.activate_validators(["validator1", "validator2"]);
 
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(300, OSMO))
         .call(user)
         .unwrap();

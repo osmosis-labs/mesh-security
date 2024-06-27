@@ -210,7 +210,7 @@ fn set_active_validators(
 /// Bond some tokens
 fn bond(vault: &Proxy<'_, MtApp, VaultContract<'_>>, user: &str, amount: u128) {
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(amount, OSMO))
         .call(user)
         .unwrap();

@@ -141,20 +141,24 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn bond(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
-        let denom = self.config.load(ctx.deps.storage)?.denom;
+    fn bond(&self, ctx: ExecCtx, sender: String) -> Result<Response, ContractError> {
+        let denom = self.config.load(ctx.deps.storage)?.denom;        
+        let ctx_sender = ctx.info.sender.clone();
+        
+        let sender_addr = ctx.deps.api.addr_validate(&sender)?;
+        ensure!(sender_addr == ctx_sender || self.config.load(ctx.deps.storage)?.module_addr == ctx_sender, ContractError::UnexpectedDenom(denom));
         let amount = must_pay(&ctx.info, &denom)?;
 
         let mut user = self
             .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .may_load(ctx.deps.storage, &sender_addr)?
             .unwrap_or_default();
         user.collateral += amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users.save(ctx.deps.storage, &sender_addr, &user)?;
 
         let resp = Response::new()
             .add_attribute("action", "bond")
-            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("sender", &sender_addr)
             .add_attribute("amount", amount.to_string());
 
         Ok(resp)

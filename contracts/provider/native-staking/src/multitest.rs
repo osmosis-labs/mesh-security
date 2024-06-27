@@ -298,7 +298,7 @@ fn releasing_proxy_stake() {
 
     // User bonds some funds to the vault
     vault
-        .bond()
+        .bond(user.to_owned())
         .with_funds(&coins(200, OSMO))
         .call(user)
         .unwrap();
