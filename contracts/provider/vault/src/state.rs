@@ -7,6 +7,8 @@ use mesh_sync::{max_range, ValueRange};
 pub struct Config {
     /// The denom we accept for staking (only native tokens)
     pub denom: String,
+    /// Mesh security provider module address
+    pub module_addr: String,
 }
 
 #[cw_serde]

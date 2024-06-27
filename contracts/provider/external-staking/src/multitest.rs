@@ -32,6 +32,7 @@ use utils::{
 
 const OSMO: &str = "osmo";
 const STAR: &str = "star";
+const MODULE_ADDR: &str = "MESH_SECURORY_PROVIDER";
 
 /// 10% slashing on the remote chain
 const SLASHING_PERCENTAGE: u64 = 10;
@@ -70,7 +71,7 @@ fn setup<'app>(
     };
 
     let vault = vault_code
-        .instantiate(OSMO.to_owned(), Some(LocalStakingInfo::New(staking_init)))
+        .instantiate(OSMO.to_owned(), MODULE_ADDR.to_owned(), Some(LocalStakingInfo::New(staking_init)))
         .call(owner)?;
 
     let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");

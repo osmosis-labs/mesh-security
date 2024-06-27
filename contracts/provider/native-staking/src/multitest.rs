@@ -21,6 +21,7 @@ use crate::msg;
 use crate::msg::{OwnerByProxyResponse, ProxyByOwnerResponse};
 
 const OSMO: &str = "OSMO";
+const MODULE_ADDR: &str = "MESH_SECURORY_PROVIDER";
 
 const SLASHING_PERCENTAGE_DSIGN: u64 = 15;
 const SLASHING_PERCENTAGE_OFFLINE: u64 = 10;
@@ -278,6 +279,7 @@ fn releasing_proxy_stake() {
     let vault = vault_code
         .instantiate(
             OSMO.to_owned(),
+            MODULE_ADDR.to_owned(),
             Some(LocalStakingInfo::New(staking_init_info)),
         )
         .with_label("Vault")

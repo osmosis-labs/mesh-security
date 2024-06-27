@@ -90,11 +90,12 @@ impl VaultContract<'_> {
         &self,
         ctx: InstantiateCtx,
         denom: String,
+        module_addr: String,
         local_staking: Option<LocalStakingInfo>,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
-        let config = Config { denom };
+        let config = Config { denom, module_addr };
         self.config.save(ctx.deps.storage, &config)?;
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 

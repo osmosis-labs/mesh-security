@@ -28,6 +28,7 @@ use crate::msg::{
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
+const MODULE_ADDR: &str = "MESH_SECURORY_PROVIDER";
 
 /// 10% slashing on the remote chain
 const SLASHING_PERCENTAGE: u64 = 10;
@@ -148,7 +149,7 @@ fn setup_inner<'app>(
     };
 
     let vault = vault_code
-        .instantiate(OSMO.to_owned(), staking_init_info)
+        .instantiate(OSMO.to_owned(), MODULE_ADDR.to_owned(), staking_init_info)
         .with_label("Vault")
         .call(owner)
         .unwrap();
