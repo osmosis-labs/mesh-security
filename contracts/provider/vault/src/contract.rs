@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply, Response,
-    StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coin, ensure, ensure_eq, Addr, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply,
+    Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -141,40 +141,53 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn bond(&self, ctx: ExecCtx, sender: String) -> Result<Response, ContractError> {
-        let denom = self.config.load(ctx.deps.storage)?.denom;        
-        let ctx_sender = ctx.info.sender.clone();
-        
-        let sender_addr = ctx.deps.api.addr_validate(&sender)?;
-        ensure!(sender_addr == ctx_sender || self.config.load(ctx.deps.storage)?.module_addr == ctx_sender, ContractError::UnexpectedDenom(denom));
+    fn bond(&self, ctx: ExecCtx, delegator: String) -> Result<Response, ContractError> {
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+        let module_addr = self.config.load(ctx.deps.storage)?.module_addr;
+
+        let delegator_addr = ctx.deps.api.addr_validate(&delegator)?;
+        ensure_eq!(
+            module_addr,
+            ctx.info.sender.to_string(),
+            ContractError::Unauthorized{}
+        );
+
         let amount = must_pay(&ctx.info, &denom)?;
 
         let mut user = self
             .users
-            .may_load(ctx.deps.storage, &sender_addr)?
+            .may_load(ctx.deps.storage, &delegator_addr)?
             .unwrap_or_default();
         user.collateral += amount;
-        self.users.save(ctx.deps.storage, &sender_addr, &user)?;
+        self.users.save(ctx.deps.storage, &delegator_addr, &user)?;
 
         let resp = Response::new()
             .add_attribute("action", "bond")
-            .add_attribute("sender", &sender_addr)
+            .add_attribute("sender", &delegator_addr)
             .add_attribute("amount", amount.to_string());
 
         Ok(resp)
     }
 
     #[sv::msg(exec)]
-    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
+    fn unbond(&self, ctx: ExecCtx, delegator: String, amount: Coin) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
-
         ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
+
+        let module_addr = self.config.load(ctx.deps.storage)?.module_addr;
+        ensure_eq!(
+            module_addr,
+            ctx.info.sender.to_string(),
+            ContractError::Unauthorized{}
+        );
+
+        let delegator_addr = ctx.deps.api.addr_validate(&delegator)?;
 
         let mut user = self
             .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .may_load(ctx.deps.storage, &delegator_addr)?
             .unwrap_or_default();
 
         let free_collateral = user.free_collateral();
@@ -184,17 +197,11 @@ impl VaultContract<'_> {
         );
 
         user.collateral -= amount.amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
-
-        let msg = BankMsg::Send {
-            to_address: ctx.info.sender.to_string(),
-            amount: vec![amount.clone()],
-        };
+        self.users.save(ctx.deps.storage, &delegator_addr, &user)?;
 
         let resp = Response::new()
-            .add_message(msg)
             .add_attribute("action", "unbond")
-            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("delegator_address", delegator_addr)
             .add_attribute("amount", amount.to_string());
 
         Ok(resp)
