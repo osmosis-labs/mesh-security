@@ -51,6 +51,16 @@ pub trait ConverterApi {
         tombstoned: Vec<String>,
         slashed: Vec<ValidatorSlashInfo>,
     ) -> Result<Response<Self::ExecC>, Self::Error>;
+
+    /// Send ibc packet, request the external staking contract to unstake
+    #[sv::msg(exec)]
+    fn internal_unstake(
+        &self,
+        ctx: ExecCtx<Self::QueryC>,
+        delegator: String,
+        validator: String,
+        amount: Coin,
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 }
 
 #[cw_serde]

@@ -1,7 +1,7 @@
 use cosmwasm_std::{
     ensure_eq, to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event,
-    Fraction, MessageInfo, Reply, Response, StdError, SubMsg, SubMsgResponse, Uint128, Validator,
-    WasmMsg,
+    Fraction, IbcMsg, MessageInfo, Reply, Response, StdError, SubMsg, SubMsgResponse, Uint128,
+    Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -15,7 +15,9 @@ use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
-use crate::ibc::{make_ibc_packet, valset_update_msg, IBC_CHANNEL};
+use crate::ibc::{
+    make_ibc_packet, packet_timeout_internal_unstake, valset_update_msg, IBC_CHANNEL,
+};
 use crate::msg::ConfigResponse;
 use crate::state::Config;
 
@@ -138,13 +140,14 @@ impl ConverterContract<'_> {
     fn test_stake(
         &self,
         ctx: ExecCtx<custom::ConverterQuery>,
+        delegator: String,
         validator: String,
         stake: Coin,
     ) -> Result<custom::Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             // This can only ever be called in tests
-            self.stake(ctx.deps, validator, stake)
+            self.stake(ctx.deps, delegator, validator, stake)
         }
         #[cfg(not(any(test, feature = "mt")))]
         {
@@ -159,13 +162,14 @@ impl ConverterContract<'_> {
     fn test_unstake(
         &self,
         ctx: ExecCtx<custom::ConverterQuery>,
+        delegator: String,
         validator: String,
         unstake: Coin,
     ) -> Result<custom::Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             // This can only ever be called in tests
-            self.unstake(ctx.deps, validator, unstake)
+            self.unstake(ctx.deps, delegator, validator, unstake)
         }
         #[cfg(not(any(test, feature = "mt")))]
         {
@@ -214,6 +218,7 @@ impl ConverterContract<'_> {
     pub(crate) fn stake(
         &self,
         deps: DepsMut<custom::ConverterQuery>,
+        delegator: String,
         validator: String,
         stake: Coin,
     ) -> Result<custom::Response, ContractError> {
@@ -223,7 +228,11 @@ impl ConverterContract<'_> {
             .add_attribute("validator", &validator)
             .add_attribute("amount", amount.amount.to_string());
 
-        let msg = virtual_staking_api::sv::ExecMsg::Bond { validator, amount };
+        let msg = virtual_staking_api::sv::ExecMsg::Bond {
+            delegator,
+            validator,
+            amount,
+        };
         let msg = WasmMsg::Execute {
             contract_addr: self.virtual_stake.load(deps.storage)?.into(),
             msg: to_json_binary(&msg)?,
@@ -238,6 +247,7 @@ impl ConverterContract<'_> {
     pub(crate) fn unstake(
         &self,
         deps: DepsMut<custom::ConverterQuery>,
+        delegator: String,
         validator: String,
         unstake: Coin,
     ) -> Result<custom::Response, ContractError> {
@@ -247,7 +257,11 @@ impl ConverterContract<'_> {
             .add_attribute("validator", &validator)
             .add_attribute("amount", amount.amount.to_string());
 
-        let msg = virtual_staking_api::sv::ExecMsg::Unbond { validator, amount };
+        let msg = virtual_staking_api::sv::ExecMsg::Unbond {
+            delegator,
+            validator,
+            amount,
+        };
         let msg = WasmMsg::Execute {
             contract_addr: self.virtual_stake.load(deps.storage)?.into(),
             msg: to_json_binary(&msg)?,
@@ -601,6 +615,38 @@ impl ConverterApi for ConverterContract<'_> {
             resp = resp.add_message(valset_msg);
         }
         resp = resp.add_event(event);
+        Ok(resp)
+    }
+
+    fn internal_unstake(
+        &self,
+        ctx: ExecCtx<custom::ConverterQuery>,
+        delegator: String,
+        validator: String,
+        amount: Coin,
+    ) -> Result<custom::Response, Self::Error> {
+        let virtual_stake = self.virtual_stake.load(ctx.deps.storage)?;
+        ensure_eq!(ctx.info.sender, virtual_stake, ContractError::Unauthorized);
+
+        #[allow(unused_mut)]
+        let mut resp = Response::new()
+            .add_attribute("action", "internal_unstake")
+            .add_attribute("amount", amount.amount.to_string())
+            .add_attribute("owner", delegator.clone());
+
+        let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+        let packet = ConsumerPacket::InternalUnstake {
+            delegator: delegator,
+            validator,
+            amount,
+        };
+        let msg = IbcMsg::SendPacket {
+            channel_id: channel.endpoint.channel_id,
+            data: to_json_binary(&packet)?,
+            timeout: packet_timeout_internal_unstake(&ctx.env),
+        };
+        // send packet if we are ibc enabled
+        resp = resp.add_message(msg);
         Ok(resp)
     }
 }

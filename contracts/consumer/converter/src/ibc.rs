@@ -5,7 +5,7 @@ use cosmwasm_std::{
     from_json, to_json_binary, DepsMut, Env, Event, Ibc3ChannelOpenResponse, IbcBasicResponse,
     IbcChannel, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg,
     IbcChannelOpenResponse, IbcMsg, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg,
-    IbcReceiveResponse, IbcTimeout, Validator,
+    IbcReceiveResponse, IbcTimeout, Validator, WasmMsg,
 };
 use cw_storage_plus::Item;
 
@@ -14,6 +14,7 @@ use mesh_apis::ibc::{
     ack_success, validate_channel_order, AckWrapper, AddValidator, ConsumerPacket, ProtocolVersion,
     ProviderPacket, StakeAck, TransferRewardsAck, UnstakeAck, PROTOCOL_NAME,
 };
+use mesh_apis::virtual_staking_api;
 use sylvia::types::ExecCtx;
 
 use crate::{
@@ -34,6 +35,8 @@ const DEFAULT_VALIDATOR_TIMEOUT: u64 = 24 * 60 * 60;
 // But reward messages should go faster or timeout
 const DEFAULT_REWARD_TIMEOUT: u64 = 60 * 60;
 
+const DEFAULT_INTERNAL_UNSTAKE_TIMEOUT: u64 = 60 * 60;
+
 pub fn packet_timeout_validator(env: &Env) -> IbcTimeout {
     // No idea about their block time, but 24 hours ahead of our view of the clock
     // should be decently in the future.
@@ -45,6 +48,13 @@ pub fn packet_timeout_rewards(env: &Env) -> IbcTimeout {
     // No idea about their block time, but 1 hour ahead of our view of the clock
     // should be decently in the future.
     let timeout = env.block.time.plus_seconds(DEFAULT_REWARD_TIMEOUT);
+    IbcTimeout::with_timestamp(timeout)
+}
+
+pub fn packet_timeout_internal_unstake(env: &Env) -> IbcTimeout {
+    // No idea about their block time, but 24 hours ahead of our view of the clock
+    // should be decently in the future.
+    let timeout = env.block.time.plus_seconds(DEFAULT_INTERNAL_UNSTAKE_TIMEOUT);
     IbcTimeout::with_timestamp(timeout)
 }
 
@@ -195,11 +205,12 @@ pub fn ibc_packet_receive(
     let contract = ConverterContract::new();
     let res = match packet {
         ProviderPacket::Stake {
+            delegator,
             validator,
             stake,
             tx_id: _,
         } => {
-            let response = contract.stake(deps, validator, stake)?;
+            let response = contract.stake(deps, delegator, validator, stake)?;
             let ack = ack_success(&StakeAck {})?;
             IbcReceiveResponse::new()
                 .set_ack(ack)
@@ -208,11 +219,12 @@ pub fn ibc_packet_receive(
                 .add_attributes(response.attributes)
         }
         ProviderPacket::Unstake {
+            delegator,
             validator,
             unstake,
             tx_id: _,
         } => {
-            let response = contract.unstake(deps, validator, unstake)?;
+            let response = contract.unstake(deps, delegator, validator, unstake)?;
             let ack = ack_success(&UnstakeAck {})?;
             IbcReceiveResponse::new()
                 .set_ack(ack)
@@ -245,14 +257,35 @@ pub fn ibc_packet_receive(
 /// If it succeeded, take no action. If it errored, we can't do anything else and let it go.
 /// We just log the error cases so they can be detected.
 pub fn ibc_packet_ack(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
     msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
     let ack: AckWrapper = from_json(&msg.acknowledgement.data)?;
+    let contract = ConverterContract::new();
     let mut res = IbcBasicResponse::new();
     match ack {
-        AckWrapper::Result(_) => {}
+        AckWrapper::Result(_) => {
+            let packet: ConsumerPacket = from_json(&msg.original_packet.data)?;
+            if let ConsumerPacket::InternalUnstake { 
+                delegator, 
+                validator, 
+                amount, 
+            } = packet {
+                // execute virtual contract's internal unbond 
+                let msg = virtual_staking_api::sv::ExecMsg::InternalUnbond {
+                    delegator, 
+                    validator, 
+                    amount,
+                };
+                let msg = WasmMsg::Execute {
+                    contract_addr: contract.virtual_stake.load(deps.storage)?.into(),
+                    msg: to_json_binary(&msg)?,
+                    funds: vec![],
+                };
+                res = res.add_message(msg);
+            }
+        }
         AckWrapper::Error(e) => {
             // The wasmd framework will label this with the contract_addr, which helps us find the port and issue.
             // Provide info to find the actual packet.

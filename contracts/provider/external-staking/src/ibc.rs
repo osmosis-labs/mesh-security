@@ -155,6 +155,11 @@ pub fn ibc_packet_receive(
                 .add_event(evt)
                 .add_messages(msgs)
         }
+        ConsumerPacket::InternalUnstake { delegator, validator, amount} => {
+            let evt = contract.internal_unstake(deps, env, delegator, validator, amount)?;
+            let ack = ack_success(&DistributeAck {})?;
+            IbcReceiveResponse::new().set_ack(ack).add_event(evt)
+        }
         ConsumerPacket::Distribute { validator, rewards } => {
             let evt = contract.distribute_rewards(deps, &validator, rewards)?;
             let ack = ack_success(&DistributeAck {})?;
