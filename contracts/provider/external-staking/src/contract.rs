@@ -446,6 +446,7 @@ impl ExternalStakingContract<'_> {
         Ok(())
     }
 
+    // immediate unstake assets
     pub(crate) fn internal_unstake(
         &self,
         deps: DepsMut,
@@ -454,7 +455,6 @@ impl ExternalStakingContract<'_> {
         validator: String,
         amount: Coin,
     ) -> Result<Event, ContractError> {
-        let config = self.config.load(deps.storage)?;
         let user = deps.api.addr_validate(&delegator)?;
         // Load stake
         let mut stake = self.stakes.stake.load(deps.storage, (&user, &validator))?;
@@ -469,19 +469,7 @@ impl ExternalStakingContract<'_> {
         let amount = min(amount.amount, stake.stake.high());
         stake.stake.commit_sub(amount);
 
-        let immediate_release = matches!(
-            self.val_set.validator_state(deps.storage, &validator)?,
-            State::Unbonded {} | State::Tombstoned {}
-        );
-
-        // FIXME? Release period being computed after successful IBC tx
-        // (Note: this is good for now, but can be revisited in v1 design)
-        let release_at = if immediate_release {
-            env.block.time
-        } else {
-            env.block.time.plus_seconds(config.unbonding_period)
-        };
-        let unbond = PendingUnbond { amount, release_at };
+        let unbond = PendingUnbond { amount, release_at: env.block.time };
         stake.pending_unbonds.push(unbond);
 
         // Distribution alignment
