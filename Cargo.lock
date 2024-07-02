@@ -610,6 +610,7 @@ dependencies = [
  "mesh-bindings",
  "mesh-burn",
  "mesh-simple-price-feed",
+ "mesh-sync",
  "schemars",
  "serde",
  "sylvia",

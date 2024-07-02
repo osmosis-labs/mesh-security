@@ -25,6 +25,7 @@ pub trait VirtualStakingApi {
     fn bond(
         &self,
         ctx: ExecCtx<Self::QueryC>,
+        delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<Self::ExecC>, Self::Error>;
@@ -36,6 +37,7 @@ pub trait VirtualStakingApi {
     fn unbond(
         &self,
         ctx: ExecCtx<Self::QueryC>,
+        delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<Self::ExecC>, Self::Error>;
@@ -48,6 +50,17 @@ pub trait VirtualStakingApi {
         &self,
         ctx: ExecCtx<Self::QueryC>,
         validators: Vec<String>,
+        amount: Coin,
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
+
+    /// TODO: docs for this function
+    /// 
+    #[sv::msg(exec)]
+    fn internal_unbond(
+        &self,
+        ctx: ExecCtx<Self::QueryC>,
+        delegator: String,
+        validator: String,
         amount: Coin,
     ) -> Result<Response<Self::ExecC>, Self::Error>;
 

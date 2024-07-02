@@ -26,7 +26,7 @@ use crate::msg::{
     StakeInfo, StakesResponse, TxResponse, ValidatorPendingRewards,
 };
 use crate::stakes::Stakes;
-use crate::state::{Config, Distribution, SlashRatio, Stake};
+use crate::state::{Config, Distribution, PendingUnbond, SlashRatio, Stake};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -296,10 +296,11 @@ impl ExternalStakingContract<'_> {
         let mut resp = Response::new()
             .add_attribute("action", "unstake")
             .add_attribute("amount", amount.amount.to_string())
-            .add_attribute("owner", info.sender);
+            .add_attribute("owner", info.sender.clone());
 
         let channel = IBC_CHANNEL.load(deps.storage)?;
         let packet = ProviderPacket::Unstake {
+            delegator: info.sender.to_string(),
             validator,
             unstake: amount,
             tx_id,
@@ -443,6 +444,66 @@ impl ExternalStakingContract<'_> {
         // Remove tx
         self.pending_txs.remove(deps.storage, tx_id);
         Ok(())
+    }
+
+    pub(crate) fn internal_unstake(
+        &self,
+        deps: DepsMut,
+        env: Env,
+        delegator: String,
+        validator: String,
+        amount: Coin,
+    ) -> Result<Event, ContractError> {
+        let config = self.config.load(deps.storage)?;
+        let user = deps.api.addr_validate(&delegator)?;
+        // Load stake
+        let mut stake = self.stakes.stake.load(deps.storage, (&user, &validator))?;
+
+        // Load distribution
+        let mut distribution = self
+            .distribution
+            .may_load(deps.storage, &validator)?
+            .unwrap_or_default();
+
+        // Commit sub amount, saturating if slashed
+        let amount = min(amount.amount, stake.stake.high());
+        stake.stake.commit_sub(amount);
+
+        let immediate_release = matches!(
+            self.val_set.validator_state(deps.storage, &validator)?,
+            State::Unbonded {} | State::Tombstoned {}
+        );
+
+        // FIXME? Release period being computed after successful IBC tx
+        // (Note: this is good for now, but can be revisited in v1 design)
+        let release_at = if immediate_release {
+            env.block.time
+        } else {
+            env.block.time.plus_seconds(config.unbonding_period)
+        };
+        let unbond = PendingUnbond { amount, release_at };
+        stake.pending_unbonds.push(unbond);
+
+        // Distribution alignment
+        stake
+            .points_alignment
+            .stake_decreased(amount, distribution.points_per_stake);
+        distribution.total_stake -= amount;
+
+        // Save stake
+        self.stakes
+            .stake
+            .save(deps.storage, (&user, &validator), &stake)?;
+
+        // Save distribution
+        self.distribution
+            .save(deps.storage, &validator, &distribution)?;
+        let event = Event::new("internal_unstake")
+            .add_attribute("delegator", delegator)
+            .add_attribute("validator", validator)
+            .add_attribute("amount", amount.to_string());
+
+        Ok(event)
     }
 
     /// In non-test code, this is called from `ibc_packet_ack`
@@ -1271,6 +1332,7 @@ pub mod cross_staking {
 
             let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
             let packet = ProviderPacket::Stake {
+                delegator: owner.to_string(),
                 validator: msg.validator,
                 stake: amount.clone(),
                 tx_id,
