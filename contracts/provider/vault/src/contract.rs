@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply,
-    Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coin, ensure, Addr, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply, Response,
+    StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -155,7 +155,7 @@ impl VaultContract<'_> {
 
         let resp = Response::new()
             .add_attribute("action", "bond")
-            .add_attribute("sender", &ctx.info.sender)
+            .add_attribute("sender", ctx.info.sender)
             .add_attribute("amount", amount.to_string());
 
         Ok(resp)
@@ -180,11 +180,11 @@ impl VaultContract<'_> {
         );
 
         user.collateral -= amount.amount;
-        self.users.save(ctx.deps.storage,  &ctx.info.sender, &user)?;
+        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
         let resp = Response::new()
             .add_attribute("action", "unbond")
-            .add_attribute("delegator_address",  &ctx.info.sender)
+            .add_attribute("sender", ctx.info.sender)
             .add_attribute("amount", amount.to_string());
 
         Ok(resp)
