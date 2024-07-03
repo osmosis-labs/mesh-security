@@ -28,7 +28,6 @@ use crate::msg::{
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
-const MODULE_ADDR: &str = "MESH_SECURORY_PROVIDER";
 
 /// 10% slashing on the remote chain
 const SLASHING_PERCENTAGE: u64 = 10;
@@ -149,7 +148,7 @@ fn setup_inner<'app>(
     };
 
     let vault = vault_code
-        .instantiate(OSMO.to_owned(), MODULE_ADDR.to_owned(), staking_init_info)
+        .instantiate(OSMO.to_owned(), staking_init_info)
         .with_label("Vault")
         .call(owner)
         .unwrap();
@@ -210,12 +209,11 @@ fn set_active_validators(
 /// Bond some tokens
 fn bond(vault: &Proxy<'_, MtApp, VaultContract<'_>>, user: &str, amount: u128) {
     vault
-        .bond(user.to_owned())
-        .with_funds(&coins(amount, OSMO))
+        .bond(coin(amount, OSMO))
         .call(user)
         .unwrap();
 }
-
+    
 fn stake_locally(
     vault: &Proxy<'_, MtApp, VaultContract<'_>>,
     user: &str,
@@ -394,7 +392,7 @@ fn bonding() {
 
     // Unbond some tokens
 
-    vault.unbond(user.to_owned(), coin(200, OSMO)).call(user).unwrap();
+    vault.unbond(coin(200, OSMO)).call(user).unwrap();
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
         AccountResponse {
@@ -417,7 +415,7 @@ fn bonding() {
         coin(50, OSMO)
     );
 
-    vault.unbond(user.to_owned(), coin(20, OSMO)).call(user).unwrap();
+    vault.unbond(coin(20, OSMO)).call(user).unwrap();
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
         AccountResponse {
@@ -442,7 +440,7 @@ fn bonding() {
 
     // Unbonding over bounded fails
 
-    let err = vault.unbond(user.to_owned(), coin(100, OSMO)).call(user).unwrap_err();
+    let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(30)))
@@ -594,7 +592,7 @@ fn stake_local() {
 
     // Cannot unbond used collateral
 
-    let err = vault.unbond(user.to_owned(), coin(100, OSMO)).call(user).unwrap_err();
+    let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
@@ -888,7 +886,7 @@ fn stake_cross() {
 
     // Cannot unbond used collateral
 
-    let err = vault.unbond(user.to_owned(), coin(100, OSMO)).call(user).unwrap_err();
+    let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
@@ -1592,7 +1590,7 @@ fn all_users_fetching() {
 
     // After unbonding some, but not all collateral, user shall still be visible
 
-    vault.unbond(users[0].to_owned(), coin(50, OSMO)).call(users[0]).unwrap();
+    vault.unbond(coin(50, OSMO)).call(users[0]).unwrap();
 
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
@@ -1641,7 +1639,7 @@ fn all_users_fetching() {
     );
 
     // Unbonding all the collateral hides the user when the collateral flag is set
-    vault.unbond(users[1].to_owned(),coin(200, OSMO)).call(users[1]).unwrap();
+    vault.unbond(coin(200, OSMO)).call(users[1]).unwrap();
 
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(

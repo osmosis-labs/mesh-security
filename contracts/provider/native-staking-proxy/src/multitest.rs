@@ -17,7 +17,6 @@ use crate::contract::NativeStakingProxyContract;
 use crate::msg::ConfigResponse;
 
 const OSMO: &str = "uosmo";
-const MODULE_ADDR: &str = "MESH_SECURORY_PROVIDER";
 const UNBONDING_PERIOD: u64 = 17 * 24 * 60 * 60; // 7 days
 
 fn init_app(owner: &str, validators: &[&str]) -> App<MtApp> {
@@ -84,7 +83,6 @@ fn setup<'app>(
     let vault = vault_code
         .instantiate(
             OSMO.to_owned(),
-            MODULE_ADDR.to_owned(),
             Some(LocalStakingInfo::New(staking_init_info)),
         )
         .with_label("Vault")
@@ -93,8 +91,7 @@ fn setup<'app>(
 
     // Bond some funds to the vault
     vault
-        .bond(user.to_owned())
-        .with_funds(&coins(200, OSMO))
+        .bond(coin(200, OSMO))
         .call(user)
         .unwrap();
 
