@@ -30,6 +30,9 @@ pub enum VirtualStakeMsg {
     /// It will then burn those tokens from the caller's account,
     /// and update the currently minted amount.
     Unbond { amount: Coin, validator: String },
+    /// TODO: Add docs for this msg
+    /// 
+    UpdateDelegation { amount: Coin, is_deduct: bool, delegator: String, validator: String},
 }
 
 impl VirtualStakeMsg {
@@ -51,6 +54,19 @@ impl VirtualStakeMsg {
         };
         VirtualStakeMsg::Unbond {
             amount: coin,
+            validator: validator.to_string(),
+        }
+    }
+    
+    pub fn update_delegation(denom: &str, is_deduct: bool, amount: impl Into<Uint128>, delgator: &str, validator: &str) -> VirtualStakeMsg {
+        let coin = Coin {
+            amount: amount.into(),
+            denom: denom.into(),
+        };
+        VirtualStakeMsg::UpdateDelegation {
+            amount: coin,
+            is_deduct,
+            delegator: delgator.to_string(),
             validator: validator.to_string(),
         }
     }

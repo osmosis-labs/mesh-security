@@ -132,6 +132,9 @@ impl Module for VirtualStakingModule {
                     Err(anyhow::anyhow!("bonded amount exceeded"))
                 }
             }
+            mesh_bindings::VirtualStakeMsg::UpdateDelegation { .. } => {
+                Ok(AppResponse::default())
+            }
         }
     }
 

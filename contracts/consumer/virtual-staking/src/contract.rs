@@ -363,7 +363,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     fn bond(
         &self,
         ctx: ExecCtx<VirtualStakeCustomQuery>,
-        _delegator: String,
+        delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
@@ -385,7 +385,13 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         self.bond_requests
             .save(ctx.deps.storage, &validator, &bonded)?;
 
-        Ok(Response::new())
+        let msg = VirtualStakeMsg::UpdateDelegation { 
+            amount, 
+            is_deduct: false,
+            delegator, 
+            validator 
+        };
+        Ok(Response::new().add_message(msg))
     }
 
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
@@ -394,7 +400,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     fn unbond(
         &self,
         ctx: ExecCtx<VirtualStakeCustomQuery>,
-        _delegator: String,
+        delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
@@ -415,7 +421,13 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         self.bond_requests
             .save(ctx.deps.storage, &validator, &bonded)?;
 
-        Ok(Response::new())
+        let msg = VirtualStakeMsg::UpdateDelegation { 
+            amount, 
+            is_deduct: true,
+            delegator, 
+            validator 
+        };
+        Ok(Response::new().add_message(msg))
     }
 
     /// Requests to unbond and burn tokens from a list of validators. Unbonding will be actually handled at the next epoch.
