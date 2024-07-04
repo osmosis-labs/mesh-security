@@ -11,9 +11,7 @@ use mesh_apis::local_staking_api::{
     sv::LocalStakingApiQueryMsg, LocalStakingApiHelper, SlashRatioResponse,
 };
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
-use mesh_bindings::{
-    VaultCustomMsg, VaultMsg,
-};
+use mesh_bindings::{VaultCustomMsg, VaultMsg};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
 
@@ -155,7 +153,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn bond(&self, ctx: ExecCtx, amount: Coin) -> Result<custom::Response, ContractError> {
+    fn bond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<VaultCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
@@ -167,17 +165,18 @@ impl VaultContract<'_> {
             .unwrap_or_default();
         user.collateral += amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
-        // let msg = VaultMsg::Bond { delegator: ctx.info.sender.into_string(), amount};
-        let resp = Response::new()
-            .add_attribute("action", "bond")
+        let amt = amount.amount;
+        let resp = custom::Response::new()
+            .add_message(VaultMsg::Bond { delegator: ctx.info.sender.clone().into_string(), amount})
+            .add_attribute("action", "unbond")
             .add_attribute("sender", ctx.info.sender)
-            .add_attribute("amount", amount.to_string());
+            .add_attribute("amount", amt.to_string());
 
         Ok(resp)
     }
 
     #[sv::msg(exec)]
-    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<custom::Response, ContractError> {
+    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<VaultCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
@@ -196,11 +195,12 @@ impl VaultContract<'_> {
 
         user.collateral -= amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
-
+        let amt = amount.amount;
         let resp = custom::Response::new()
+            .add_message(VaultMsg::Unbond { delegator: ctx.info.sender.clone().into_string(), amount})
             .add_attribute("action", "unbond")
             .add_attribute("sender", ctx.info.sender)
-            .add_attribute("amount", amount.to_string());
+            .add_attribute("amount", amt.to_string());
 
         Ok(resp)
     }
@@ -500,7 +500,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<custom::Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -511,7 +511,7 @@ impl VaultContract<'_> {
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let local_staking = Addr::unchecked(init_data.contract_address);
 

@@ -16,7 +16,6 @@ backtraces = ["cosmwasm-std/backtraces"]
 library = []
 # enables generation of mt utilities
 mt = ["library", "sylvia/mt"]
-fake-custom = [ "mesh-vault/fake-custom" ]
 
 [dependencies]
 mesh-apis        = { workspace = true }
