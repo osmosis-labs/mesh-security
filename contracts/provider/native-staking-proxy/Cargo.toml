@@ -17,6 +17,7 @@ backtraces = ["cosmwasm-std/backtraces"]
 library = []
 # enables generation of mt utilities
 mt = ["library", "sylvia/mt"]
+fake-custom = [ "mesh-vault/fake-custom" ]
 
 [dependencies]
 mesh-apis        = { workspace = true }
@@ -40,7 +41,7 @@ test-case     = { workspace = true }
 derivative    = { workspace = true }
 anyhow        = { workspace = true }
 
-mesh-vault          = { workspace = true, features = ["mt"] }
+mesh-vault          = { workspace = true, features = ["mt", "fake-custom"] }
 mesh-native-staking = { workspace = true, features = ["mt"] }
 
 [[bin]]

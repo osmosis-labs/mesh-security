@@ -37,7 +37,7 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 mesh-burn = { workspace = true }
-mesh-simple-price-feed = { workspace = true, features = ["mt"] }
+mesh-simple-price-feed = { workspace = true, features = ["mt", "fake-custom"] }
 
 cw-multi-test = { workspace = true }
 test-case = { workspace = true }
