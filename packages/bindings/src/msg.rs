@@ -63,3 +63,60 @@ impl From<VirtualStakeMsg> for CosmosMsg<VirtualStakeCustomMsg> {
 }
 
 impl CustomMsg for VirtualStakeCustomMsg {}
+
+/// A top-level Custom message for the meshsecurityprovider module.
+/// It is embedded like this to easily allow adding other variants that are custom
+/// to your chain, or other "standardized" extensions along side it.
+#[cw_serde]
+pub enum VaultCustomMsg {
+    Vault(VaultMsg),
+}
+
+/// Special messages to be supported by any chain that supports meshsecurityprovider
+#[cw_serde]
+pub enum VaultMsg {
+    /// Bond will enforce the calling contract is the vault contract.
+    /// It ensures amount.denom is the native staking denom.
+    ///
+    /// If these conditions are met, it will bond amount.amount tokens
+    /// to the vault.
+    Bond { delegator: String, amount: Coin },
+    /// Unbond ensures that amount.denom is the native staking denom and 
+    /// the calling contract is the vault contract.
+    ///
+    /// If these conditions are met, it will instantly unbond
+    /// amount.amount tokens from the vault contract.
+    Unbond { delegator: String, amount: Coin },
+}
+
+impl VaultMsg {
+    pub fn bond(denom: &str, delegator: &str, amount: impl Into<Uint128>) -> VaultMsg {
+        let coin = Coin {
+            amount: amount.into(),
+            denom: denom.into(),
+        };
+        VaultMsg::Bond {
+            delegator: delegator.to_string(),
+            amount: coin,
+        }
+    }
+
+    pub fn unbond(denom: &str, delegator: &str, amount: impl Into<Uint128>) -> VaultMsg {
+        let coin = Coin {
+            amount: amount.into(),
+            denom: denom.into(),
+        };
+        VaultMsg::Unbond {
+            delegator: delegator.to_string(),
+            amount: coin,
+        }
+    }
+}
+
+impl From<VaultMsg> for CosmosMsg<VaultCustomMsg> {
+    fn from(msg: VaultMsg) -> CosmosMsg<VaultCustomMsg> {
+        CosmosMsg::Custom(VaultCustomMsg::Vault(msg))
+    }
+}
+
+impl CustomMsg for VaultCustomMsg {}

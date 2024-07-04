@@ -12,8 +12,12 @@ use mesh_apis::local_staking_api::{
     sv::LocalStakingApiQueryMsg, LocalStakingApiHelper, SlashRatioResponse,
 };
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
+use mesh_bindings::{
+    VaultCustomMsg, VaultMsg,
+};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
+
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
@@ -154,6 +158,7 @@ impl VaultContract<'_> {
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
         let resp = Response::new()
+            .add_message(VaultMsg::Bond { delegator: ctx.info.sender, amount})
             .add_attribute("action", "bond")
             .add_attribute("sender", ctx.info.sender)
             .add_attribute("amount", amount.to_string());
@@ -183,6 +188,7 @@ impl VaultContract<'_> {
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
         let resp = Response::new()
+            .add_message(VaultMsg::Unbond { delegator: ctx.info.sender, amount})
             .add_attribute("action", "unbond")
             .add_attribute("sender", ctx.info.sender)
             .add_attribute("amount", amount.to_string());
