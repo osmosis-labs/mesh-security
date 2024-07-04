@@ -81,7 +81,7 @@ pub enum VaultMsg {
     /// If these conditions are met, it will bond amount.amount tokens
     /// to the vault.
     Bond { delegator: String, amount: Coin },
-    /// Unbond ensures that amount.denom is the native staking denom and 
+    /// Unbond ensures that amount.denom is the native staking denom and
     /// the calling contract is the vault contract.
     ///
     /// If these conditions are met, it will instantly unbond

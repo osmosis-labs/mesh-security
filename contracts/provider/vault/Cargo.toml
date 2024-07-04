@@ -17,6 +17,8 @@ backtraces = ["cosmwasm-std/backtraces"]
 library = []
 # enables generation of mt utilities
 mt = ["library", "sylvia/mt"]
+# enable this for multi-tests where you need custom messages for compatibility with virtual staking 
+fake-custom = []
 
 [dependencies]
 mesh-apis        = { workspace = true }
