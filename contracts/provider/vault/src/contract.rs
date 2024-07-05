@@ -45,16 +45,6 @@ fn def_false() -> bool {
     false
 }
 
-#[cfg(not(feature = "fake-custom"))]
-pub mod custom {
-    pub type VaultContractMsg = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<cosmwasm_std::Empty>;
-}
-#[cfg(feature = "fake-custom")]
-pub mod custom {
-    pub type VaultContractMsg = mesh_bindings::VaultCustomMsg;
-    pub type Response = cosmwasm_std::Response<VaultContractMsg>;
-}
 pub struct VaultContract<'a> {
     /// General contract configuration
     pub config: Item<'a, Config>,
@@ -78,7 +68,7 @@ pub struct VaultContract<'a> {
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
-#[sv::custom(msg=custom::VaultContractMsg)]
+#[sv::custom(msg=VaultCustomMsg)]
 impl VaultContract<'_> {
     pub fn new() -> Self {
         Self {
@@ -104,7 +94,7 @@ impl VaultContract<'_> {
         ctx: InstantiateCtx,
         denom: String,
         local_staking: Option<LocalStakingInfo>,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response<VaultCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = Config { denom };
@@ -166,7 +156,7 @@ impl VaultContract<'_> {
         user.collateral += amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
         let amt = amount.amount;
-        let resp = custom::Response::new()
+        let resp = Response::new()
             .add_message(VaultMsg::Bond { delegator: ctx.info.sender.clone().into_string(), amount})
             .add_attribute("action", "unbond")
             .add_attribute("sender", ctx.info.sender)
@@ -196,7 +186,7 @@ impl VaultContract<'_> {
         user.collateral -= amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
         let amt = amount.amount;
-        let resp = custom::Response::new()
+        let resp = Response::new()
             .add_message(VaultMsg::Unbond { delegator: ctx.info.sender.clone().into_string(), amount})
             .add_attribute("action", "unbond")
             .add_attribute("sender", ctx.info.sender)
@@ -216,7 +206,7 @@ impl VaultContract<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response<VaultCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -263,7 +253,7 @@ impl VaultContract<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response<VaultCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -500,7 +490,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<custom::Response, ContractError> {
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response<VaultCustomMsg>, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -511,7 +501,7 @@ impl VaultContract<'_> {
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response<VaultCustomMsg>, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let local_staking = Addr::unchecked(init_data.contract_address);
 
@@ -991,7 +981,7 @@ impl Default for VaultContract<'_> {
 
 impl VaultApi for VaultContract<'_> {
     type Error = ContractError;
-    type ExecC = custom::VaultContractMsg;
+    type ExecC = VaultCustomMsg;
 
     /// This must be called by the remote staking contract to release this claim
     fn release_cross_stake(
@@ -1001,7 +991,7 @@ impl VaultApi for VaultContract<'_> {
         owner: String,
         // amount to unstake on that contract
         amount: Coin,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response<VaultCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         self.unstake(&mut ctx, owner.clone(), amount.clone())?;
@@ -1022,7 +1012,7 @@ impl VaultApi for VaultContract<'_> {
         mut ctx: ExecCtx,
         // address of the user who originally called stake_remote
         owner: String,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response<VaultCustomMsg>, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
         let amount = must_pay(&ctx.info, &denom)?;
 
@@ -1043,7 +1033,7 @@ impl VaultApi for VaultContract<'_> {
         mut ctx: ExecCtx,
         slashes: Vec<SlashInfo>,
         validator: String,
-    ) -> Result<custom::Response, Self::Error> {
+    ) -> Result<Response<VaultCustomMsg>, Self::Error> {
         nonpayable(&ctx.info)?;
 
         let msgs = self.slash(&mut ctx, &slashes, &validator)?;
@@ -1071,7 +1061,7 @@ impl VaultApi for VaultContract<'_> {
         mut ctx: ExecCtx,
         slashes: Vec<SlashInfo>,
         validator: String,
-    ) -> Result<custom::Response, Self::Error> {
+    ) -> Result<Response<VaultCustomMsg>, Self::Error> {
         nonpayable(&ctx.info)?;
 
         let msgs = self.slash(&mut ctx, &slashes, &validator)?;
@@ -1093,7 +1083,7 @@ impl VaultApi for VaultContract<'_> {
         Ok(resp)
     }
 
-    fn commit_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<custom::Response, ContractError> {
+    fn commit_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response<VaultCustomMsg>, ContractError> {
         self.commit_stake(&mut ctx, tx_id)?;
 
         let resp = Response::new()
@@ -1104,7 +1094,7 @@ impl VaultApi for VaultContract<'_> {
         Ok(resp)
     }
 
-    fn rollback_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<custom::Response, ContractError> {
+    fn rollback_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response<VaultCustomMsg>, ContractError> {
         self.rollback_stake(&mut ctx, tx_id)?;
 
         let resp = Response::new()
