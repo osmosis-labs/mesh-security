@@ -24,9 +24,6 @@ use crate::state::Config;
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// TODO: lack test for the appropriate max retrieve.
-pub const MAX_RETRIEVE: u16 = 50;
-
 pub struct VirtualStakingContract<'a> {
     pub config: Item<'a, Config>,
     /// Amount of tokens that have been requested to bond to a validator
@@ -77,12 +74,14 @@ impl VirtualStakingContract<'_> {
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx<VirtualStakeCustomQuery>,
+        max_retrieve: u16
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
         let denom = ctx.deps.querier.query_bonded_denom()?;
         let config = Config {
             denom,
             converter: ctx.info.sender,
+            max_retrieve: max_retrieve,
         };
         self.config.save(ctx.deps.storage, &config)?;
         // initialize these to no one, so no issue when reading for the first time
@@ -569,7 +568,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         if max_cap.is_zero() {
             let all_delegations = 
                 TokenQuerier::new(&deps.querier).all_delegations(
-                        env.contract.address.to_string(), MAX_RETRIEVE
+                        env.contract.address.to_string(), config.max_retrieve
                     )?;
             let mut msgs = vec![];
             for delegation in all_delegations.delegations {
@@ -1419,7 +1418,9 @@ mod tests {
                 deps,
                 env: mock_env(),
                 info: mock_info("me", &[]),
-            })
+            },
+            50
+        )
             .unwrap();
         }
 
