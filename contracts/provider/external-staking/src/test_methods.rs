@@ -1,4 +1,4 @@
-use cosmwasm_std::{Coin, Response, StdError, Uint128};
+use cosmwasm_std::{Coin, CustomMsg, Response, StdError, Uint128};
 use mesh_apis::converter_api::RewardInfo;
 use mesh_apis::ibc::AddValidator;
 use sylvia::interface;
@@ -9,14 +9,15 @@ use sylvia::types::ExecCtx;
 #[interface]
 pub trait TestMethods {
     type Error: From<StdError>;
+    type ExecC: CustomMsg;
 
     /// Commits a pending stake.
     #[sv::msg(exec)]
-    fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
+    fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Rollbacks a pending stake.
     #[sv::msg(exec)]
-    fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
+    fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Updates the active validator set.
     #[sv::msg(exec)]
@@ -26,7 +27,7 @@ pub trait TestMethods {
         validator: AddValidator,
         height: u64,
         time: u64,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Sets validator as `unbonded`.
     #[sv::msg(exec)]
@@ -36,7 +37,7 @@ pub trait TestMethods {
         valoper: String,
         height: u64,
         time: u64,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     #[sv::msg(exec)]
     fn test_tombstone_validator(
@@ -45,15 +46,15 @@ pub trait TestMethods {
         valoper: String,
         height: u64,
         time: u64,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Commits a pending unstake.
     #[sv::msg(exec)]
-    fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
+    fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Rollbacks a pending unstake.
     #[sv::msg(exec)]
-    fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
+    fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Distribute rewards.
     #[sv::msg(exec)]
@@ -62,7 +63,7 @@ pub trait TestMethods {
         ctx: ExecCtx,
         validator: String,
         rewards: Coin,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Batch distribute rewards.
     #[sv::msg(exec)]
@@ -71,7 +72,7 @@ pub trait TestMethods {
         ctx: ExecCtx,
         denom: String,
         rewards: Vec<RewardInfo>,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Commits a withdraw rewards transaction.
     #[sv::msg(exec)]
@@ -79,7 +80,7 @@ pub trait TestMethods {
         &self,
         ctx: ExecCtx,
         tx_id: u64,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Rollbacks a withdraw rewards transaction.
     #[sv::msg(exec)]
@@ -87,7 +88,7 @@ pub trait TestMethods {
         &self,
         ctx: ExecCtx,
         tx_id: u64,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Slashes a validator.
     /// This will not perform any check on the validator's state in the validator set, which should
@@ -98,5 +99,5 @@ pub trait TestMethods {
         ctx: ExecCtx,
         validator: String,
         slash_amount: Uint128,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 }

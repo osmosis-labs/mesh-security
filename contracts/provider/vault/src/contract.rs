@@ -45,6 +45,19 @@ fn def_false() -> bool {
     false
 }
 
+#[cfg(not(feature = "fake-custom"))]
+pub mod custom {
+    pub type VaultMsg = cosmwasm_std::Empty;
+    pub type VaultQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<cosmwasm_std::Empty>;
+}
+#[cfg(feature = "fake-custom")]
+pub mod custom {
+    pub type VaultMsg = mesh_bindings::VaultCustomMsg;
+    pub type VaultQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<VaultMsg>;
+}
+
 pub struct VaultContract<'a> {
     /// General contract configuration
     pub config: Item<'a, Config>,
@@ -68,7 +81,7 @@ pub struct VaultContract<'a> {
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
-#[sv::custom(msg=VaultCustomMsg)]
+#[sv::custom(msg=custom::VaultMsg)]
 impl VaultContract<'_> {
     pub fn new() -> Self {
         Self {
@@ -94,7 +107,7 @@ impl VaultContract<'_> {
         ctx: InstantiateCtx,
         denom: String,
         local_staking: Option<LocalStakingInfo>,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = Config { denom };
@@ -143,7 +156,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn bond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<VaultCustomMsg>, ContractError> {
+    fn bond(&self, ctx: ExecCtx, amount: Coin) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
@@ -166,7 +179,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<VaultCustomMsg>, ContractError> {
+    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
@@ -206,7 +219,7 @@ impl VaultContract<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -253,7 +266,7 @@ impl VaultContract<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -490,7 +503,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response<VaultCustomMsg>, ContractError> {
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<custom::Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -501,7 +514,7 @@ impl VaultContract<'_> {
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let local_staking = Addr::unchecked(init_data.contract_address);
 

@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_json_binary, Addr, Binary, Coin, Deps, Response, StdError, WasmMsg};
+use cosmwasm_std::{to_json_binary, Addr, Binary, Coin, CustomMsg, Deps, Response, StdError, WasmMsg};
 use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
 
@@ -14,6 +14,7 @@ pub use crate::local_staking_api::SlashRatioResponse;
 #[interface]
 pub trait CrossStakingApi {
     type Error: From<StdError>;
+    type ExecC: CustomMsg;
 
     /// Receives stake from vault contract on behalf of owner and performs the action
     /// specified in msg with it.
@@ -26,7 +27,7 @@ pub trait CrossStakingApi {
         amount: Coin,
         tx_id: u64,
         msg: Binary,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Burns stake. This is called when the user's collateral is slashed and, as part of slashing
     /// propagation, the virtual staking contract needs to burn / discount the indicated slashing amount.
@@ -41,7 +42,7 @@ pub trait CrossStakingApi {
         owner: String,
         amount: Coin,
         validator: Option<String>,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// Returns the maximum percentage that can be slashed
     #[sv::msg(query)]

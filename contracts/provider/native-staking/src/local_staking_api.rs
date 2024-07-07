@@ -5,7 +5,7 @@ use sylvia::types::{ExecCtx, QueryCtx};
 #[allow(unused_imports)]
 use mesh_apis::local_staking_api::{self, LocalStakingApi, SlashRatioResponse};
 
-use crate::contract::{NativeStakingContract, REPLY_ID_INSTANTIATE};
+use crate::contract::{custom, NativeStakingContract, REPLY_ID_INSTANTIATE};
 use crate::error::ContractError;
 use crate::msg::StakeMsg;
 
@@ -13,6 +13,7 @@ use crate::state::Config;
 
 impl LocalStakingApi for NativeStakingContract<'_> {
     type Error = ContractError;
+    type ExecC = custom::VaultMsg;
 
     /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
     /// specified in msg with it.
@@ -22,7 +23,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         ctx: ExecCtx,
         owner: String,
         msg: Binary,
-    ) -> Result<Response, Self::Error> {
+    ) -> Result<custom::Response, Self::Error> {
         // Can only be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.vault.0, ctx.info.sender, ContractError::Unauthorized {});
@@ -88,7 +89,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         owner: String,
         amount: Coin,
         validator: Option<String>,
-    ) -> Result<Response, Self::Error> {
+    ) -> Result<custom::Response, Self::Error> {
         // Can only be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.vault.0, ctx.info.sender, ContractError::Unauthorized {});

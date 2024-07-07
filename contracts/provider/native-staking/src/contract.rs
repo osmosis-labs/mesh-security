@@ -1,6 +1,7 @@
 use cosmwasm_std::Order::Ascending;
 use cosmwasm_std::{
-    from_json, Addr, Decimal, DepsMut, Event, Reply, Response, StdResult, SubMsgResponse, WasmMsg,
+    from_json, Addr, Decimal, DepsMut, Event, Reply, Response,
+    StdResult, SubMsgResponse, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -21,6 +22,19 @@ pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const REPLY_ID_INSTANTIATE: u64 = 2;
+
+#[cfg(not(feature = "fake-custom"))]
+pub mod custom {
+    pub type VaultMsg = cosmwasm_std::Empty;
+    pub type VaultQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<cosmwasm_std::Empty>;
+}
+#[cfg(feature = "fake-custom")]
+pub mod custom {
+    pub type VaultMsg = mesh_bindings::VaultCustomMsg;
+    pub type VaultQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<VaultMsg>;
+}
 
 pub struct NativeStakingContract<'a> {
     pub config: Item<'a, Config>,
@@ -43,6 +57,8 @@ pub(crate) enum SlashingReason {
 #[sv::error(ContractError)]
 #[sv::messages(local_staking_api as LocalStakingApi)]
 #[sv::messages(native_staking_callback as NativeStakingCallback)]
+/// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
+#[sv::custom(msg=custom::VaultMsg)]
 impl NativeStakingContract<'_> {
     pub const fn new() -> Self {
         Self {
@@ -62,7 +78,7 @@ impl NativeStakingContract<'_> {
         proxy_code_id: u64,
         slash_ratio_dsign: Decimal,
         slash_ratio_offline: Decimal,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         if slash_ratio_dsign > Decimal::one() || slash_ratio_offline > Decimal::one() {
             return Err(ContractError::InvalidSlashRatio);
         }
@@ -87,7 +103,7 @@ impl NativeStakingContract<'_> {
         mut deps: DepsMut,
         jailed: Option<Vec<String>>,
         tombstoned: Option<Vec<String>>,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         let jailed = &jailed.unwrap_or_default();
         let tombstoned = &tombstoned.unwrap_or_default();
 
@@ -181,7 +197,7 @@ impl NativeStakingContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<custom::Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -192,7 +208,7 @@ impl NativeStakingContract<'_> {
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
 
         // Associate staking proxy with owner address
@@ -242,7 +258,7 @@ impl NativeStakingContract<'_> {
         ctx: ExecCtx,
         jailed: Vec<String>,
         tombstoned: Vec<String>,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
             let jailed = if jailed.is_empty() {
@@ -274,7 +290,7 @@ impl NativeStakingContract<'_> {
         ctx: SudoCtx,
         jailed: Option<Vec<String>>,
         tombstoned: Option<Vec<String>>,
-    ) -> Result<Response, ContractError> {
+    ) -> Result<custom::Response, ContractError> {
         self.handle_jailing(ctx.deps, jailed, tombstoned)
     }
 }

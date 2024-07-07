@@ -2,7 +2,7 @@ mod utils;
 
 use anyhow::Result as AnyResult;
 
-use cosmwasm_std::{coin, coins, to_json_binary, Decimal, Uint128};
+use cosmwasm_std::{coin, coins, to_json_binary, Decimal, Empty, Uint128};
 use mesh_native_staking::contract::sv::mt::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::sv::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::contract::sv::mt::CodeId as NativeStakingProxyCodeId;
@@ -12,7 +12,6 @@ use mesh_vault::msg::{LocalStakingInfo, StakingInitInfo};
 
 use mesh_sync::ValueRange;
 
-use cw_multi_test::App as MtApp;
 use sylvia::multitest::{App, Proxy};
 
 use crate::contract::sv::mt::ExternalStakingContractProxy;
@@ -38,6 +37,12 @@ const SLASHING_PERCENTAGE: u64 = 10;
 /// 5% slashing on the local chain (so we can differentiate in future tests)
 const LOCAL_SLASHING_PERCENTAGE_DSIGN: u64 = 5;
 const LOCAL_SLASHING_PERCENTAGE_OFFLINE: u64 = 5;
+
+// Trying to figure out how to work with the generic types
+type MtApp = cw_multi_test::BasicApp<
+    mesh_bindings::VaultCustomMsg,
+    Empty,
+>;
 
 // Shortcut setuping all needed contracts
 //
