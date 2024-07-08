@@ -18,6 +18,7 @@ use mesh_sync::{max_range, ValueRange};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
+use crate::contract::custom::VaultContractMsg;
 use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountDetailsResponse, AccountResponse, AllAccountsResponse,
@@ -473,7 +474,7 @@ impl VaultMock<'_> {
         Ok(Response::new())
     }
 
-    fn stake(
+    pub fn stake(
         &self,
         ctx: &mut ExecCtx,
         config: &Config,
@@ -915,7 +916,7 @@ impl VaultMock<'_> {
 
 impl VaultApi for VaultMock<'_> {
     type Error = ContractError;
-    type ExecC = VaultCustomMsg;
+    type ExecC = VaultContractMsg;
 
     /// This must be called by the remote staking contract to release this claim
     fn release_cross_stake(

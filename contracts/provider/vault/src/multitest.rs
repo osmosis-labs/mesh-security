@@ -1,5 +1,3 @@
-mod vault_mock;
-
 use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Empty, Uint128, Validator};
 use cw_multi_test::StakingInfo;
 use mesh_apis::ibc::AddValidator;
@@ -24,9 +22,9 @@ use crate::msg::{
     AccountResponse, AllAccountsResponseItem, AllActiveExternalStakingResponse, LienResponse,
     LocalStakingInfo, StakingInitInfo,
 };
-use vault_mock::VaultMock;
-use crate::multitest::vault_mock::sv::mt::VaultMockProxy;
-use vault_mock::sv::mt::CodeId as VaultCodeId;
+use crate::mock::VaultMock;
+use crate::mock::sv::mt::VaultMockProxy;
+use crate::mock::sv::mt::CodeId as VaultCodeId;
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
