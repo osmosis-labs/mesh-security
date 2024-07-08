@@ -20,7 +20,7 @@ impl TestMethods for ExternalStakingContract<'_> {
     fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<custom::Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
-            let msg = self.commit_stake(ctx.deps, tx_id)?;
+            let msg: cosmwasm_std::WasmMsg = self.commit_stake(ctx.deps, tx_id)?;
             Ok(Response::new().add_message(msg))
         }
         #[cfg(not(any(feature = "mt", test)))]

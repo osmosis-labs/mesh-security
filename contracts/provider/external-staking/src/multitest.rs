@@ -3,6 +3,7 @@ mod utils;
 use anyhow::Result as AnyResult;
 
 use cosmwasm_std::{coin, coins, to_json_binary, Decimal, Empty, Uint128};
+use cw_multi_test::{no_init, AppBuilder};
 use mesh_native_staking::contract::sv::mt::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::sv::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::contract::sv::mt::CodeId as NativeStakingProxyCodeId;
@@ -99,7 +100,7 @@ fn setup<'app>(
 
 #[test]
 fn instantiate() {
-    let app = App::default();
+    let app =  App::new(AppBuilder::new_custom().build(no_init));
 
     let owner = "owner";
     let users = ["user1"];

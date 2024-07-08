@@ -1,9 +1,9 @@
 use anyhow::Result as AnyResult;
 
 use cosmwasm_std::testing::mock_env;
-use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Validator};
+use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Empty, Validator};
 
-use cw_multi_test::{App as MtApp, StakingInfo};
+use cw_multi_test::{AppBuilder, StakingInfo};
 
 use sylvia::multitest::{App, Proxy};
 
@@ -19,10 +19,16 @@ use crate::msg::ConfigResponse;
 const OSMO: &str = "uosmo";
 const UNBONDING_PERIOD: u64 = 17 * 24 * 60 * 60; // 7 days
 
+// Trying to figure out how to work with the generic types
+type MtApp = cw_multi_test::BasicApp<
+    mesh_bindings::VaultCustomMsg,
+    Empty,
+>;
+
 fn init_app(owner: &str, validators: &[&str]) -> App<MtApp> {
     // Fund the staking contract, and add validators to staking keeper
     let block = mock_env().block;
-    let app = MtApp::new(|router, api, storage| {
+    let app = AppBuilder::new_custom().build(|router, api, storage| {
         router
             .bank
             .init_balance(storage, &Addr::unchecked(owner), coins(1000, OSMO))

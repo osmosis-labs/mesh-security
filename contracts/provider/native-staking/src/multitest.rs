@@ -1,8 +1,8 @@
 use cosmwasm_std::{
-    coin, coins, to_json_binary, Addr, Decimal, Delegation, StdError, Uint128, Validator,
+    coin, coins, to_json_binary, Addr, Decimal, Delegation, Empty, StdError, Uint128, Validator
 };
 
-use cw_multi_test::{App as MtApp, StakingInfo};
+use cw_multi_test::{no_init, AppBuilder, StakingInfo};
 use sylvia::multitest::{App, Proxy};
 
 use mesh_apis::local_staking_api::sv::mt::LocalStakingApiProxy;
@@ -25,6 +25,12 @@ const OSMO: &str = "OSMO";
 const SLASHING_PERCENTAGE_DSIGN: u64 = 15;
 const SLASHING_PERCENTAGE_OFFLINE: u64 = 10;
 
+// Trying to figure out how to work with the generic types
+type MtApp = cw_multi_test::BasicApp<
+    mesh_bindings::VaultCustomMsg,
+    Empty,
+>;
+
 fn slashing_rate_dsign() -> Decimal {
     Decimal::percent(SLASHING_PERCENTAGE_DSIGN)
 }
@@ -34,7 +40,7 @@ fn slashing_rate_offline() -> Decimal {
 }
 
 fn app(balances: &[(&str, (u128, &str))], validators: &[&str]) -> App<MtApp> {
-    let mut mt_app = MtApp::default();
+    let mut mt_app = AppBuilder::new_custom().build(no_init);
 
     let block_info = mt_app.block_info();
     mt_app.init_modules(|router, api, storage| {
