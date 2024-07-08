@@ -25,22 +25,22 @@ pub struct NativeStakingProxyContract<'a> {
 
 #[cfg(not(feature = "fake-custom"))]
 pub mod custom {
-    pub type VaultMsg = cosmwasm_std::Empty;
-    pub type VaultQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<cosmwasm_std::Empty>;
+    pub type NativeStakingProxyMsg = cosmwasm_std::Empty;
+    pub type NativeStakingProxyQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<NativeStakingProxyMsg>;
 }
 #[cfg(feature = "fake-custom")]
 pub mod custom {
-    pub type VaultMsg = mesh_bindings::VaultCustomMsg;
-    pub type VaultQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<VaultMsg>;
+    pub type NativeStakingProxyMsg = mesh_bindings::VaultCustomMsg;
+    pub type NativeStakingProxyQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<NativeStakingProxyMsg>;
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[sv::error(ContractError)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
-#[sv::custom(msg=custom::VaultMsg)]
+#[sv::custom(msg=custom::NativeStakingProxyMsg)]
 impl NativeStakingProxyContract<'_> {
     pub const fn new() -> Self {
         Self {

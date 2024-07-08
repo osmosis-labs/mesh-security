@@ -47,15 +47,15 @@ fn def_false() -> bool {
 
 #[cfg(not(feature = "fake-custom"))]
 pub mod custom {
-    pub type VaultMsg = cosmwasm_std::Empty;
-    pub type VaultQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<cosmwasm_std::Empty>;
+    pub type VaultContractMsg = cosmwasm_std::Empty;
+    pub type VaultContractQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<VaultContractMsg>;
 }
 #[cfg(feature = "fake-custom")]
 pub mod custom {
-    pub type VaultMsg = mesh_bindings::VaultCustomMsg;
-    pub type VaultQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<VaultMsg>;
+    pub type VaultContractMsg = mesh_bindings::VaultCustomMsg;
+    pub type VaultContractQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<VaultContractMsg>;
 }
 
 pub struct VaultContract<'a> {
@@ -81,7 +81,7 @@ pub struct VaultContract<'a> {
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
-#[sv::custom(msg=custom::VaultMsg)]
+#[sv::custom(msg=custom::VaultContractMsg)]
 impl VaultContract<'_> {
     pub fn new() -> Self {
         Self {

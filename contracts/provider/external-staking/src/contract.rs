@@ -43,15 +43,15 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
 
 #[cfg(not(feature = "fake-custom"))]
 pub mod custom {
-    pub type VaultMsg = cosmwasm_std::Empty;
-    pub type VaultQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<cosmwasm_std::Empty>;
+    pub type ExternalStakingMsg = cosmwasm_std::Empty;
+    pub type ExternalStakingQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<ExternalStakingMsg>;
 }
 #[cfg(feature = "fake-custom")]
 pub mod custom {
-    pub type VaultMsg = mesh_bindings::VaultCustomMsg;
-    pub type VaultQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<VaultMsg>;
+    pub type ExternalStakingMsg = mesh_bindings::VaultCustomMsg;
+    pub type ExternalStakingQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<ExternalStakingMsg>;
 }
 
 pub struct ExternalStakingContract<'a> {
@@ -79,7 +79,7 @@ impl Default for ExternalStakingContract<'_> {
 #[sv::messages(cross_staking_api as CrossStakingApi)]
 #[sv::messages(crate::test_methods as TestMethods)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
-#[sv::custom(msg=custom::VaultMsg)]
+#[sv::custom(msg=custom::ExternalStakingMsg)]
 impl ExternalStakingContract<'_> {
     pub fn new() -> Self {
         Self {
@@ -1230,7 +1230,7 @@ pub mod cross_staking {
     #[sv::messages(mesh_apis::cross_staking_api as CrossStakingApi)]
     impl CrossStakingApi for ExternalStakingContract<'_> {
         type Error = ContractError;
-        type ExecC = custom::VaultMsg;
+        type ExecC = custom::ExternalStakingMsg;
 
         #[sv::msg(exec)]
         fn receive_virtual_stake(

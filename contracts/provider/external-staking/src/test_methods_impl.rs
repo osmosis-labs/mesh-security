@@ -13,7 +13,7 @@ use sylvia::types::ExecCtx;
 #[sv::messages(crate::test_methods as TestMethods)]
 impl TestMethods for ExternalStakingContract<'_> {
     type Error = ContractError;
-    type ExecC = custom::VaultMsg;
+    type ExecC = custom::ExternalStakingMsg;
 
     /// Commits a pending stake.
     #[sv::msg(exec)]

@@ -25,15 +25,15 @@ pub const REPLY_ID_INSTANTIATE: u64 = 2;
 
 #[cfg(not(feature = "fake-custom"))]
 pub mod custom {
-    pub type VaultMsg = cosmwasm_std::Empty;
-    pub type VaultQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<cosmwasm_std::Empty>;
+    pub type NativeStakingMsg = cosmwasm_std::Empty;
+    pub type NativeStakingQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<NativeStakingMsg>;
 }
 #[cfg(feature = "fake-custom")]
 pub mod custom {
-    pub type VaultMsg = mesh_bindings::VaultCustomMsg;
-    pub type VaultQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<VaultMsg>;
+    pub type NativeStakingMsg = mesh_bindings::VaultCustomMsg;
+    pub type NativeStakingQuery = cosmwasm_std::Empty;
+    pub type Response = cosmwasm_std::Response<NativeStakingMsg>;
 }
 
 pub struct NativeStakingContract<'a> {
@@ -58,7 +58,7 @@ pub(crate) enum SlashingReason {
 #[sv::messages(local_staking_api as LocalStakingApi)]
 #[sv::messages(native_staking_callback as NativeStakingCallback)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
-#[sv::custom(msg=custom::VaultMsg)]
+#[sv::custom(msg=custom::NativeStakingMsg)]
 impl NativeStakingContract<'_> {
     pub const fn new() -> Self {
         Self {

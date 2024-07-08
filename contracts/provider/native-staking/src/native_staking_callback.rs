@@ -10,7 +10,7 @@ use crate::error::ContractError;
 
 impl NativeStakingCallback for NativeStakingContract<'_> {
     type Error = ContractError;
-    type ExecC = custom::VaultMsg;
+    type ExecC = custom::NativeStakingMsg;
 
     /// This sends tokens back from the proxy to native-staking. (See info.funds)
     /// The native-staking contract can determine which user it belongs to via an internal Map.

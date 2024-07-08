@@ -13,7 +13,7 @@ use crate::state::Config;
 
 impl LocalStakingApi for NativeStakingContract<'_> {
     type Error = ContractError;
-    type ExecC = custom::VaultMsg;
+    type ExecC = custom::NativeStakingMsg;
 
     /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
     /// specified in msg with it.
