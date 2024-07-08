@@ -7,7 +7,7 @@ use cw_multi_test::{no_init, AppBuilder};
 use mesh_native_staking::contract::sv::mt::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::sv::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::contract::sv::mt::CodeId as NativeStakingProxyCodeId;
-use mesh_vault::mock::sv::mt::CodeId as VaultCodeId;
+use mesh_vault::mock::sv::mt::{CodeId as VaultCodeId, VaultMockProxy};
 use mesh_vault::mock::VaultMock;
 use mesh_vault::msg::{LocalStakingInfo, StakingInitInfo};
 
@@ -18,7 +18,6 @@ use sylvia::multitest::{App, Proxy};
 use crate::contract::sv::mt::ExternalStakingContractProxy;
 use crate::test_methods::sv::mt::TestMethodsProxy;
 use mesh_apis::cross_staking_api::sv::mt::CrossStakingApiProxy;
-use mesh_vault::mock::sv::mt::VaultMockProxy;
 
 use crate::contract::sv::mt::CodeId;
 use crate::contract::ExternalStakingContract;

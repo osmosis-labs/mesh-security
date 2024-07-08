@@ -117,7 +117,7 @@ pub fn ibc_packet_receive(
     deps: DepsMut,
     env: Env,
     msg: IbcPacketReceiveMsg,
-) -> Result<IbcReceiveResponse<custom::Response>, ContractError> {
+) -> Result<IbcReceiveResponse<custom::ExternalStakingMsg>, ContractError> {
     // There is only one channel, so we don't need to switch.
     // We also don't care about packet sequence as this is being ordered by height.
     // If a validator is in more than one of the events, the end result will depend on the

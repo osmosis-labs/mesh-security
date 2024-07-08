@@ -11,7 +11,7 @@ use mesh_apis::local_staking_api::{
     sv::LocalStakingApiQueryMsg, LocalStakingApiHelper, SlashRatioResponse,
 };
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
-use mesh_bindings::{VaultCustomMsg, VaultMsg};
+use mesh_bindings::VaultMsg;
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
 
@@ -47,15 +47,29 @@ fn def_false() -> bool {
 
 #[cfg(not(feature = "fake-custom"))]
 pub mod custom {
+    use cosmwasm_std::CosmosMsg;
+    use mesh_bindings::VaultMsg;
+
     pub type VaultContractMsg = cosmwasm_std::Empty;
     pub type VaultContractQuery = cosmwasm_std::Empty;
     pub type Response = cosmwasm_std::Response<VaultContractMsg>;
+
+    pub fn cosmos_msg(_msg: VaultMsg) -> Option<CosmosMsg<VaultContractMsg>> {
+        return None
+    }
 }
 #[cfg(feature = "fake-custom")]
 pub mod custom {
+    use cosmwasm_std::CosmosMsg;
+    use mesh_bindings::VaultMsg;
+
     pub type VaultContractMsg = mesh_bindings::VaultCustomMsg;
     pub type VaultContractQuery = cosmwasm_std::Empty;
     pub type Response = cosmwasm_std::Response<VaultContractMsg>;
+
+    pub fn cosmos_msg(msg: VaultMsg) -> Option<CosmosMsg<VaultContractMsg>> {
+        Some(CosmosMsg::Custom(VaultContractMsg::Vault(msg)))
+    }
 }
 
 pub struct VaultContract<'a> {
@@ -169,12 +183,15 @@ impl VaultContract<'_> {
         user.collateral += amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
         let amt = amount.amount;
-        let resp = Response::new()
-            .add_message(VaultMsg::Bond { delegator: ctx.info.sender.clone().into_string(), amount})
+        let msg = custom::cosmos_msg(VaultMsg::Bond { delegator: ctx.info.sender.clone().into_string(), amount});
+        let mut resp = Response::new()
             .add_attribute("action", "unbond")
             .add_attribute("sender", ctx.info.sender)
             .add_attribute("amount", amt.to_string());
 
+        if msg.is_some() {
+            resp = resp.add_message(msg.unwrap())
+        }
         Ok(resp)
     }
 
@@ -199,12 +216,14 @@ impl VaultContract<'_> {
         user.collateral -= amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
         let amt = amount.amount;
-        let resp = Response::new()
-            .add_message(VaultMsg::Unbond { delegator: ctx.info.sender.clone().into_string(), amount})
+        let msg = custom::cosmos_msg(VaultMsg::Unbond { delegator: ctx.info.sender.clone().into_string(), amount});
+        let mut resp = Response::new()
             .add_attribute("action", "unbond")
             .add_attribute("sender", ctx.info.sender)
             .add_attribute("amount", amt.to_string());
-
+        if msg.is_some() {
+            resp = resp.add_message(msg.unwrap())
+        }
         Ok(resp)
     }
 
@@ -994,7 +1013,7 @@ impl Default for VaultContract<'_> {
 
 impl VaultApi for VaultContract<'_> {
     type Error = ContractError;
-    type ExecC = VaultCustomMsg;
+    type ExecC = custom::VaultContractMsg;
 
     /// This must be called by the remote staking contract to release this claim
     fn release_cross_stake(

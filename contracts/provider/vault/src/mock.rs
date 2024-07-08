@@ -11,14 +11,12 @@ use mesh_apis::local_staking_api::{
     sv::LocalStakingApiQueryMsg, LocalStakingApiHelper, SlashRatioResponse,
 };
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
-use mesh_bindings::VaultCustomMsg;
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
 
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
-use crate::contract::custom::VaultContractMsg;
 use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountDetailsResponse, AccountResponse, AllAccountsResponse,
@@ -48,7 +46,6 @@ pub struct VaultMock<'a> {
     pub pending: Txs<'a>,
 }
 
-#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
@@ -916,7 +913,7 @@ impl VaultMock<'_> {
 
 impl VaultApi for VaultMock<'_> {
     type Error = ContractError;
-    type ExecC = VaultContractMsg;
+    type ExecC = custom::VaultContractMsg;
 
     /// This must be called by the remote staking contract to release this claim
     fn release_cross_stake(
