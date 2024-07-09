@@ -74,6 +74,7 @@ impl ConverterContract<'_> {
         remote_denom: String,
         virtual_staking_code_id: u64,
         admin: Option<String>,
+        max_retrieve: u16,
     ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
         // validate args
@@ -97,11 +98,14 @@ impl ConverterContract<'_> {
             ctx.deps.api.addr_validate(admin)?;
         }
 
+        let msg = to_json_binary(&mesh_virtual_staking::contract::sv::InstantiateMsg{
+            max_retrieve
+        })?;
         // Instantiate virtual staking contract
         let init_msg = WasmMsg::Instantiate {
             admin,
             code_id: virtual_staking_code_id,
-            msg: b"{}".into(),
+            msg,
             funds: vec![],
             label: format!("Virtual Staking: {}", &config.remote_denom),
         };
@@ -151,7 +155,7 @@ impl ConverterContract<'_> {
         }
         #[cfg(not(any(test, feature = "mt")))]
         {
-            let _ = (ctx, validator, stake);
+            let _ = (ctx, delegator, validator, stake);
             Err(ContractError::Unauthorized)
         }
     }
@@ -173,7 +177,7 @@ impl ConverterContract<'_> {
         }
         #[cfg(not(any(test, feature = "mt")))]
         {
-            let _ = (ctx, validator, unstake);
+            let _ = (ctx, delegator, validator, unstake);
             Err(ContractError::Unauthorized)
         }
     }

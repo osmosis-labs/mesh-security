@@ -611,6 +611,7 @@ dependencies = [
  "mesh-burn",
  "mesh-simple-price-feed",
  "mesh-sync",
+ "mesh-virtual-staking",
  "schemars",
  "serde",
  "sylvia",

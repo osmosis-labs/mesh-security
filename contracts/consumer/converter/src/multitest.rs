@@ -63,6 +63,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
             JUNO.to_owned(),
             virtual_staking_code.code_id(),
             Some(admin.to_owned()),
+            50
         )
         .with_label("Juno Converter")
         .with_admin(admin)
