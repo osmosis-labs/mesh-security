@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Empty, Fraction, Order, Reply, Response, StdResult, Storage, SubMsgResponse, Uint128, WasmMsg
+    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Empty, Fraction, Order, Reply, Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -13,7 +13,6 @@ use mesh_apis::local_staking_api::{
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
-
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
@@ -48,6 +47,7 @@ pub struct VaultMock<'a> {
     pub pending: Txs<'a>,
 }
 
+#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
@@ -88,16 +88,34 @@ impl VaultMock<'_> {
                 LocalStakingInfo::Existing(exist) => {
                     let addr = exist.existing;
 
+                    // Query for max slashing percentage
+                    let query = LocalStakingApiQueryMsg::MaxSlash {};
+                    let SlashRatioResponse {
+                        slash_ratio_dsign, ..
+                    } = ctx.deps.querier.query_wasm_smart(&addr, &query)?;
+
                     let local_staking = LocalStaking {
                         contract: LocalStakingApiHelper(ctx.deps.api.addr_validate(&addr)?),
-                        max_slash: Decimal::percent(10),
+                        max_slash: slash_ratio_dsign,
                     };
 
                     self.local_staking
                         .save(ctx.deps.storage, &Some(local_staking))?;
                     Ok(Response::new())
                 }
-                LocalStakingInfo::New(_) => Ok(Response::new()),
+                LocalStakingInfo::New(local_staking) => {
+                    let msg = WasmMsg::Instantiate {
+                        admin: local_staking.admin,
+                        code_id: local_staking.code_id,
+                        msg: local_staking.msg,
+                        funds: vec![],
+                        label: local_staking
+                            .label
+                            .unwrap_or_else(|| "Mesh Security Local Staking".to_string()),
+                    };
+                    let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
+                    Ok(Response::new().add_submessage(sub_msg))
+                }
             }
         } else {
             self.local_staking.save(ctx.deps.storage, &None)?;
@@ -161,6 +179,7 @@ impl VaultMock<'_> {
         Ok(resp)
     }
 
+    /// This assigns a claim of amount tokens to the remote contract, which can take some action with it
     #[sv::msg(exec)]
     fn stake_remote(
         &self,
@@ -452,11 +471,7 @@ impl VaultMock<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(
-        &self,
-        ctx: ReplyCtx,
-        reply: Reply,
-    ) -> Result<Response, ContractError> {
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -926,6 +941,12 @@ impl VaultMock<'_> {
             }
         };
         Ok(msg)
+    }
+}
+
+impl Default for VaultMock<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
