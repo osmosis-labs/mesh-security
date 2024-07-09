@@ -16,11 +16,9 @@ backtraces = ["cosmwasm-std/backtraces"]
 library = []
 # enables generation of mt utilities
 mt = ["library", "sylvia/mt"]
-# enable this for multi-tests where you need custom messages for compatibility with vault 
 
 [dependencies]
 mesh-apis        = { workspace = true }
-mesh-bindings    = { workspace = true }
 mesh-burn        = { workspace = true }
 mesh-sync        = { workspace = true }
 

@@ -5,12 +5,11 @@ use sylvia::types::ExecCtx;
 #[allow(unused_imports)]
 use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCallback};
 
-use crate::contract::{custom, NativeStakingContract};
+use crate::contract::NativeStakingContract;
 use crate::error::ContractError;
 
 impl NativeStakingCallback for NativeStakingContract<'_> {
     type Error = ContractError;
-    type ExecC = custom::NativeStakingMsg;
 
     /// This sends tokens back from the proxy to native-staking. (See info.funds)
     /// The native-staking contract can determine which user it belongs to via an internal Map.

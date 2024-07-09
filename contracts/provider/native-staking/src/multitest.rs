@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    coin, coins, to_json_binary, Addr, Decimal, Delegation, StdError, Uint128, Validator
+    coin, coins, to_json_binary, Addr, Decimal, Delegation, StdError, Uint128, Validator,
 };
 
 use cw_multi_test::{App as MtApp, StakingInfo};
@@ -297,7 +297,8 @@ fn releasing_proxy_stake() {
     // User bonds some funds to the vault
     vault
         .bond()
-        .with_funds(&coins(200, OSMO))        .call(user)
+        .with_funds(&coins(200, OSMO))
+        .call(user)
         .unwrap();
 
     // Vault has the funds

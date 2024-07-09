@@ -93,7 +93,7 @@ fn setup<'app>(
 
 #[test]
 fn instantiate() {
-    let app =  App::default();
+    let app = App::default();
 
     let owner = "owner";
     let users = ["user1"];
@@ -232,12 +232,14 @@ fn unstaking() {
 
     vault
         .bond()
-        .with_funds(&coins(300, OSMO))        .call(users[0])
+        .with_funds(&coins(300, OSMO))
+        .call(users[0])
         .unwrap();
 
     vault
         .bond()
-        .with_funds(&coins(300, OSMO))        .call(users[1])
+        .with_funds(&coins(300, OSMO))
+        .call(users[1])
         .unwrap();
 
     vault.stake(&contract, users[0], validators[0], coin(200, OSMO));
@@ -472,7 +474,8 @@ fn immediate_unstake_if_unbonded_validator() {
 
     vault
         .bond()
-        .with_funds(&coins(200, OSMO))        .call(user)
+        .with_funds(&coins(200, OSMO))
+        .call(user)
         .unwrap();
     vault.stake(&contract, user, validators[0], coin(200, OSMO));
 
@@ -510,7 +513,8 @@ fn immediate_unstake_if_tombstoned_validator() {
 
     vault
         .bond()
-        .with_funds(&coins(200, OSMO))        .call(user)
+        .with_funds(&coins(200, OSMO))
+        .call(user)
         .unwrap();
     vault.stake(&contract, user, validators[0], coin(200, OSMO));
 
@@ -556,12 +560,14 @@ fn distribution() {
     // all of validators[1] to users[1]
     vault
         .bond()
-        .with_funds(&coins(600, OSMO))        .call(users[0])
+        .with_funds(&coins(600, OSMO))
+        .call(users[0])
         .unwrap();
 
     vault
         .bond()
-        .with_funds(&coins(600, OSMO))        .call(users[1])
+        .with_funds(&coins(600, OSMO))
+        .call(users[1])
         .unwrap();
 
     vault.stake(&contract, users[0], validators[0], coin(200, OSMO));
@@ -1158,11 +1164,13 @@ fn batch_distribution() {
 
     vault
         .bond()
-        .with_funds(&coins(600, OSMO))        .call(users[0])
+        .with_funds(&coins(600, OSMO))
+        .call(users[0])
         .unwrap();
     vault
         .bond()
-        .with_funds(&coins(600, OSMO))        .call(users[1])
+        .with_funds(&coins(600, OSMO))
+        .call(users[1])
         .unwrap();
 
     vault.stake(&contract, users[0], validators[0], coin(200, OSMO));
@@ -1201,7 +1209,8 @@ fn batch_distribution_invalid_token() {
 
     vault
         .bond()
-        .with_funds(&coins(600, OSMO))        .call(user)
+        .with_funds(&coins(600, OSMO))
+        .call(user)
         .unwrap();
 
     vault.stake(&contract, user, validator, coin(200, OSMO));
@@ -1226,7 +1235,8 @@ fn slashing() {
 
     vault
         .bond()
-        .with_funds(&coins(300, OSMO))        .call(user)
+        .with_funds(&coins(300, OSMO))
+        .call(user)
         .unwrap();
 
     vault.stake(&contract, user, validators[0], coin(200, OSMO));
@@ -1370,7 +1380,8 @@ fn slashing_pending_tx_partial_unbond() {
 
     vault
         .bond()
-        .with_funds(&coins(300, OSMO))        .call(user)
+        .with_funds(&coins(300, OSMO))
+        .call(user)
         .unwrap();
 
     vault.stake(&contract, user, validators[0], coin(200, OSMO));
@@ -1456,7 +1467,8 @@ fn slashing_pending_tx_full_unbond() {
 
     vault
         .bond()
-        .with_funds(&coins(200, OSMO))        .call(user)
+        .with_funds(&coins(200, OSMO))
+        .call(user)
         .unwrap();
 
     vault.stake(&contract, user, validators[0], coin(200, OSMO));
@@ -1538,7 +1550,8 @@ fn slashing_pending_tx_full_unbond_rolled_back() {
 
     vault
         .bond()
-        .with_funds(&coins(200, OSMO))        .call(user)
+        .with_funds(&coins(200, OSMO))
+        .call(user)
         .unwrap();
 
     vault.stake(&contract, user, validators[0], coin(200, OSMO));
@@ -1618,7 +1631,8 @@ fn slashing_pending_tx_bond() {
 
     vault
         .bond()
-        .with_funds(&coins(300, OSMO))        .call(user)
+        .with_funds(&coins(300, OSMO))
+        .call(user)
         .unwrap();
 
     vault.stake(&contract, user, validators[0], coin(200, OSMO));
@@ -1702,7 +1716,8 @@ fn slashing_pending_tx_bond_rolled_back() {
 
     vault
         .bond()
-        .with_funds(&coins(300, OSMO))        .call(user)
+        .with_funds(&coins(300, OSMO))
+        .call(user)
         .unwrap();
 
     vault.stake(&contract, user, validators[0], coin(200, OSMO));

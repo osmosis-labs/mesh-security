@@ -3,8 +3,7 @@ use anyhow::Result as AnyResult;
 use cosmwasm_std::testing::mock_env;
 use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Validator};
 
-use cw_multi_test::{App as MtApp, AppBuilder, StakingInfo};
-
+use cw_multi_test::{App as MtApp, StakingInfo};
 use sylvia::multitest::{App, Proxy};
 
 use mesh_vault::mock::sv::mt::VaultMockProxy;
@@ -22,7 +21,7 @@ const UNBONDING_PERIOD: u64 = 17 * 24 * 60 * 60; // 7 days
 fn init_app(owner: &str, validators: &[&str]) -> App<MtApp> {
     // Fund the staking contract, and add validators to staking keeper
     let block = mock_env().block;
-    let app = AppBuilder::new_custom().build(|router, api, storage| {
+    let app = MtApp::new(|router, api, storage| {
         router
             .bank
             .init_balance(storage, &Addr::unchecked(owner), coins(1000, OSMO))
@@ -92,7 +91,8 @@ fn setup<'app>(
     // Bond some funds to the vault
     vault
         .bond()
-        .with_funds(&coins(200, OSMO))        .call(user)
+        .with_funds(&coins(200, OSMO))
+        .call(user)
         .unwrap();
 
     // Stakes some of it locally. This instantiates the staking proxy contract for user

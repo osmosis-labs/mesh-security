@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    to_json_binary, Addr, Binary, Coin, CustomMsg, Decimal, Deps, Response, StdError, WasmMsg,
+    to_json_binary, Addr, Binary, Coin, Decimal, Deps, Response, StdError, WasmMsg,
 };
 use sylvia::types::{ExecCtx, QueryCtx};
 use sylvia::{interface, schemars};
@@ -16,7 +16,6 @@ pub struct SlashRatioResponse {
 #[interface]
 pub trait LocalStakingApi {
     type Error: From<StdError>;
-    type ExecC: CustomMsg;
 
     /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
     /// specified in msg with it.
@@ -32,7 +31,7 @@ pub trait LocalStakingApi {
         //
         // Basically, it allows iterations on various staking designs without touching Vault
         msg: Binary,
-    ) -> Result<Response<Self::ExecC>, Self::Error>;
+    ) -> Result<Response, Self::Error>;
 
     /// Burns stake. This is called when the user's collateral is slashed and, as part of slashing
     /// propagation, the native staking contract needs to burn / discount the indicated slashing amount.
@@ -45,7 +44,7 @@ pub trait LocalStakingApi {
         owner: String,
         amount: Coin,
         validator: Option<String>,
-    ) -> Result<Response<Self::ExecC>, Self::Error>;
+    ) -> Result<Response, Self::Error>;
 
     /// Returns the maximum percentage that can be slashed
     #[sv::msg(query)]

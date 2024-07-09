@@ -18,13 +18,13 @@ use mesh_apis::vault_api::sv::mt::VaultApiProxy;
 use mesh_external_staking::test_methods::sv::mt::TestMethodsProxy;
 
 use crate::error::ContractError;
+use crate::mock::sv::mt::CodeId as VaultCodeId;
+use crate::mock::sv::mt::VaultMockProxy;
+use crate::mock::VaultMock;
 use crate::msg::{
     AccountResponse, AllAccountsResponseItem, AllActiveExternalStakingResponse, LienResponse,
     LocalStakingInfo, StakingInitInfo,
 };
-use crate::mock::VaultMock;
-use crate::mock::sv::mt::VaultMockProxy;
-use crate::mock::sv::mt::CodeId as VaultCodeId;
 
 const OSMO: &str = "OSMO";
 const STAR: &str = "star";
@@ -205,7 +205,11 @@ fn set_active_validators(
 
 /// Bond some tokens
 fn bond(vault: &Proxy<'_, MtApp, VaultMock<'_>>, user: &str, amount: u128) {
-    vault.bond().with_funds(&coins(amount, OSMO)).call(user).unwrap();
+    vault
+        .bond()
+        .with_funds(&coins(amount, OSMO))
+        .call(user)
+        .unwrap();
 }
 
 fn stake_locally(

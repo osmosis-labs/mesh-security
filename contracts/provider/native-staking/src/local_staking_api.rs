@@ -5,7 +5,7 @@ use sylvia::types::{ExecCtx, QueryCtx};
 #[allow(unused_imports)]
 use mesh_apis::local_staking_api::{self, LocalStakingApi, SlashRatioResponse};
 
-use crate::contract::{custom, NativeStakingContract, REPLY_ID_INSTANTIATE};
+use crate::contract::{NativeStakingContract, REPLY_ID_INSTANTIATE};
 use crate::error::ContractError;
 use crate::msg::StakeMsg;
 
@@ -13,7 +13,6 @@ use crate::state::Config;
 
 impl LocalStakingApi for NativeStakingContract<'_> {
     type Error = ContractError;
-    type ExecC = custom::NativeStakingMsg;
 
     /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
     /// specified in msg with it.

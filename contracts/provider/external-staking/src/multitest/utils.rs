@@ -1,5 +1,5 @@
 use cosmwasm_std::{to_json_binary, Addr, Coin};
-use cw_multi_test::{App as MtApp, AppBuilder, AppResponse};
+use cw_multi_test::{App as MtApp, AppResponse};
 use mesh_apis::{converter_api::RewardInfo, ibc::AddValidator};
 use mesh_sync::Tx;
 use mesh_vault::mock::{sv::mt::VaultMockProxy, VaultMock};
@@ -48,7 +48,7 @@ impl AppExt for App<MtApp> {
     #[track_caller]
     fn new_with_balances(balances: &[(&str, &[Coin])]) -> Self {
         
-        let app =AppBuilder::new_custom().build(|router, _api, storage| {
+        let app =MtApp::new(|router, _api, storage| {
             for (addr, coins) in balances {
                 router
                     .bank
