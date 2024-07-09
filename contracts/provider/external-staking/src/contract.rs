@@ -41,19 +41,6 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
     limit.unwrap_or(DEFAULT_PAGE_LIMIT).max(MAX_PAGE_LIMIT) as usize
 }
 
-#[cfg(not(feature = "fake-custom"))]
-pub mod custom {
-    pub type ExternalStakingMsg = cosmwasm_std::Empty;
-    pub type ExternalStakingQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<ExternalStakingMsg>;
-}
-#[cfg(feature = "fake-custom")]
-pub mod custom {
-    pub type ExternalStakingMsg = mesh_bindings::VaultCustomMsg;
-    pub type ExternalStakingQuery = cosmwasm_std::Empty;
-    pub type Response = cosmwasm_std::Response<ExternalStakingMsg>;
-}
-
 pub struct ExternalStakingContract<'a> {
     pub config: Item<'a, Config>,
     /// Stakes indexed by `(owner, validator)` pair
@@ -78,8 +65,6 @@ impl Default for ExternalStakingContract<'_> {
 #[sv::error(ContractError)]
 #[sv::messages(cross_staking_api as CrossStakingApi)]
 #[sv::messages(crate::test_methods as TestMethods)]
-/// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
-#[sv::custom(msg=custom::ExternalStakingMsg)]
 impl ExternalStakingContract<'_> {
     pub fn new() -> Self {
         Self {
@@ -111,7 +96,7 @@ impl ExternalStakingContract<'_> {
         unbonding_period: u64,
         remote_contact: crate::msg::AuthorizedEndpoint,
         slash_ratio: SlashRatio,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         let vault = ctx.deps.api.addr_validate(&vault)?;
         let vault = VaultApiHelper(vault);
 
@@ -266,7 +251,7 @@ impl ExternalStakingContract<'_> {
         ctx: ExecCtx,
         validator: String,
         amount: Coin,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         let ExecCtx { info, deps, env } = ctx;
         nonpayable(&info)?;
 
@@ -616,7 +601,7 @@ impl ExternalStakingContract<'_> {
     /// Tokens to be claimed have to be unbond before by calling the `unbond` message, and
     /// their unbonding period must have passed.
     #[sv::msg(exec)]
-    pub fn withdraw_unbonded(&self, ctx: ExecCtx) -> Result<custom::Response, ContractError> {
+    pub fn withdraw_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -749,7 +734,7 @@ impl ExternalStakingContract<'_> {
         validator: String,
         /// Address on the consumer side to receive the rewards
         remote_recipient: String,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let stake = self
@@ -1220,7 +1205,6 @@ impl ExternalStakingContract<'_> {
 
 pub mod cross_staking {
     use crate::msg::ReceiveVirtualStake;
-    use super::custom;
 
     use super::*;
     use cosmwasm_std::{from_json, Binary};
@@ -1230,7 +1214,6 @@ pub mod cross_staking {
     #[sv::messages(mesh_apis::cross_staking_api as CrossStakingApi)]
     impl CrossStakingApi for ExternalStakingContract<'_> {
         type Error = ContractError;
-        type ExecC = custom::ExternalStakingMsg;
 
         #[sv::msg(exec)]
         fn receive_virtual_stake(
@@ -1240,7 +1223,7 @@ pub mod cross_staking {
             amount: Coin,
             tx_id: u64,
             msg: Binary,
-        ) -> Result<custom::Response, Self::Error> {
+        ) -> Result<Response, Self::Error> {
             let config = self.config.load(ctx.deps.storage)?;
             ensure_eq!(ctx.info.sender, config.vault.0, ContractError::Unauthorized);
 
@@ -1323,7 +1306,7 @@ pub mod cross_staking {
             owner: String,
             amount: Coin,
             validator: Option<String>,
-        ) -> Result<custom::Response, Self::Error> {
+        ) -> Result<Response, Self::Error> {
             let config = self.config.load(ctx.deps.storage)?;
             ensure_eq!(ctx.info.sender, config.vault.0, ContractError::Unauthorized);
 

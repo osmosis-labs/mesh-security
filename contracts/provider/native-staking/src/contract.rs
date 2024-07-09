@@ -78,7 +78,7 @@ impl NativeStakingContract<'_> {
         proxy_code_id: u64,
         slash_ratio_dsign: Decimal,
         slash_ratio_offline: Decimal,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         if slash_ratio_dsign > Decimal::one() || slash_ratio_offline > Decimal::one() {
             return Err(ContractError::InvalidSlashRatio);
         }
@@ -103,7 +103,7 @@ impl NativeStakingContract<'_> {
         mut deps: DepsMut,
         jailed: Option<Vec<String>>,
         tombstoned: Option<Vec<String>>,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         let jailed = &jailed.unwrap_or_default();
         let tombstoned = &tombstoned.unwrap_or_default();
 
@@ -197,7 +197,7 @@ impl NativeStakingContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<custom::Response, ContractError> {
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -208,7 +208,7 @@ impl NativeStakingContract<'_> {
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
 
         // Associate staking proxy with owner address
@@ -258,7 +258,7 @@ impl NativeStakingContract<'_> {
         ctx: ExecCtx,
         jailed: Vec<String>,
         tombstoned: Vec<String>,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
             let jailed = if jailed.is_empty() {
@@ -290,7 +290,7 @@ impl NativeStakingContract<'_> {
         ctx: SudoCtx,
         jailed: Option<Vec<String>>,
         tombstoned: Option<Vec<String>>,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         self.handle_jailing(ctx.deps, jailed, tombstoned)
     }
 }

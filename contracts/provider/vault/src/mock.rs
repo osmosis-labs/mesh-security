@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply, Response, StdResult, Storage, SubMsgResponse, Uint128, WasmMsg
+    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Empty, Fraction, Order, Reply, Response, StdResult, Storage, SubMsgResponse, Uint128, WasmMsg
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -13,11 +13,13 @@ use mesh_apis::local_staking_api::{
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
-use mesh_bindings::VaultCustomMsg;
 
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
+use crate::contract::{
+    CONTRACT_NAME, CONTRACT_VERSION, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, REPLY_ID_INSTANTIATE,
+};
 use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountDetailsResponse, AccountResponse, AllAccountsResponse,
@@ -26,7 +28,6 @@ use crate::msg::{
 };
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
-use crate::contract::{CONTRACT_NAME, CONTRACT_VERSION, REPLY_ID_INSTANTIATE, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT};
 
 fn clamp_page_limit(limit: Option<u32>) -> usize {
     limit.unwrap_or(DEFAULT_PAGE_LIMIT).max(MAX_PAGE_LIMIT) as usize
@@ -50,7 +51,6 @@ pub struct VaultMock<'a> {
 #[contract]
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
-#[sv::custom(msg=VaultCustomMsg)]
 impl VaultMock<'_> {
     pub fn new() -> Self {
         Self {
@@ -76,7 +76,7 @@ impl VaultMock<'_> {
         ctx: InstantiateCtx,
         denom: String,
         local_staking: Option<LocalStakingInfo>,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = Config { denom };
@@ -97,9 +97,7 @@ impl VaultMock<'_> {
                         .save(ctx.deps.storage, &Some(local_staking))?;
                     Ok(Response::new())
                 }
-                LocalStakingInfo::New(_) => {
-                    Ok(Response::new())
-                }
+                LocalStakingInfo::New(_) => Ok(Response::new()),
             }
         } else {
             self.local_staking.save(ctx.deps.storage, &None)?;
@@ -108,27 +106,31 @@ impl VaultMock<'_> {
     }
 
     #[sv::msg(exec)]
-    fn bond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<VaultCustomMsg>, ContractError> {
-        nonpayable(&ctx.info)?;
-
+    fn bond(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
-        ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
+        let amount = must_pay(&ctx.info, &denom)?;
 
         let mut user = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
-        user.collateral += amount.amount;
+        user.collateral += amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
-        Ok(Response::new())
+        let resp = Response::new()
+            .add_attribute("action", "bond")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("amount", amount.to_string());
+
+        Ok(resp)
     }
 
     #[sv::msg(exec)]
-    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<VaultCustomMsg>, ContractError> {
+    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
+
         ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
 
         let mut user = self
@@ -145,7 +147,18 @@ impl VaultMock<'_> {
         user.collateral -= amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
 
-        Ok(Response::new())
+        let msg = BankMsg::Send {
+            to_address: ctx.info.sender.to_string(),
+            amount: vec![amount.clone()],
+        };
+
+        let resp = Response::new()
+            .add_message(msg)
+            .add_attribute("action", "unbond")
+            .add_attribute("sender", ctx.info.sender)
+            .add_attribute("amount", amount.to_string());
+
+        Ok(resp)
     }
 
     #[sv::msg(exec)]
@@ -158,7 +171,7 @@ impl VaultMock<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -205,7 +218,7 @@ impl VaultMock<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -439,7 +452,11 @@ impl VaultMock<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response<VaultCustomMsg>, ContractError> {
+    fn reply(
+        &self,
+        ctx: ReplyCtx,
+        reply: Reply,
+    ) -> Result<Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -450,7 +467,7 @@ impl VaultMock<'_> {
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let local_staking = Addr::unchecked(init_data.contract_address);
 
@@ -914,7 +931,7 @@ impl VaultMock<'_> {
 
 impl VaultApi for VaultMock<'_> {
     type Error = ContractError;
-    type ExecC = VaultCustomMsg;
+    type ExecC = Empty;
 
     /// This must be called by the remote staking contract to release this claim
     fn release_cross_stake(

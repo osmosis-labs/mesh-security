@@ -17,7 +17,6 @@ library = []
 # enables generation of mt utilities
 mt = ["library", "sylvia/mt"]
 # enable this for multi-tests where you need custom messages for compatibility with vault 
-fake-custom = [ "mesh-vault/fake-custom" ]
 
 [dependencies]
 mesh-apis        = { workspace = true }
@@ -40,9 +39,9 @@ thiserror        = { workspace = true }
 sylvia        = { workspace = true, features = ["mt"] }
 cw-multi-test = { workspace = true }
 anyhow        = { workspace = true }
-mesh-vault = { workspace = true, features = ["mt", "fake-custom"] }
-mesh-native-staking-proxy = { workspace = true, features = ["mt", "fake-custom"] }
-mesh-native-staking = { workspace = true, features = ["mt", "fake-custom"] }
+mesh-vault = { workspace = true, features = ["mt"] }
+mesh-native-staking-proxy = { workspace = true, features = ["mt"] }
+mesh-native-staking = { workspace = true, features = ["mt"] }
 mesh-sync = { workspace = true }
 
 [[bin]]

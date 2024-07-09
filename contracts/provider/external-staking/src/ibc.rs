@@ -12,7 +12,7 @@ use mesh_apis::ibc::{
     ProtocolVersion, ProviderPacket, ValsetUpdateAck,
 };
 
-use crate::contract::{custom, ExternalStakingContract};
+use crate::contract::ExternalStakingContract;
 use crate::error::ContractError;
 use crate::msg::AuthorizedEndpoint;
 
@@ -117,7 +117,7 @@ pub fn ibc_packet_receive(
     deps: DepsMut,
     env: Env,
     msg: IbcPacketReceiveMsg,
-) -> Result<IbcReceiveResponse<custom::ExternalStakingMsg>, ContractError> {
+) -> Result<IbcReceiveResponse, ContractError> {
     // There is only one channel, so we don't need to switch.
     // We also don't care about packet sequence as this is being ordered by height.
     // If a validator is in more than one of the events, the end result will depend on the

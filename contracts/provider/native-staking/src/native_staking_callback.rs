@@ -15,7 +15,7 @@ impl NativeStakingCallback for NativeStakingContract<'_> {
     /// This sends tokens back from the proxy to native-staking. (See info.funds)
     /// The native-staking contract can determine which user it belongs to via an internal Map.
     /// The native-staking contract will then send those tokens back to vault and release the claim.
-    fn release_proxy_stake(&self, ctx: ExecCtx) -> Result<custom::Response, Self::Error> {
+    fn release_proxy_stake(&self, ctx: ExecCtx) -> Result<Response, Self::Error> {
         let cfg = self.config.load(ctx.deps.storage)?;
 
         // Assert funds are passed in

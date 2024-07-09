@@ -1,4 +1,4 @@
-use crate::contract::{custom, ExternalStakingContract};
+use crate::contract::ExternalStakingContract;
 use crate::error::ContractError;
 use crate::test_methods::TestMethods;
 
@@ -13,11 +13,10 @@ use sylvia::types::ExecCtx;
 #[sv::messages(crate::test_methods as TestMethods)]
 impl TestMethods for ExternalStakingContract<'_> {
     type Error = ContractError;
-    type ExecC = custom::ExternalStakingMsg;
 
     /// Commits a pending stake.
     #[sv::msg(exec)]
-    fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<custom::Response, ContractError> {
+    fn test_commit_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
             let msg: cosmwasm_std::WasmMsg = self.commit_stake(ctx.deps, tx_id)?;
@@ -32,7 +31,7 @@ impl TestMethods for ExternalStakingContract<'_> {
 
     /// Rollbacks a pending stake.
     #[sv::msg(exec)]
-    fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<custom::Response, ContractError> {
+    fn test_rollback_stake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             let msg = self.rollback_stake(ctx.deps, tx_id)?;
@@ -53,7 +52,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         validator: AddValidator,
         height: u64,
         time: u64,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
             let AddValidator { valoper, pub_key } = validator;
@@ -76,7 +75,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         valoper: String,
         height: u64,
         time: u64,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
             self.val_set
@@ -98,7 +97,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         valoper: String,
         height: u64,
         time: u64,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         #[cfg(any(feature = "mt", test))]
         {
             self.val_set
@@ -114,7 +113,7 @@ impl TestMethods for ExternalStakingContract<'_> {
 
     /// Commits a pending unstake.
     #[sv::msg(exec)]
-    fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<custom::Response, ContractError> {
+    fn test_commit_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             self.commit_unstake(ctx.deps, ctx.env, tx_id)?;
@@ -129,7 +128,7 @@ impl TestMethods for ExternalStakingContract<'_> {
 
     /// Rollbacks a pending unstake.
     #[sv::msg(exec)]
-    fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<custom::Response, ContractError> {
+    fn test_rollback_unstake(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             self.rollback_unstake(ctx.deps, tx_id)?;
@@ -149,7 +148,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         ctx: ExecCtx,
         validator: String,
         rewards: Coin,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             let event = self.distribute_rewards(ctx.deps, &validator, rewards)?;
@@ -169,7 +168,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         ctx: ExecCtx,
         denom: String,
         rewards: Vec<RewardInfo>,
-    ) -> Result<custom::Response, Self::Error> {
+    ) -> Result<Response, Self::Error> {
         #[cfg(any(test, feature = "mt"))]
         {
             let events = self.distribute_rewards_batch(ctx.deps, &rewards, &denom)?;
@@ -188,7 +187,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         &self,
         ctx: ExecCtx,
         tx_id: u64,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             self.commit_withdraw_rewards(ctx.deps, tx_id)?;
@@ -207,7 +206,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         &self,
         ctx: ExecCtx,
         tx_id: u64,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             self.rollback_withdraw_rewards(ctx.deps, tx_id)?;
@@ -227,7 +226,7 @@ impl TestMethods for ExternalStakingContract<'_> {
         ctx: ExecCtx,
         validator: String,
         slash_amount: Uint128,
-    ) -> Result<custom::Response, ContractError> {
+    ) -> Result<Response, ContractError> {
         #[cfg(any(test, feature = "mt"))]
         {
             let cfg = self.config.load(ctx.deps.storage)?;

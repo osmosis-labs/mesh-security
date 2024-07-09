@@ -1,5 +1,5 @@
-use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Empty, Uint128, Validator};
-use cw_multi_test::StakingInfo;
+use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Uint128, Validator};
+use cw_multi_test::{App as MtApp, StakingInfo};
 use mesh_apis::ibc::AddValidator;
 use mesh_external_staking::contract::sv::mt::ExternalStakingContractProxy;
 use mesh_external_staking::contract::ExternalStakingContract;
@@ -31,14 +31,6 @@ const STAR: &str = "star";
 
 /// 10% slashing on the remote chain
 const SLASHING_PERCENTAGE: u64 = 10;
-
-// Trying to figure out how to work with the generic types
-type MtApp = cw_multi_test::BasicApp<
-    mesh_bindings::VaultCustomMsg,
-    Empty,
->;
-
-/// Test utils
 
 /// App initialization
 fn init_app(users: &[&str], amounts: &[u128]) -> App<MtApp> {
@@ -213,7 +205,7 @@ fn set_active_validators(
 
 /// Bond some tokens
 fn bond(vault: &Proxy<'_, MtApp, VaultMock<'_>>, user: &str, amount: u128) {
-    vault.bond(coin(amount, OSMO)).call(user).unwrap();
+    vault.bond().with_funds(&coins(amount, OSMO)).call(user).unwrap();
 }
 
 fn stake_locally(

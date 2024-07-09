@@ -1,5 +1,5 @@
-use cosmwasm_std::{to_json_binary, Addr, Coin, Empty};
-use cw_multi_test::{AppBuilder, AppResponse};
+use cosmwasm_std::{to_json_binary, Addr, Coin};
+use cw_multi_test::{App as MtApp, AppBuilder, AppResponse};
 use mesh_apis::{converter_api::RewardInfo, ibc::AddValidator};
 use mesh_sync::Tx;
 use mesh_vault::mock::{sv::mt::VaultMockProxy, VaultMock};
@@ -13,12 +13,6 @@ use crate::{
     test_methods::sv::mt::TestMethodsProxy,
     //test_methods_impl::test_utils::TestMethods as _,
 };
-
-// Trying to figure out how to work with the generic types
-type MtApp = cw_multi_test::BasicApp<
-    mesh_bindings::VaultCustomMsg,
-    Empty,
->;
 
 macro_rules! assert_rewards {
     ($contract:expr, $user:expr, $validator:expr, $expected:expr) => {

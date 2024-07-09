@@ -23,7 +23,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         ctx: ExecCtx,
         owner: String,
         msg: Binary,
-    ) -> Result<custom::Response, Self::Error> {
+    ) -> Result<Response, Self::Error> {
         // Can only be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.vault.0, ctx.info.sender, ContractError::Unauthorized {});
@@ -89,7 +89,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         owner: String,
         amount: Coin,
         validator: Option<String>,
-    ) -> Result<custom::Response, Self::Error> {
+    ) -> Result<Response, Self::Error> {
         // Can only be called by the vault
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.vault.0, ctx.info.sender, ContractError::Unauthorized {});

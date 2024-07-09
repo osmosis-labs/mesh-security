@@ -1,14 +1,14 @@
 use anyhow::Result as AnyResult;
 
 use cosmwasm_std::testing::mock_env;
-use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Empty, Validator};
+use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Validator};
 
-use cw_multi_test::{AppBuilder, StakingInfo};
+use cw_multi_test::{App as MtApp, AppBuilder, StakingInfo};
 
 use sylvia::multitest::{App, Proxy};
 
-use mesh_vault::contract::sv::mt::VaultContractProxy;
-use mesh_vault::contract::VaultContract;
+use mesh_vault::mock::sv::mt::VaultMockProxy;
+use mesh_vault::mock::VaultMock;
 use mesh_vault::msg::LocalStakingInfo;
 
 use crate::contract;
@@ -18,12 +18,6 @@ use crate::msg::ConfigResponse;
 
 const OSMO: &str = "uosmo";
 const UNBONDING_PERIOD: u64 = 17 * 24 * 60 * 60; // 7 days
-
-// Trying to figure out how to work with the generic types
-type MtApp = cw_multi_test::BasicApp<
-    mesh_bindings::VaultCustomMsg,
-    Empty,
->;
 
 fn init_app(owner: &str, validators: &[&str]) -> App<MtApp> {
     // Fund the staking contract, and add validators to staking keeper
@@ -66,8 +60,8 @@ fn setup<'app>(
     owner: &'app str,
     user: &str,
     validators: &[&str],
-) -> AnyResult<Proxy<'app, MtApp, VaultContract<'app>>> {
-    let vault_code = mesh_vault::contract::sv::mt::CodeId::store_code(app);
+) -> AnyResult<Proxy<'app, MtApp, VaultMock<'app>>> {
+    let vault_code = mesh_vault::mock::sv::mt::CodeId::store_code(app);
     let staking_code = mesh_native_staking::contract::sv::mt::CodeId::store_code(app);
     let staking_proxy_code = contract::sv::mt::CodeId::store_code(app);
 
@@ -97,8 +91,8 @@ fn setup<'app>(
 
     // Bond some funds to the vault
     vault
-        .bond(coin(200, OSMO))
-        .call(user)
+        .bond()
+        .with_funds(&coins(200, OSMO))        .call(user)
         .unwrap();
 
     // Stakes some of it locally. This instantiates the staking proxy contract for user
