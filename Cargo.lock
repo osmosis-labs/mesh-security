@@ -26,28 +26,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-name = "band-price-feed"
-version = "0.10.0-alpha.1"
-dependencies = [
- "anyhow",
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-band",
- "cw-multi-test",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "derivative",
- "mesh-apis",
- "obi",
- "schemars",
- "serde",
- "sylvia",
- "test-case",
- "thiserror",
-]
-
-[[package]]
 name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -616,6 +594,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-band-price-feed"
+version = "0.10.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-band",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "derivative",
+ "mesh-apis",
+ "mesh-scheduler",
+ "obi",
+ "schemars",
+ "serde",
+ "sylvia",
+ "test-case",
+ "thiserror",
+]
+
+[[package]]
 name = "mesh-bindings"
 version = "0.10.0-alpha.1"
 dependencies = [
@@ -720,6 +721,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-osmosis-price-feed"
+version = "0.10.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "derivative",
+ "mesh-apis",
+ "mesh-scheduler",
+ "schemars",
+ "serde",
+ "sylvia",
+ "test-case",
+ "thiserror",
+]
+
+[[package]]
 name = "mesh-osmosis-price-provider"
 version = "0.10.0-alpha.1"
 dependencies = [
@@ -738,23 +760,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "mesh-remote-price-feed"
+name = "mesh-scheduler"
 version = "0.10.0-alpha.1"
 dependencies = [
- "anyhow",
- "cosmwasm-schema",
  "cosmwasm-std",
- "cw-multi-test",
  "cw-storage-plus",
- "cw-utils",
- "cw2",
- "derivative",
- "mesh-apis",
- "schemars",
- "serde",
- "sylvia",
- "test-case",
- "thiserror",
 ]
 
 [[package]]

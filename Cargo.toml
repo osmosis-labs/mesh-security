@@ -17,6 +17,7 @@ repository = "https://github.com/osmosis-labs/mesh-security"
 mesh-apis = { path = "./packages/apis" }
 mesh-bindings = { path = "./packages/bindings" }
 mesh-burn = { path = "./packages/burn" }
+mesh-scheduler = { path = "./packages/scheduler" }
 mesh-sync = { path = "./packages/sync" }
 mesh-virtual-staking-mock = { path = "./packages/virtual-staking-mock" }
 
@@ -42,6 +43,9 @@ serde = { version = "1.0.199", default-features = false, features = ["derive"] }
 thiserror = "1.0.59"
 semver = "1.0.22"
 itertools = "0.12.1"
+
+obi = "0.0.2"
+cw-band = "0.1.1"
 
 # dev deps
 anyhow = "1"

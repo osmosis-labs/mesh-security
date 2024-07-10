@@ -23,8 +23,12 @@ codegen({
       dir: './contracts/consumer/converter/schema'
     },
     {
-      name: 'RemotePriceFeed',
-      dir: './contracts/consumer/remote-price-feed/schema'
+      name: 'OsmosisPriceFeed',
+      dir: './contracts/consumer/osmosis-price-feed/schema'
+    },
+    {
+      name: 'BandPriceFeed',
+      dir: './contracts/consumer/band-price-feed/schema'
     },
     {
       name: 'SimplePriceFeed',
