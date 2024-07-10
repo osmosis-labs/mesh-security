@@ -1,5 +1,9 @@
 use cosmwasm_std::StdError;
+use cw_utils::PaymentError;
+use mesh_apis::ibc::VersionError;
 use thiserror::Error;
+
+use crate::price_keeper::PriceKeeperError;
 
 /// Never is a placeholder to ensure we don't return any errors
 #[derive(Error, Debug)]
@@ -10,14 +14,44 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
+    #[error("{0}")]
+    Payment(#[from] PaymentError),
+
+    #[error("{0}")]
+    PriceKeeper(#[from] PriceKeeperError),
+
+    #[error("Unauthorized")]
+    Unauthorized,
+
     #[error("Request didn't suceess")]
     RequestNotSuccess {},
 
-    #[error("Only supports channel with ibc version bandchain-1, got {version}")]
-    InvalidIbcVersion { version: String },
+    #[error("{0}")]
+    IbcVersion(#[from] VersionError),
 
-    #[error("Only supports unordered channel")]
-    OnlyUnorderedChannel {},
+    #[error("The provided IBC channel is not open")]
+    IbcChannelNotOpen,
+
+    #[error("Contract already has an open IBC channel")]
+    IbcChannelAlreadyOpen,
+
+    #[error("You must start the channel handshake on the other side, it doesn't support OpenInit")]
+    IbcOpenInitDisallowed,
+
+    #[error("Contract does not receive packets ack")]
+    IbcAckNotAccepted,
+
+    #[error("Contract does not receive packets timeout")]
+    IbcTimeoutNotAccepted,
+
+    #[error("Response packet should only contains 2 symbols")]
+    InvalidResponsePacket,
+
+    #[error("Symbol must be base denom or quote denom")]
+    SymbolsNotMatch,
+
+    #[error("Invalid price, must be greater than 0.0")]
+    InvalidPrice,
 
     #[error("Custom Error val: {val:?}")]
     CustomError { val: String },

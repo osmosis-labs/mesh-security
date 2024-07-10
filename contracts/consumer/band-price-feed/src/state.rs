@@ -1,72 +1,33 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::IbcEndpoint;
-use cosmwasm_std::{Coin, Uint256, Uint64};
-use cw_storage_plus::{Item, Map};
-use cosmwasm_std::{Decimal, Timestamp};
+use cosmwasm_std::{Decimal, IbcEndpoint, Timestamp};
+use cosmwasm_std::{Coin, Uint64};
 
 #[cw_serde]
 pub struct Config {
+    // A unique ID for the oracle request
     pub client_id: String,
+    pub connection_id: String,
+    // Endpoint to validate when open channel
+    pub endpoint: IbcEndpoint,
+    // The oracle script ID to query
     pub oracle_script_id: Uint64,
+    // The number of validators that are requested to respond
     pub ask_count: Uint64,
+    // The minimum number of validators that need to respond
     pub min_count: Uint64,
+    // The maximum amount of band in uband to be paid to the data source providers
+    // e.g. vec![Coin::new(100, "uband")]
     pub fee_limit: Vec<Coin>,
+    // Amount of gas to pay to prepare raw requests
     pub prepare_gas: Uint64,
+    // Amount of gas reserved for execution
     pub execute_gas: Uint64,
+    // Minimum number of sources required to return a successful response
     pub minimum_sources: u8,
 }
 
 #[cw_serde]
-pub struct Rate {
-    // Rate of an asset relative to USD
-    pub rate: Uint64,
-    // The resolve time of the request ID
-    pub resolve_time: Uint64,
-    // The request ID where the rate was derived from
-    pub request_id: Uint64,
-}
-
-impl Rate {
-    pub fn new(rate: Uint64, resolve_time: Uint64, request_id: Uint64) -> Self {
-        Rate {
-            rate,
-            resolve_time,
-            request_id,
-        }
-    }
-}
-
-pub const RATES: Map<&str, Rate> = Map::new("rates");
-
-pub const ENDPOINT: Item<IbcEndpoint> = Item::new("endpoint");
-
-pub const BAND_CONFIG: Item<Config> = Item::new("config");
-
-#[cw_serde]
-pub struct ReferenceData {
-    // Pair rate e.g. rate of BTC/USD
-    pub rate: Uint256,
-    // Unix time of when the base asset was last updated. e.g. Last update time of BTC in Unix time
-    pub last_updated_base: Uint64,
-    // Unix time of when the quote asset was last updated. e.g. Last update time of USD in Unix time
-    pub last_updated_quote: Uint64,
-}
-
-impl ReferenceData {
-    pub fn new(rate: Uint256, last_updated_base: Uint64, last_updated_quote: Uint64) -> Self {
-        ReferenceData {
-            rate,
-            last_updated_base,
-            last_updated_quote,
-        }
-    }
-}
-
-
-
-#[cw_serde]
 pub struct TradingPair {
-    pub pool_id: u64,
     pub base_asset: String,
     pub quote_asset: String,
 }

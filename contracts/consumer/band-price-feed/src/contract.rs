@@ -1,86 +1,141 @@
-#[cfg(not(feature = "library"))]
-use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Empty, Env, IbcMsg, IbcTimeout, MessageInfo, Response, IbcChannel,
-    StdResult, Uint256, Uint64,
+    to_json_binary, Binary, Coin, DepsMut, Env, IbcChannel, IbcEndpoint, IbcMsg, IbcTimeout, Response, Uint64
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
+use cw_utils::nonpayable;
+use mesh_apis::price_feed_api::{PriceFeedApi, PriceResponse};
 
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Config, Rate, ReferenceData, BAND_CONFIG, ENDPOINT, RATES};
-use obi::enc::OBIEncode;
-use cw_band::{Input, OracleRequestPacketData};
-use crate::state::TradingPair;
 use crate::price_keeper::PriceKeeper;
-use crate::scheduler::{Action, Scheduler};
+use crate::state::{TradingPair, Config};
 
-const E9: Uint64 = Uint64::new(1_000_000_000u64);
-const E18: Uint256 = Uint256::from_u128(1_000_000_000_000_000_000u128);
+use sylvia::types::{InstantiateCtx, QueryCtx, SudoCtx};
+use sylvia::{contract, schemars};
+
+use cw_band::{Input, OracleRequestPacketData};
+use mesh_scheduler::{Action, Scheduler};
+use obi::enc::OBIEncode;
 
 // Version info for migration
-const CONTRACT_NAME: &str = "crates.io:band-ibc-price-feed";
+const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct RemotePriceFeedContract {
     pub channel: Item<'static, IbcChannel>,
+    pub config: Item<'static, Config>,
     pub trading_pair: Item<'static, TradingPair>,
     pub price_keeper: PriceKeeper,
-    pub scheduler: Scheduler<Box<dyn Action>>,
+    pub scheduler: Scheduler<Box<dyn Action<ContractError>>, ContractError>,
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn instantiate(
-    deps: DepsMut,
-    _env: Env,
-    _info: MessageInfo,
-    msg: InstantiateMsg,
-) -> Result<Response, ContractError> {
-    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-
-    BAND_CONFIG.save(
-        deps.storage,
-        &Config {
-            client_id: msg.client_id,
-            oracle_script_id: msg.oracle_script_id,
-            ask_count: msg.ask_count,
-            min_count: msg.min_count,
-            fee_limit: msg.fee_limit,
-            prepare_gas: msg.prepare_gas,
-            execute_gas: msg.execute_gas,
-            minimum_sources: msg.minimum_sources,
-        },
-    )?;
-
-    Ok(Response::new().add_attribute("method", "instantiate"))
+impl Default for RemotePriceFeedContract {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute(
-    deps: DepsMut,
-    env: Env,
-    _info: MessageInfo,
-    msg: ExecuteMsg,
-) -> Result<Response, ContractError> {
-    match msg {
-        ExecuteMsg::Request { symbols } => try_request(deps, env, symbols),
+#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
+#[contract]
+#[sv::error(ContractError)]
+#[sv::messages(mesh_apis::price_feed_api as PriceFeedApi)]
+impl RemotePriceFeedContract {
+    pub fn new() -> Self {
+        Self {
+            channel: Item::new("channel"),
+            config: Item::new("config"),
+            trading_pair: Item::new("tpair"),
+            price_keeper: PriceKeeper::new(),
+            // TODO: the indirection can be removed once Sylvia supports
+            // generics. The constructor can then probably be constant.
+            //
+            // Stable existential types would be even better!
+            // https://github.com/rust-lang/rust/issues/63063
+            scheduler: Scheduler::new(Box::new(try_request)),
+        }
+    }
+
+    #[sv::msg(instantiate)]
+    pub fn instantiate(
+        &self,
+        ctx: InstantiateCtx,
+        trading_pair: TradingPair,
+        client_id: String,
+        connection_id: String,
+        channel_id: String,
+        port_id: String,
+        oracle_script_id: Uint64,
+        ask_count: Uint64,
+        min_count: Uint64,
+        fee_limit: Vec<Coin>,
+        prepare_gas: Uint64,
+        execute_gas: Uint64,
+        minimum_sources: u8,
+    ) -> Result<Response, ContractError> {
+        nonpayable(&ctx.info)?;
+
+        set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+        self.trading_pair.save(ctx.deps.storage, &trading_pair)?;
+    
+        self.config.save(ctx.deps.storage, &Config{
+            client_id,
+            connection_id,
+            endpoint: IbcEndpoint{
+                port_id,
+                channel_id,
+            },
+            oracle_script_id,
+            ask_count,
+            min_count,
+            fee_limit,
+            prepare_gas,
+            execute_gas,
+            minimum_sources,
+        })?;
+
+        Ok(Response::new())
+    }
+}
+
+impl PriceFeedApi for RemotePriceFeedContract {
+    type Error = ContractError;
+    // FIXME: make these under a feature flag if we need virtual-staking multitest compatibility
+    type ExecC = cosmwasm_std::Empty;
+    type QueryC = cosmwasm_std::Empty;
+
+    /// Return the price of the foreign token. That is, how many native tokens
+    /// are needed to buy one foreign token.
+    fn price(&self, ctx: QueryCtx) -> Result<PriceResponse, Self::Error> {
+        Ok(self
+            .price_keeper
+            .price(ctx.deps, &ctx.env)
+            .map(|rate| PriceResponse {
+                native_per_foreign: rate,
+            })?)
+    }
+
+    fn handle_epoch(&self, ctx: SudoCtx) -> Result<Response, Self::Error> {
+        self.scheduler.trigger(ctx.deps, &ctx.env)
     }
 }
 
 // TODO: Possible features
 // - Request fee + Bounty logic to prevent request spam and incentivize relayer
 // - Whitelist who can call update price
-pub fn try_request(
-    deps: DepsMut,
-    env: Env,
-    symbols: Vec<String>,
-) -> Result<Response, ContractError> {
-    let endpoint = ENDPOINT.load(deps.storage)?;
-    let config = BAND_CONFIG.load(deps.storage)?;
+pub fn try_request(deps: DepsMut, env: &Env) -> Result<Response, ContractError> {
+    let contract = RemotePriceFeedContract::new();
+    let TradingPair {
+        base_asset,
+        quote_asset,
+    } = contract.trading_pair.load(deps.storage)?;
+    let config = contract.config.load(deps.storage)?;
+    let channel = contract
+        .channel
+        .may_load(deps.storage)?
+        .ok_or(ContractError::IbcChannelNotOpen)?;
 
     let raw_calldata = Input {
-        symbols,
+        symbols: vec![base_asset, quote_asset],
         minimum_sources: config.minimum_sources,
     }
     .try_to_vec()
@@ -101,61 +156,8 @@ pub fn try_request(
     };
 
     Ok(Response::new().add_message(IbcMsg::SendPacket {
-        channel_id: endpoint.channel_id,
+        channel_id: channel.endpoint.channel_id,
         data: to_json_binary(&packet)?,
         timeout: IbcTimeout::with_timestamp(env.block.time.plus_seconds(60)),
     }))
 }
-
-/// this is a no-op
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: Empty) -> StdResult<Response> {
-    Ok(Response::default())
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::GetRate { symbol } => to_json_binary(&query_rate(deps, &symbol)?),
-        QueryMsg::GetReferenceData { symbol_pair } => {
-            to_json_binary(&query_reference_data(deps, &symbol_pair)?)
-        }
-        QueryMsg::GetReferenceDataBulk { symbol_pairs } => {
-            to_json_binary(&query_reference_data_bulk(deps, &symbol_pairs)?)
-        }
-    }
-}
-
-fn query_rate(deps: Deps, symbol: &str) -> StdResult<Rate> {
-    if symbol == "USD" {
-        Ok(Rate::new(E9, Uint64::MAX, Uint64::new(0)))
-    } else {
-        RATES.load(deps.storage, symbol)
-    }
-}
-
-fn query_reference_data(deps: Deps, symbol_pair: &(String, String)) -> StdResult<ReferenceData> {
-    let base = query_rate(deps, &symbol_pair.0)?;
-    let quote = query_rate(deps, &symbol_pair.1)?;
-
-    Ok(ReferenceData::new(
-        Uint256::from(base.rate)
-            .checked_mul(E18)?
-            .checked_div(Uint256::from(quote.rate))?,
-        base.resolve_time,
-        quote.resolve_time,
-    ))
-}
-
-fn query_reference_data_bulk(
-    deps: Deps,
-    symbol_pairs: &[(String, String)],
-) -> StdResult<Vec<ReferenceData>> {
-    symbol_pairs
-        .iter()
-        .map(|pair| query_reference_data(deps, pair))
-        .collect()
-}
-// TODO: Writing test
-#[cfg(test)]
-mod tests {}
