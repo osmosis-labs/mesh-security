@@ -68,13 +68,13 @@ impl CustomMsg for VirtualStakeCustomMsg {}
 /// It is embedded like this to easily allow adding other variants that are custom
 /// to your chain, or other "standardized" extensions along side it.
 #[cw_serde]
-pub enum VaultCustomMsg {
-    Vault(VaultMsg),
+pub enum ProviderCustomMsg {
+    Provider(ProviderMsg),
 }
 
 /// Special messages to be supported by any chain that supports meshsecurityprovider
 #[cw_serde]
-pub enum VaultMsg {
+pub enum ProviderMsg {
     /// Bond will enforce the calling contract is the vault contract.
     /// It ensures amount.denom is the native staking denom.
     ///
@@ -89,34 +89,34 @@ pub enum VaultMsg {
     Unbond { delegator: String, amount: Coin },
 }
 
-impl VaultMsg {
-    pub fn bond(denom: &str, delegator: &str, amount: impl Into<Uint128>) -> VaultMsg {
+impl ProviderMsg {
+    pub fn bond(denom: &str, delegator: &str, amount: impl Into<Uint128>) -> ProviderMsg {
         let coin = Coin {
             amount: amount.into(),
             denom: denom.into(),
         };
-        VaultMsg::Bond {
+        ProviderMsg::Bond {
             delegator: delegator.to_string(),
             amount: coin,
         }
     }
 
-    pub fn unbond(denom: &str, delegator: &str, amount: impl Into<Uint128>) -> VaultMsg {
+    pub fn unbond(denom: &str, delegator: &str, amount: impl Into<Uint128>) -> ProviderMsg {
         let coin = Coin {
             amount: amount.into(),
             denom: denom.into(),
         };
-        VaultMsg::Unbond {
+        ProviderMsg::Unbond {
             delegator: delegator.to_string(),
             amount: coin,
         }
     }
 }
 
-impl From<VaultMsg> for CosmosMsg<VaultCustomMsg> {
-    fn from(msg: VaultMsg) -> CosmosMsg<VaultCustomMsg> {
-        CosmosMsg::Custom(VaultCustomMsg::Vault(msg))
+impl From<ProviderMsg> for CosmosMsg<ProviderCustomMsg> {
+    fn from(msg: ProviderMsg) -> CosmosMsg<ProviderCustomMsg> {
+        CosmosMsg::Custom(ProviderCustomMsg::Provider(msg))
     }
 }
 
-impl CustomMsg for VaultCustomMsg {}
+impl CustomMsg for ProviderCustomMsg {}

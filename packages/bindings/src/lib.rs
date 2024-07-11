@@ -1,7 +1,7 @@
 mod msg;
 mod query;
 
-pub use msg::{VirtualStakeCustomMsg, VirtualStakeMsg, VaultCustomMsg, VaultMsg};
+pub use msg::{VirtualStakeCustomMsg, VirtualStakeMsg, ProviderCustomMsg, ProviderMsg};
 pub use query::{
     BondStatusResponse, SlashRatioResponse, TokenQuerier, VirtualStakeCustomQuery,
     VirtualStakeQuery,

@@ -11,7 +11,7 @@ use mesh_apis::local_staking_api::{
     sv::LocalStakingApiQueryMsg, LocalStakingApiHelper, SlashRatioResponse,
 };
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
-use mesh_bindings::{VaultCustomMsg, VaultMsg};
+use mesh_bindings::{ProviderCustomMsg, ProviderMsg};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
 
@@ -68,7 +68,7 @@ pub struct VaultContract<'a> {
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
-#[sv::custom(msg=VaultCustomMsg)]
+#[sv::custom(msg=ProviderCustomMsg)]
 impl VaultContract<'_> {
     pub fn new() -> Self {
         Self {
@@ -94,7 +94,7 @@ impl VaultContract<'_> {
         ctx: InstantiateCtx,
         denom: String,
         local_staking: Option<LocalStakingInfo>,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = Config { denom };
@@ -143,7 +143,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn bond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<VaultCustomMsg>, ContractError> {
+    fn bond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<ProviderCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
@@ -156,7 +156,7 @@ impl VaultContract<'_> {
         user.collateral += amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
         let amt = amount.amount;
-        let msg = VaultMsg::Bond { delegator: ctx.info.sender.clone().into_string(), amount};
+        let msg = ProviderMsg::Bond { delegator: ctx.info.sender.clone().into_string(), amount};
         let resp = Response::new()
             .add_message(msg)
             .add_attribute("action", "unbond")
@@ -167,7 +167,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<VaultCustomMsg>, ContractError> {
+    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<ProviderCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
@@ -187,7 +187,7 @@ impl VaultContract<'_> {
         user.collateral -= amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
         let amt = amount.amount;
-        let msg = VaultMsg::Unbond { delegator: ctx.info.sender.clone().into_string(), amount};
+        let msg = ProviderMsg::Unbond { delegator: ctx.info.sender.clone().into_string(), amount};
         let resp = Response::new()
             .add_message(msg)
             .add_attribute("action", "unbond")
@@ -208,7 +208,7 @@ impl VaultContract<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -255,7 +255,7 @@ impl VaultContract<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -492,7 +492,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response<VaultCustomMsg>, ContractError> {
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response<ProviderCustomMsg>, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -503,7 +503,7 @@ impl VaultContract<'_> {
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-    ) -> Result<Response<VaultCustomMsg>, ContractError> {
+    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let local_staking = Addr::unchecked(init_data.contract_address);
 
@@ -983,7 +983,7 @@ impl Default for VaultContract<'_> {
 
 impl VaultApi for VaultContract<'_> {
     type Error = ContractError;
-    type ExecC = VaultCustomMsg;
+    type ExecC = ProviderCustomMsg;
 
     /// This must be called by the remote staking contract to release this claim
     fn release_cross_stake(
