@@ -7,6 +7,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
 use cw_utils::{must_pay, nonpayable};
+use mesh_bindings::ProviderMsg;
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -288,7 +289,7 @@ impl NativeStakingProxyContract<'_> {
             ContractError::InvalidDenom(amount.denom)
         );
 
-        let msg = StakingMsg::Undelegate { validator, amount };
+        let msg = ProviderMsg::Unstake { validator, amount };
         Ok(Response::new().add_message(msg))
     }
 
