@@ -10,9 +10,8 @@ use mesh_vault::mock::sv::mt::VaultMockProxy;
 use mesh_vault::mock::VaultMock;
 use mesh_vault::msg::LocalStakingInfo;
 
-use crate::contract;
-use crate::contract::sv::mt::NativeStakingProxyContractProxy;
-use crate::contract::NativeStakingProxyContract;
+use crate::mock::sv::mt::NativeStakingProxyMockProxy;
+use crate::mock::NativeStakingProxyMock;
 use crate::msg::ConfigResponse;
 
 const OSMO: &str = "uosmo";
@@ -62,7 +61,7 @@ fn setup<'app>(
 ) -> AnyResult<Proxy<'app, MtApp, VaultMock<'app>>> {
     let vault_code = mesh_vault::mock::sv::mt::CodeId::store_code(app);
     let staking_code = mesh_native_staking::contract::sv::mt::CodeId::store_code(app);
-    let staking_proxy_code = contract::sv::mt::CodeId::store_code(app);
+    let staking_proxy_code = crate::mock::sv::mt::CodeId::store_code(app);
 
     // Instantiate vault msg
     let staking_init_info = mesh_vault::msg::StakingInitInfo {
@@ -126,7 +125,7 @@ fn instantiation() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Check config
@@ -170,7 +169,7 @@ fn staking() {
     let vault = setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Stake some more
@@ -216,7 +215,7 @@ fn restaking() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Restake 30% to a different validator
@@ -255,7 +254,7 @@ fn unstaking() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Unstake 50%
@@ -310,7 +309,7 @@ fn burning() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Burn 10%, from validator
@@ -377,7 +376,7 @@ fn burning_multiple_delegations() {
     setup(&app, owner, user, &validators).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Burn 15%, no validator specified
@@ -458,7 +457,7 @@ fn releasing_unbonded() {
     let vault = setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Unstake 100%
@@ -514,7 +513,7 @@ fn withdrawing_rewards() {
     let original_user_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Advance time enough for rewards to accrue
