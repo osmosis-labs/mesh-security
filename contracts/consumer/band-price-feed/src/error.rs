@@ -3,7 +3,7 @@ use cw_utils::PaymentError;
 use mesh_apis::ibc::VersionError;
 use thiserror::Error;
 
-use crate::price_keeper::PriceKeeperError;
+use mesh_price_feed::PriceKeeperError;
 
 /// Never is a placeholder to ensure we don't return any errors
 #[derive(Error, Debug)]

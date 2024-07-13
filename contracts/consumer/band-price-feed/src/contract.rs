@@ -7,14 +7,13 @@ use cw_utils::nonpayable;
 use mesh_apis::price_feed_api::{PriceFeedApi, PriceResponse};
 
 use crate::error::ContractError;
-use crate::price_keeper::PriceKeeper;
 use crate::state::{TradingPair, Config};
 
 use sylvia::types::{InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use cw_band::{Input, OracleRequestPacketData};
-use mesh_scheduler::{Action, Scheduler};
+use mesh_price_feed::{Action, Scheduler, PriceKeeper};
 use obi::enc::OBIEncode;
 
 // Version info for migration
@@ -160,4 +159,49 @@ pub fn try_request(deps: DepsMut, env: &Env) -> Result<Response, ContractError> 
         data: to_json_binary(&packet)?,
         timeout: IbcTimeout::with_timestamp(env.block.time.plus_seconds(60)),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::{testing::{mock_dependencies, mock_env, mock_info}, Uint64, Uint128};
+
+    use super::*;
+
+    #[test]
+    fn instantiation() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("sender", &[]);
+        let contract = RemotePriceFeedContract::new();
+
+        let trading_pair = TradingPair {
+            base_asset: "base".to_string(),
+            quote_asset: "quote".to_string(),
+        };
+
+        contract
+            .instantiate(
+                InstantiateCtx {
+                    deps: deps.as_mut(),
+                    env,
+                    info,
+                },
+                trading_pair,
+                "07-tendermint-0".to_string(),
+                "connection-0".to_string(),
+                "channel-0".to_string(),
+                "transfer".to_string(),
+                Uint64::new(1),
+                Uint64::new(10),
+                Uint64::new(50),
+                vec![Coin { 
+                    denom: "uband".to_string(),
+                    amount: Uint128::new(1),
+                }],
+                Uint64::new(100000),
+                Uint64::new(200000),
+                1
+            )
+            .unwrap();
+    }
 }

@@ -17,7 +17,7 @@ repository = "https://github.com/osmosis-labs/mesh-security"
 mesh-apis = { path = "./packages/apis" }
 mesh-bindings = { path = "./packages/bindings" }
 mesh-burn = { path = "./packages/burn" }
-mesh-scheduler = { path = "./packages/scheduler" }
+mesh-price-feed = { path = "./packages/price-feed" }
 mesh-sync = { path = "./packages/sync" }
 mesh-virtual-staking-mock = { path = "./packages/virtual-staking-mock" }
 

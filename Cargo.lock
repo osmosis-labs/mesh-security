@@ -607,7 +607,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
- "mesh-scheduler",
+ "mesh-price-feed",
  "obi",
  "schemars",
  "serde",
@@ -733,7 +733,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
- "mesh-scheduler",
+ "mesh-price-feed",
  "schemars",
  "serde",
  "sylvia",
@@ -760,11 +760,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "mesh-scheduler"
+name = "mesh-price-feed"
 version = "0.10.0-alpha.1"
 dependencies = [
+ "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
+ "thiserror",
 ]
 
 [[package]]

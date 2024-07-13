@@ -21,7 +21,7 @@ mt = ["library", "sylvia/mt"]
 
 [dependencies]
 mesh-apis        = { workspace = true }
-mesh-scheduler   = { workspace = true }
+mesh-price-feed  = { workspace = true }
 
 sylvia           = { workspace = true }
 cosmwasm-schema  = { workspace = true }
