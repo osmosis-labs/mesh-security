@@ -23,7 +23,6 @@ pub struct NativeStakingProxyMock<'a> {
     burned: Item<'a, u128>,
 }
 
-#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[sv::error(ContractError)]
 impl NativeStakingProxyMock<'_> {
