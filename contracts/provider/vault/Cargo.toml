@@ -19,9 +19,10 @@ library = []
 mt = ["library", "sylvia/mt"]
 
 [dependencies]
-mesh-apis        = { workspace = true }
-mesh-sync        = { workspace = true }
-mesh-bindings    = { workspace = true }
+mesh-apis           = { workspace = true }
+mesh-sync           = { workspace = true }
+mesh-bindings       = { workspace = true }
+mesh-native-staking = { workspace = true, features = ["mt", "library"] }
 
 sylvia = { workspace = true }
 cosmwasm-schema  = { workspace = true }
