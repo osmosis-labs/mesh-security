@@ -1,5 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply, Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg
+    coin, ensure, Addr, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply, Response,
+    StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -143,7 +144,11 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn bond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    fn bond(
+        &self,
+        ctx: ExecCtx,
+        amount: Coin,
+    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
@@ -156,7 +161,10 @@ impl VaultContract<'_> {
         user.collateral += amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
         let amt = amount.amount;
-        let msg = ProviderMsg::Bond { delegator: ctx.info.sender.clone().into_string(), amount};
+        let msg = ProviderMsg::Bond {
+            delegator: ctx.info.sender.clone().into_string(),
+            amount,
+        };
         let resp = Response::new()
             .add_message(msg)
             .add_attribute("action", "unbond")
@@ -167,7 +175,11 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    fn unbond(
+        &self,
+        ctx: ExecCtx,
+        amount: Coin,
+    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
@@ -187,7 +199,10 @@ impl VaultContract<'_> {
         user.collateral -= amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
         let amt = amount.amount;
-        let msg = ProviderMsg::Unbond { delegator: ctx.info.sender.clone().into_string(), amount};
+        let msg = ProviderMsg::Unbond {
+            delegator: ctx.info.sender.clone().into_string(),
+            amount,
+        };
         let resp = Response::new()
             .add_message(msg)
             .add_attribute("action", "unbond")
@@ -492,7 +507,11 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    fn reply(
+        &self,
+        ctx: ReplyCtx,
+        reply: Reply,
+    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -1085,7 +1104,11 @@ impl VaultApi for VaultContract<'_> {
         Ok(resp)
     }
 
-    fn commit_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response<Self::ExecC>, ContractError> {
+    fn commit_tx(
+        &self,
+        mut ctx: ExecCtx,
+        tx_id: u64,
+    ) -> Result<Response<Self::ExecC>, ContractError> {
         self.commit_stake(&mut ctx, tx_id)?;
 
         let resp = Response::new()
@@ -1096,7 +1119,11 @@ impl VaultApi for VaultContract<'_> {
         Ok(resp)
     }
 
-    fn rollback_tx(&self, mut ctx: ExecCtx, tx_id: u64) -> Result<Response<Self::ExecC>, ContractError> {
+    fn rollback_tx(
+        &self,
+        mut ctx: ExecCtx,
+        tx_id: u64,
+    ) -> Result<Response<Self::ExecC>, ContractError> {
         self.rollback_stake(&mut ctx, tx_id)?;
 
         let resp = Response::new()

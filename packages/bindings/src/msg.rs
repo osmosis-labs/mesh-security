@@ -117,7 +117,7 @@ impl ProviderMsg {
             amount: coin,
         }
     }
-    
+
     pub fn unstake(denom: &str, validator: &str, amount: impl Into<Uint128>) -> ProviderMsg {
         let coin = Coin {
             amount: amount.into(),
