@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_json_binary, Addr, Coin, Response, StdError, Uint128, CustomMsg, WasmMsg};
+use cosmwasm_std::{to_json_binary, Addr, Coin, CustomMsg, Response, StdError, Uint128, WasmMsg};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 

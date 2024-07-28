@@ -78,7 +78,11 @@ impl NativeStakingProxyContract<'_> {
     /// Stakes the tokens from `info.funds` to the given validator.
     /// Can only be called by the parent contract
     #[sv::msg(exec)]
-    fn stake(&self, ctx: ExecCtx, validator: String) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    fn stake(
+        &self,
+        ctx: ExecCtx,
+        validator: String,
+    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
 
