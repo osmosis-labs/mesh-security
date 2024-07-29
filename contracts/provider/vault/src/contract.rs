@@ -256,10 +256,7 @@ impl VaultContract<'_> {
 
             let stake_msg = local_staking.contract.receive_stake(
                 ctx.info.sender.to_string(),
-                to_json_binary(&mesh_native_staking::msg::StakeMsg {
-                    validator,
-                })
-                .unwrap(),
+                to_json_binary(&mesh_native_staking::msg::StakeMsg { validator }).unwrap(),
                 vec![amount],
             )?;
 
