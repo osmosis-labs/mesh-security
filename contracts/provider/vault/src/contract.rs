@@ -257,10 +257,10 @@ impl VaultContract<'_> {
             let stake_msg = local_staking.contract.receive_stake(
                 ctx.info.sender.to_string(),
                 to_json_binary(&mesh_native_staking::msg::StakeMsg {
-                    validator: validator.to_owned(),
+                    validator,
                 })
                 .unwrap(),
-                vec![amount.clone()],
+                vec![amount],
             )?;
 
             resp = resp.add_message(stake_msg);
