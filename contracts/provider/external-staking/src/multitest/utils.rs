@@ -47,8 +47,7 @@ pub(crate) trait AppExt {
 impl AppExt for App<MtApp> {
     #[track_caller]
     fn new_with_balances(balances: &[(&str, &[Coin])]) -> Self {
-        
-        let app =MtApp::new(|router, _api, storage| {
+        let app = MtApp::new(|router, _api, storage| {
             for (addr, coins) in balances {
                 router
                     .bank
