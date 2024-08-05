@@ -81,7 +81,7 @@ impl VirtualStakingContract<'_> {
         let config = Config {
             denom,
             converter: ctx.info.sender,
-            max_retrieve: max_retrieve,
+            max_retrieve,
         };
         self.config.save(ctx.deps.storage, &config)?;
         // initialize these to no one, so no issue when reading for the first time
@@ -526,7 +526,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             )
             .collect::<Result<_, _>>()?;
         self.bonded.save(ctx.deps.storage, &requests)?;
-        return Ok(Response::new());
+        Ok(Response::new())
     }
 
     // FIXME: need to handle custom message types and queries
@@ -574,7 +574,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
                 // Send unstake request to converter contract
                 let msg = converter_api::sv::ExecMsg::InternalUnstake {
                     delegator: delegation.delegator,
-                    validator: validator,
+                    validator,
                     amount: Coin {
                         denom: config.denom.clone(),
                         amount: delegation.amount,
