@@ -10,8 +10,8 @@ use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
 use crate::error::ContractError;
 use crate::ibc::{make_ibc_packet, AUTH_ENDPOINT};
 use crate::msg::AuthorizedEndpoint;
-use mesh_price_feed::{Action, Scheduler, PriceKeeper};
 use crate::state::TradingPair;
+use mesh_price_feed::{Action, PriceKeeper, Scheduler};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");

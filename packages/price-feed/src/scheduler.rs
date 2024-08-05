@@ -63,7 +63,9 @@ mod tests {
 
     #[test]
     fn scheduler_first_epoch_always_fires() {
-        let scheduler = TestScheduler::new(Box::new(|_, _| Ok(Response::new().set_data(Binary::from(b"foo")))));
+        let scheduler = TestScheduler::new(Box::new(|_, _| {
+            Ok(Response::new().set_data(Binary::from(b"foo")))
+        }));
         let mut deps = mock_dependencies();
         let env = mock_env();
 
@@ -77,7 +79,9 @@ mod tests {
 
     #[test]
     fn scheduler() {
-        let scheduler = TestScheduler::new(Box::new(|_, _| Ok(Response::new().set_data(Binary::from(b"foo")))));
+        let scheduler = TestScheduler::new(Box::new(|_, _| {
+            Ok(Response::new().set_data(Binary::from(b"foo")))
+        }));
         let mut deps = mock_dependencies();
         let mut env = mock_env();
 
@@ -93,7 +97,7 @@ mod tests {
         }
 
         #[track_caller]
-        fn assert_noop<A, E>(s: &Scheduler<A, E>, deps: DepsMut, env: &Env) 
+        fn assert_noop<A, E>(s: &Scheduler<A, E>, deps: DepsMut, env: &Env)
         where
             A: Action<E>,
             E: std::fmt::Debug + From<StdError>,

@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Uint64, IbcEndpoint};
+use cosmwasm_std::{Coin, IbcEndpoint, Uint64};
 
 #[cw_serde]
 pub struct Config {

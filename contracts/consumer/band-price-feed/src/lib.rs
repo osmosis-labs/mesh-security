@@ -1,4 +1,4 @@
 pub mod contract;
 pub mod error;
-pub mod state;
 pub mod ibc;
+pub mod state;

@@ -1,5 +1,6 @@
 use cosmwasm_std::{
-    to_json_binary, Binary, Coin, DepsMut, Env, IbcChannel, IbcEndpoint, IbcMsg, IbcTimeout, Response, Uint64
+    to_json_binary, Binary, Coin, DepsMut, Env, IbcChannel, IbcEndpoint, IbcMsg, IbcTimeout,
+    Response, Uint64,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -7,13 +8,13 @@ use cw_utils::nonpayable;
 use mesh_apis::price_feed_api::{PriceFeedApi, PriceResponse};
 
 use crate::error::ContractError;
-use crate::state::{TradingPair, Config};
+use crate::state::{Config, TradingPair};
 
 use sylvia::types::{InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use cw_band::{Input, OracleRequestPacketData};
-use mesh_price_feed::{Action, Scheduler, PriceKeeper};
+use mesh_price_feed::{Action, PriceKeeper, Scheduler};
 use obi::enc::OBIEncode;
 
 // Version info for migration
@@ -75,22 +76,25 @@ impl RemotePriceFeedContract {
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         self.trading_pair.save(ctx.deps.storage, &trading_pair)?;
-    
-        self.config.save(ctx.deps.storage, &Config{
-            client_id,
-            connection_id,
-            endpoint: IbcEndpoint{
-                port_id,
-                channel_id,
+
+        self.config.save(
+            ctx.deps.storage,
+            &Config {
+                client_id,
+                connection_id,
+                endpoint: IbcEndpoint {
+                    port_id,
+                    channel_id,
+                },
+                oracle_script_id,
+                ask_count,
+                min_count,
+                fee_limit,
+                prepare_gas,
+                execute_gas,
+                minimum_sources,
             },
-            oracle_script_id,
-            ask_count,
-            min_count,
-            fee_limit,
-            prepare_gas,
-            execute_gas,
-            minimum_sources,
-        })?;
+        )?;
 
         Ok(Response::new())
     }
@@ -163,7 +167,10 @@ pub fn try_request(deps: DepsMut, env: &Env) -> Result<Response, ContractError> 
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::{testing::{mock_dependencies, mock_env, mock_info}, Uint64, Uint128};
+    use cosmwasm_std::{
+        testing::{mock_dependencies, mock_env, mock_info},
+        Uint128, Uint64,
+    };
 
     use super::*;
 
@@ -194,13 +201,13 @@ mod tests {
                 Uint64::new(1),
                 Uint64::new(10),
                 Uint64::new(50),
-                vec![Coin { 
+                vec![Coin {
                     denom: "uband".to_string(),
                     amount: Uint128::new(1),
                 }],
                 Uint64::new(100000),
                 Uint64::new(200000),
-                1
+                1,
             )
             .unwrap();
     }
