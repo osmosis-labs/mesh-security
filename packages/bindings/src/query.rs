@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Uint128, CustomQuery, QuerierWrapper, QueryRequest, StdResult};
+use cosmwasm_std::{Coin, CustomQuery, QuerierWrapper, QueryRequest, StdResult, Uint128};
 
 #[cw_serde]
 #[derive(QueryResponses)]
@@ -22,7 +22,7 @@ pub enum VirtualStakeQuery {
     #[returns(SlashRatioResponse)]
     SlashRatio {},
 
-    /// Returns a max retrieve amount of delegations for the given contract 
+    /// Returns a max retrieve amount of delegations for the given contract
     #[returns(AllDelegationsResponse)]
     AllDelegations { contract: String, max_retrieve: u16 },
 }
@@ -86,8 +86,15 @@ impl<'a> TokenQuerier<'a> {
         self.querier.query(&slash_ratio_query.into())
     }
 
-    pub fn all_delegations(&self, contract: String, max_retrieve: u16) -> StdResult<AllDelegationsResponse> {
-        let all_delegations_query = VirtualStakeQuery::AllDelegations { contract, max_retrieve };
+    pub fn all_delegations(
+        &self,
+        contract: String,
+        max_retrieve: u16,
+    ) -> StdResult<AllDelegationsResponse> {
+        let all_delegations_query = VirtualStakeQuery::AllDelegations {
+            contract,
+            max_retrieve,
+        };
         self.querier.query(&all_delegations_query.into())
     }
 }

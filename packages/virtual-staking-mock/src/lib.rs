@@ -1,6 +1,9 @@
 use anyhow::Result as AnyResult;
 use cosmwasm_std::{
-    coin, testing::{MockApi, MockStorage}, to_json_binary, Addr, AllDelegationsResponse, Api, Binary, BlockInfo, CustomQuery, Empty, Querier, QuerierWrapper, Storage, Uint128
+    coin,
+    testing::{MockApi, MockStorage},
+    to_json_binary, Addr, AllDelegationsResponse, Api, Binary, BlockInfo, CustomQuery, Empty,
+    Querier, QuerierWrapper, Storage, Uint128,
 };
 use cw_multi_test::{AppResponse, BankKeeper, Module, WasmKeeper};
 use cw_storage_plus::{Item, Map};
@@ -132,9 +135,7 @@ impl Module for VirtualStakingModule {
                     Err(anyhow::anyhow!("bonded amount exceeded"))
                 }
             }
-            mesh_bindings::VirtualStakeMsg::UpdateDelegation { .. } => {
-                Ok(AppResponse::default())
-            }
+            mesh_bindings::VirtualStakeMsg::UpdateDelegation { .. } => Ok(AppResponse::default()),
         }
     }
 
@@ -183,7 +184,7 @@ impl Module for VirtualStakingModule {
             }
             mesh_bindings::VirtualStakeQuery::AllDelegations { .. } => {
                 to_json_binary(&AllDelegationsResponse {
-                    delegations: vec![]
+                    delegations: vec![],
                 })?
             }
         };

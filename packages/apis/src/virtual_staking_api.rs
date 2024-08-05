@@ -54,7 +54,7 @@ pub trait VirtualStakingApi {
     ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// TODO: docs for this function
-    /// 
+    ///
     #[sv::msg(exec)]
     fn internal_unbond(
         &self,

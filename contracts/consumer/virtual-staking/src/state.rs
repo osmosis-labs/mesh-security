@@ -9,7 +9,7 @@ pub struct Config {
     /// The address of the converter contract (that is authorized to bond/unbond and will receive rewards)
     pub converter: Addr,
 
-    /// Maximum 
-    /// 
+    /// Maximum
+    ///
     pub max_retrieve: u16,
 }

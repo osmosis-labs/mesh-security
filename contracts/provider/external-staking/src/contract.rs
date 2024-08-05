@@ -469,7 +469,10 @@ impl ExternalStakingContract<'_> {
         let amount = min(amount.amount, stake.stake.high());
         stake.stake.commit_sub(amount);
 
-        let unbond = PendingUnbond { amount, release_at: env.block.time };
+        let unbond = PendingUnbond {
+            amount,
+            release_at: env.block.time,
+        };
         stake.pending_unbonds.push(unbond);
 
         // Distribution alignment

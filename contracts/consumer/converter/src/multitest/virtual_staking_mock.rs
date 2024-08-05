@@ -245,11 +245,11 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
 
     fn internal_unbond(
         &self,
-        _ctx:ExecCtx<Self::QueryC>,
-        _delegator:String,
-        _validator:String,
-        _amount:Coin
-    ) -> Result<Response<Self::ExecC> ,Self::Error> {
+        _ctx: ExecCtx<Self::QueryC>,
+        _delegator: String,
+        _validator: String,
+        _amount: Coin,
+    ) -> Result<Response<Self::ExecC>, Self::Error> {
         unimplemented!()
     }
 

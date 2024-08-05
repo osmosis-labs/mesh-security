@@ -98,9 +98,8 @@ impl ConverterContract<'_> {
             ctx.deps.api.addr_validate(admin)?;
         }
 
-        let msg = to_json_binary(&mesh_virtual_staking::contract::sv::InstantiateMsg{
-            max_retrieve
-        })?;
+        let msg =
+            to_json_binary(&mesh_virtual_staking::contract::sv::InstantiateMsg { max_retrieve })?;
         // Instantiate virtual staking contract
         let init_msg = WasmMsg::Instantiate {
             admin,

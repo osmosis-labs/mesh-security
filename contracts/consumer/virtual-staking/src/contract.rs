@@ -74,7 +74,7 @@ impl VirtualStakingContract<'_> {
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx<VirtualStakeCustomQuery>,
-        max_retrieve: u16
+        max_retrieve: u16,
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
         let denom = ctx.deps.querier.query_bonded_denom()?;
@@ -384,11 +384,11 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         self.bond_requests
             .save(ctx.deps.storage, &validator, &bonded)?;
 
-        let msg = VirtualStakeMsg::UpdateDelegation { 
-            amount, 
+        let msg = VirtualStakeMsg::UpdateDelegation {
+            amount,
             is_deduct: false,
-            delegator, 
-            validator 
+            delegator,
+            validator,
         };
         Ok(Response::new().add_message(msg))
     }
@@ -420,11 +420,11 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         self.bond_requests
             .save(ctx.deps.storage, &validator, &bonded)?;
 
-        let msg = VirtualStakeMsg::UpdateDelegation { 
-            amount, 
+        let msg = VirtualStakeMsg::UpdateDelegation {
+            amount,
             is_deduct: true,
-            delegator, 
-            validator 
+            delegator,
+            validator,
         };
         Ok(Response::new().add_message(msg))
     }
@@ -498,7 +498,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         _delegator: String,
         validator: String,
         amount: Coin,
-    ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error>  {
+    ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
         nonpayable(&ctx.info)?;
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized); // only the converter can call this
@@ -526,7 +526,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             )
             .collect::<Result<_, _>>()?;
         self.bonded.save(ctx.deps.storage, &requests)?;
-        return Ok(Response::new())
+        return Ok(Response::new());
     }
 
     // FIXME: need to handle custom message types and queries
@@ -566,18 +566,19 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         // call and set bonded to empty
         // TODO: verify this behavior with SDK module (otherwise we send unbond message)
         if max_cap.is_zero() {
-            let all_delegations = 
-                TokenQuerier::new(&deps.querier).all_delegations(
-                        env.contract.address.to_string(), config.max_retrieve
-                    )?;
+            let all_delegations = TokenQuerier::new(&deps.querier)
+                .all_delegations(env.contract.address.to_string(), config.max_retrieve)?;
             let mut msgs = vec![];
             for delegation in all_delegations.delegations {
                 let validator = delegation.validator.clone();
                 // Send unstake request to converter contract
-                let msg = converter_api::sv::ExecMsg::InternalUnstake { 
-                    delegator: delegation.delegator, 
-                    validator: validator, 
-                    amount: Coin { denom: config.denom.clone(), amount: delegation.amount }
+                let msg = converter_api::sv::ExecMsg::InternalUnstake {
+                    delegator: delegation.delegator,
+                    validator: validator,
+                    amount: Coin {
+                        denom: config.denom.clone(),
+                        amount: delegation.amount,
+                    },
                 };
                 let msg = WasmMsg::Execute {
                     contract_addr: config.converter.to_string(),
@@ -719,7 +720,9 @@ mod tests {
     };
 
     use cosmwasm_std::{
-        coins, from_json, testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage}, AllDelegationsResponse, Decimal
+        coins, from_json,
+        testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
+        AllDelegationsResponse, Decimal,
     };
     use mesh_bindings::{BondStatusResponse, SlashRatioResponse};
 
@@ -1285,8 +1288,8 @@ mod tests {
             slash_fraction_downtime: "0.1".to_string(),
             slash_fraction_double_sign: "0.25".to_string(),
         });
-        let all_delegations = MockAllDelegations::new(AllDelegationsResponse { 
-            delegations: vec![]
+        let all_delegations = MockAllDelegations::new(AllDelegationsResponse {
+            delegations: vec![],
         });
 
         let handler = {
@@ -1371,7 +1374,7 @@ mod tests {
             self.0.borrow()
         }
     }
-    
+
     fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
         REWARD_TARGETS
             .save(
@@ -1414,13 +1417,14 @@ mod tests {
 
     impl VirtualStakingExt for VirtualStakingContract<'_> {
         fn quick_inst(&self, deps: DepsMut) {
-            self.instantiate(InstantiateCtx {
-                deps,
-                env: mock_env(),
-                info: mock_info("me", &[]),
-            },
-            50
-        )
+            self.instantiate(
+                InstantiateCtx {
+                    deps,
+                    env: mock_env(),
+                    info: mock_info("me", &[]),
+                },
+                50,
+            )
             .unwrap();
         }
 

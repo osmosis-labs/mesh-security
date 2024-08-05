@@ -54,7 +54,10 @@ pub fn packet_timeout_rewards(env: &Env) -> IbcTimeout {
 pub fn packet_timeout_internal_unstake(env: &Env) -> IbcTimeout {
     // No idea about their block time, but 24 hours ahead of our view of the clock
     // should be decently in the future.
-    let timeout = env.block.time.plus_seconds(DEFAULT_INTERNAL_UNSTAKE_TIMEOUT);
+    let timeout = env
+        .block
+        .time
+        .plus_seconds(DEFAULT_INTERNAL_UNSTAKE_TIMEOUT);
     IbcTimeout::with_timestamp(timeout)
 }
 
@@ -267,15 +270,16 @@ pub fn ibc_packet_ack(
     match ack {
         AckWrapper::Result(_) => {
             let packet: ConsumerPacket = from_json(&msg.original_packet.data)?;
-            if let ConsumerPacket::InternalUnstake { 
-                delegator, 
-                validator, 
-                amount, 
-            } = packet {
-                // execute virtual contract's internal unbond 
+            if let ConsumerPacket::InternalUnstake {
+                delegator,
+                validator,
+                amount,
+            } = packet
+            {
+                // execute virtual contract's internal unbond
                 let msg = virtual_staking_api::sv::ExecMsg::InternalUnbond {
-                    delegator, 
-                    validator, 
+                    delegator,
+                    validator,
                     amount,
                 };
                 let msg = WasmMsg::Execute {
