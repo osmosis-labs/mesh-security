@@ -639,7 +639,7 @@ impl ConverterApi for ConverterContract<'_> {
 
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
         let packet = ConsumerPacket::InternalUnstake {
-            delegator: delegator,
+            delegator,
             validator,
             amount,
         };
