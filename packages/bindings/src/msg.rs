@@ -30,8 +30,8 @@ pub enum VirtualStakeMsg {
     /// It will then burn those tokens from the caller's account,
     /// and update the currently minted amount.
     Unbond { amount: Coin, validator: String },
-    /// TODO: Add docs for this msg
-    ///
+    /// After each bonding or unbond process, a msg will be sent to the chain
+    /// Consumer chain will save the data - represent each delegator's stake amount
     UpdateDelegation {
         amount: Coin,
         is_deduct: bool,

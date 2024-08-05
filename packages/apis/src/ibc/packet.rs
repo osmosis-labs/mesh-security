@@ -112,6 +112,8 @@ pub enum ConsumerPacket {
         /// This has precedence over all other events in the same packet.
         slashed: Vec<ValidatorSlashInfo>,
     },
+    /// This is a part of zero max cap process
+    /// The consumer chain will send this packet to provider, force user to unbond token
     InternalUnstake {
         delegator: String,
         validator: String,

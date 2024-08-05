@@ -53,8 +53,9 @@ pub trait VirtualStakingApi {
         amount: Coin,
     ) -> Result<Response<Self::ExecC>, Self::Error>;
 
-    /// TODO: docs for this function
-    ///
+    /// Immediately unbond the given amount due to zero max cap
+    /// When the consumer chain receives ack packet from provider - which means the unbond process from provider is success,
+    /// consumer chain will trigger this function to unbond this contract actor staking base on the delegate amount.
     #[sv::msg(exec)]
     fn internal_unbond(
         &self,
