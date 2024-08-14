@@ -248,6 +248,7 @@ impl VirtualStakingContract<'_> {
         }
         #[cfg(not(any(test, feature = "mt")))]
         {
+            let _ = ctx;
             Err(ContractError::Unauthorized)
         }
     }
