@@ -18,7 +18,7 @@ use sylvia::{contract, schemars};
 use mesh_apis::virtual_staking_api::{self, ValidatorSlash, VirtualStakingApi};
 
 use crate::error::ContractError;
-use crate::msg::ConfigResponse;
+use crate::msg::{AllStakeResponse, ConfigResponse, StakeResponse};
 use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -220,6 +220,62 @@ impl VirtualStakingContract<'_> {
         } else {
             Ok(Response::new())
         }
+    }
+
+    /// This is only used for tests.
+    /// Ideally we want conditional compilation of these whole methods and the enum variants
+    #[sv::msg(exec)]
+    pub fn test_handle_epoch(
+        &self,
+        ctx: ExecCtx<VirtualStakeCustomQuery>,
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
+        #[cfg(any(test, feature = "mt"))]
+        {
+            let ExecCtx { mut deps, .. } = ctx;
+            let requests: Vec<(String, Uint128)> = self
+                .bond_requests
+                .range(
+                    deps.as_ref().storage,
+                    None,
+                    None,
+                    cosmwasm_std::Order::Ascending,
+                )
+                .collect::<Result<_, _>>()?;
+
+            // Save the future values
+            self.bonded.save(deps.branch().storage, &requests)?;
+            Ok(Response::new())
+        }
+        #[cfg(not(any(test, feature = "mt")))]
+        {
+            Err(ContractError::Unauthorized)
+        }
+    }
+
+    #[sv::msg(query)]
+    fn get_stake(
+        &self,
+        ctx: QueryCtx<VirtualStakeCustomQuery>,
+        validator: String,
+    ) -> Result<StakeResponse, ContractError> {
+        let bonded = self.bonded.load(ctx.deps.storage)?;
+
+        if let Some(stake) = bonded.iter().find(|&x| x.0 == validator) {
+            Ok(StakeResponse { stake: stake.1 })
+        } else {
+            Ok(StakeResponse {
+                stake: Uint128::zero(),
+            })
+        }
+    }
+
+    #[sv::msg(query)]
+    fn get_all_stake(
+        &self,
+        ctx: QueryCtx<VirtualStakeCustomQuery>,
+    ) -> Result<AllStakeResponse, ContractError> {
+        let stakes = self.bonded.load(ctx.deps.storage)?;
+        Ok(AllStakeResponse { stakes })
     }
 }
 
