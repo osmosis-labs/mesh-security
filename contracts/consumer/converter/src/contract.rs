@@ -96,7 +96,9 @@ impl ConverterContract<'_> {
             ctx.deps.api.addr_validate(admin)?;
         }
 
-        let msg = to_json_binary(&mesh_virtual_staking::contract::sv::InstantiateMsg { tombstoned_unbond_enable })?;
+        let msg = to_json_binary(&mesh_virtual_staking::contract::sv::InstantiateMsg {
+            tombstoned_unbond_enable,
+        })?;
         // Instantiate virtual staking contract
         let init_msg = WasmMsg::Instantiate {
             admin,

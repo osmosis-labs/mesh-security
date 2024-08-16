@@ -246,7 +246,7 @@ fn calculate_rebalance(
     let mut msgs = vec![];
     for (validator, prev) in current {
         let next = desired.remove(&validator).unwrap_or_else(Uint128::zero);
-        if tombstoned_list.contains(&validator) && !next.is_zero(){
+        if tombstoned_list.contains(&validator) && !next.is_zero() {
             let amount = coin(next.u128(), denom);
             msgs.push(VirtualStakeMsg::Unbond { validator, amount }.into());
             continue;
@@ -508,7 +508,14 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         // withdraw rewards
         let bonded = self.bonded.load(deps.storage)?;
         let inactive_list = self.inactive.load(deps.storage)?;
-        let withdraw = withdraw_reward_msgs(deps.branch(), &bonded, &inactive_list.iter().map(| (i, _) | i.to_string()).collect::<Vec<_>>());
+        let withdraw = withdraw_reward_msgs(
+            deps.branch(),
+            &bonded,
+            &inactive_list
+                .iter()
+                .map(|(i, _)| i.to_string())
+                .collect::<Vec<_>>(),
+        );
         let mut resp = Response::new().add_submessages(withdraw);
 
         let bond =
@@ -531,7 +538,12 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             self.adjust_slashings(deps.branch(), &mut current, &slash)?;
             // Update inactive list. Defensive, as it should already been updated in handle_valset_update, due to removals
             self.inactive.update(deps.branch().storage, |mut old| {
-                old.extend_from_slice(&slash.iter().map(|v| (v.address.clone(), v.is_tombstoned)).collect::<Vec<_>>());
+                old.extend_from_slice(
+                    &slash
+                        .iter()
+                        .map(|v| (v.address.clone(), v.is_tombstoned))
+                        .collect::<Vec<_>>(),
+                );
                 old.dedup();
                 Ok::<_, ContractError>(old)
             })?;
@@ -559,7 +571,13 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         // Force the tombstoned validator to auto unbond
         let tombstoned_list = inactive_list
             .iter()
-            .filter_map(| (val, is_tombstoned) | if *is_tombstoned { Some(val.to_string()) } else { None })
+            .filter_map(|(val, is_tombstoned)| {
+                if *is_tombstoned {
+                    Some(val.to_string())
+                } else {
+                    None
+                }
+            })
             .collect::<HashSet<_>>();
         let mut request_with_tombstoned = requests.clone();
         for (val, amount) in request_with_tombstoned.iter_mut() {
@@ -571,7 +589,8 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         }
 
         // Save the future values
-        self.bonded.save(deps.branch().storage, &request_with_tombstoned)?;
+        self.bonded
+            .save(deps.branch().storage, &request_with_tombstoned)?;
 
         // Compare these two to make bond/unbond calls as needed
         let rebalance = calculate_rebalance(current, requests, tombstoned_list, &config.denom);
@@ -620,9 +639,22 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         if !removals.is_empty() || !additions.is_empty() {
             self.inactive.update(deps.storage, |mut old| {
                 // Add removals
-                old.extend_from_slice(&tombstoned.iter().map(| t | (t.to_string(), true)).collect::<Vec<_>>());
-                let removals = removals.iter().filter(| r | !tombstoned.contains(r)).collect::<Vec<_>>();
-                old.extend_from_slice(&removals.iter().map(| r | (r.to_string(), false)).collect::<Vec<_>>());
+                old.extend_from_slice(
+                    &tombstoned
+                        .iter()
+                        .map(|t| (t.to_string(), true))
+                        .collect::<Vec<_>>(),
+                );
+                let removals = removals
+                    .iter()
+                    .filter(|r| !tombstoned.contains(r))
+                    .collect::<Vec<_>>();
+                old.extend_from_slice(
+                    &removals
+                        .iter()
+                        .map(|r| (r.to_string(), false))
+                        .collect::<Vec<_>>(),
+                );
                 // Filter additions
                 old.retain(|v| !additions.iter().any(|a| a.address == *v.0));
                 old.dedup();
@@ -1349,11 +1381,14 @@ mod tests {
 
     impl VirtualStakingExt for VirtualStakingContract<'_> {
         fn quick_inst(&self, deps: DepsMut) {
-            self.instantiate(InstantiateCtx {
-                deps,
-                env: mock_env(),
-                info: mock_info("me", &[]),
-            }, true)
+            self.instantiate(
+                InstantiateCtx {
+                    deps,
+                    env: mock_env(),
+                    info: mock_info("me", &[]),
+                },
+                true,
+            )
             .unwrap();
         }
 
