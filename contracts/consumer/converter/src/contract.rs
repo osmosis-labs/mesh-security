@@ -71,6 +71,7 @@ impl ConverterContract<'_> {
         discount: Decimal,
         remote_denom: String,
         virtual_staking_code_id: u64,
+        tombstoned_unbond_enable: bool,
         admin: Option<String>,
     ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
@@ -95,11 +96,12 @@ impl ConverterContract<'_> {
             ctx.deps.api.addr_validate(admin)?;
         }
 
+        let msg = to_json_binary(&mesh_virtual_staking::contract::sv::InstantiateMsg { tombstoned_unbond_enable })?;
         // Instantiate virtual staking contract
         let init_msg = WasmMsg::Instantiate {
             admin,
             code_id: virtual_staking_code_id,
-            msg: b"{}".into(),
+            msg,
             funds: vec![],
             label: format!("Virtual Staking: {}", &config.remote_denom),
         };

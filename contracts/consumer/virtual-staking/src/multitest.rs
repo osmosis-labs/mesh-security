@@ -59,6 +59,7 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
             discount,
             JUNO.to_owned(),
             virtual_staking_code.code_id(),
+            true,
             Some(admin.to_owned()),
         )
         .with_label("Juno Converter")

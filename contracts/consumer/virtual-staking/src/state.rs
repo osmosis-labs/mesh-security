@@ -8,4 +8,7 @@ pub struct Config {
 
     /// The address of the converter contract (that is authorized to bond/unbond and will receive rewards)
     pub converter: Addr,
+
+    /// If it enable, tombstoned validators will be unbond automatically
+    pub tombstoned_unbond_enable: bool,
 }
