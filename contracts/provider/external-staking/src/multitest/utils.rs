@@ -2,7 +2,7 @@ use cosmwasm_std::{to_json_binary, Addr, Coin};
 use cw_multi_test::{App as MtApp, AppResponse};
 use mesh_apis::{converter_api::RewardInfo, ibc::AddValidator};
 use mesh_sync::Tx;
-use mesh_vault::contract::{sv::mt::VaultContractProxy, VaultContract};
+use mesh_vault::mock::{sv::mt::VaultMockProxy, VaultMock};
 use sylvia::multitest::{App, Proxy};
 
 use crate::{
@@ -59,7 +59,7 @@ impl AppExt for App<MtApp> {
     }
 }
 
-type Vault<'app> = Proxy<'app, MtApp, VaultContract<'app>>;
+type Vault<'app> = Proxy<'app, MtApp, VaultMock<'app>>;
 type Contract<'app> = Proxy<'app, MtApp, ExternalStakingContract<'app>>;
 
 pub(crate) trait ContractExt {
