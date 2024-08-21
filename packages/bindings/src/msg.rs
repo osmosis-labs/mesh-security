@@ -90,3 +90,60 @@ impl From<VirtualStakeMsg> for CosmosMsg<VirtualStakeCustomMsg> {
 }
 
 impl CustomMsg for VirtualStakeCustomMsg {}
+
+/// A top-level Custom message for the meshsecurityprovider module.
+/// It is embedded like this to easily allow adding other variants that are custom
+/// to your chain, or other "standardized" extensions along side it.
+#[cw_serde]
+pub enum ProviderCustomMsg {
+    Provider(ProviderMsg),
+}
+
+/// Special messages to be supported by any chain that supports meshsecurityprovider
+#[cw_serde]
+pub enum ProviderMsg {
+    /// Bond will enforce the calling contract is the vault contract.
+    /// It ensures amount.denom is the native staking denom.
+    ///
+    /// If these conditions are met, it will bond amount.amount tokens
+    /// to the vault.
+    Bond { delegator: String, amount: Coin },
+    /// Unbond ensures that amount.denom is the native staking denom and
+    /// the calling contract is the vault contract.
+    ///
+    /// If these conditions are met, it will instantly unbond
+    /// amount.amount tokens from the vault contract.
+    Unbond { delegator: String, amount: Coin },
+}
+
+impl ProviderMsg {
+    pub fn bond(denom: &str, delegator: &str, amount: impl Into<Uint128>) -> ProviderMsg {
+        let coin = Coin {
+            amount: amount.into(),
+            denom: denom.into(),
+        };
+        ProviderMsg::Bond {
+            delegator: delegator.to_string(),
+            amount: coin,
+        }
+    }
+
+    pub fn unbond(denom: &str, delegator: &str, amount: impl Into<Uint128>) -> ProviderMsg {
+        let coin = Coin {
+            amount: amount.into(),
+            denom: denom.into(),
+        };
+        ProviderMsg::Unbond {
+            delegator: delegator.to_string(),
+            amount: coin,
+        }
+    }
+}
+
+impl From<ProviderMsg> for CosmosMsg<ProviderCustomMsg> {
+    fn from(msg: ProviderMsg) -> CosmosMsg<ProviderCustomMsg> {
+        CosmosMsg::Custom(ProviderCustomMsg::Provider(msg))
+    }
+}
+
+impl CustomMsg for ProviderCustomMsg {}

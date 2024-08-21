@@ -773,6 +773,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-bindings",
  "mesh-external-staking",
  "mesh-native-staking",
  "mesh-native-staking-proxy",

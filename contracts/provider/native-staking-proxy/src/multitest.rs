@@ -4,11 +4,10 @@ use cosmwasm_std::testing::mock_env;
 use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Validator};
 
 use cw_multi_test::{App as MtApp, StakingInfo};
-
 use sylvia::multitest::{App, Proxy};
 
-use mesh_vault::contract::sv::mt::VaultContractProxy;
-use mesh_vault::contract::VaultContract;
+use mesh_vault::mock::sv::mt::VaultMockProxy;
+use mesh_vault::mock::VaultMock;
 use mesh_vault::msg::LocalStakingInfo;
 
 use crate::contract;
@@ -60,8 +59,8 @@ fn setup<'app>(
     owner: &'app str,
     user: &str,
     validators: &[&str],
-) -> AnyResult<Proxy<'app, MtApp, VaultContract<'app>>> {
-    let vault_code = mesh_vault::contract::sv::mt::CodeId::store_code(app);
+) -> AnyResult<Proxy<'app, MtApp, VaultMock<'app>>> {
+    let vault_code = mesh_vault::mock::sv::mt::CodeId::store_code(app);
     let staking_code = mesh_native_staking::contract::sv::mt::CodeId::store_code(app);
     let staking_proxy_code = contract::sv::mt::CodeId::store_code(app);
 
