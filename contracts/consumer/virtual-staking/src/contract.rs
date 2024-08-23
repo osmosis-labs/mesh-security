@@ -534,10 +534,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             delegator,
             validator: validator.clone(),
         });
-        msgs.push(VirtualStakeMsg::Unbond { 
-            amount, 
-            validator,
-        });
+        msgs.push(VirtualStakeMsg::Unbond { amount, validator });
         Ok(Response::new().add_messages(msgs))
     }
 

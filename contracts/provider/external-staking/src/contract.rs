@@ -468,7 +468,7 @@ impl ExternalStakingContract<'_> {
         // Commit sub amount, saturating if slashed
         let amount = min(amount.amount, stake.stake.high());
         stake.stake.sub(amount, Uint128::zero())?;
-   
+
         let unbond = PendingUnbond {
             amount,
             release_at: env.block.time,

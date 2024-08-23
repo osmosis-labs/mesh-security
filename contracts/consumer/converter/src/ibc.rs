@@ -277,7 +277,6 @@ pub fn ibc_packet_ack(
                 inverted_amount: _,
             } = packet
             {
-
                 // execute virtual contract's internal unbond
                 let msg = virtual_staking_api::sv::ExecMsg::InternalUnbond {
                     delegator,

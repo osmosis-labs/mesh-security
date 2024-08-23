@@ -161,7 +161,8 @@ pub fn ibc_packet_receive(
             normalize_amount: _,
             inverted_amount,
         } => {
-            let evt = contract.internal_unstake(deps, env, delegator, validator, inverted_amount)?;
+            let evt =
+                contract.internal_unstake(deps, env, delegator, validator, inverted_amount)?;
             let ack = ack_success(&DistributeAck {})?;
             IbcReceiveResponse::new().set_ack(ack).add_event(evt)
         }
