@@ -273,14 +273,16 @@ pub fn ibc_packet_ack(
             if let ConsumerPacket::InternalUnstake {
                 delegator,
                 validator,
-                amount,
+                normalize_amount,
+                inverted_amount: _,
             } = packet
             {
+
                 // execute virtual contract's internal unbond
                 let msg = virtual_staking_api::sv::ExecMsg::InternalUnbond {
                     delegator,
                     validator,
-                    amount,
+                    amount: normalize_amount,
                 };
                 let msg = WasmMsg::Execute {
                     contract_addr: contract.virtual_stake.load(deps.storage)?.into(),

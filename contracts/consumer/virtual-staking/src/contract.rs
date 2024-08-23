@@ -495,7 +495,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     fn internal_unbond(
         &self,
         ctx: ExecCtx<VirtualStakeCustomQuery>,
-        _delegator: String,
+        delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
@@ -526,7 +526,19 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             )
             .collect::<Result<_, _>>()?;
         self.bonded.save(ctx.deps.storage, &requests)?;
-        Ok(Response::new())
+
+        let mut msgs: Vec<_> = vec![];
+        msgs.push(VirtualStakeMsg::UpdateDelegation {
+            amount: amount.clone(),
+            is_deduct: true,
+            delegator,
+            validator: validator.clone(),
+        });
+        msgs.push(VirtualStakeMsg::Unbond { 
+            amount, 
+            validator,
+        });
+        Ok(Response::new().add_messages(msgs))
     }
 
     // FIXME: need to handle custom message types and queries

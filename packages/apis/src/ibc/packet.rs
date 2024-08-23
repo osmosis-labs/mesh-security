@@ -120,7 +120,8 @@ pub enum ConsumerPacket {
         /// This is the local (provider-side) denom that is held in the vault.
         /// It will be converted to the consumer-side staking token in the converter with help
         /// of the price feed.
-        amount: Coin,
+        normalize_amount: Coin,
+        inverted_amount: Coin,
     },
     /// This is part of the rewards protocol
     Distribute {
