@@ -527,14 +527,15 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             .collect::<Result<_, _>>()?;
         self.bonded.save(ctx.deps.storage, &requests)?;
 
-        let mut msgs: Vec<_> = vec![];
-        msgs.push(VirtualStakeMsg::UpdateDelegation {
-            amount: amount.clone(),
-            is_deduct: true,
-            delegator,
-            validator: validator.clone(),
-        });
-        msgs.push(VirtualStakeMsg::Unbond { amount, validator });
+        let msgs = vec![
+            VirtualStakeMsg::UpdateDelegation {
+                amount: amount.clone(),
+                is_deduct: true,
+                delegator,
+                validator: validator.clone(),
+            },
+            VirtualStakeMsg::Unbond { amount, validator }
+        ];
         Ok(Response::new().add_messages(msgs))
     }
 
