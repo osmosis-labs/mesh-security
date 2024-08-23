@@ -638,6 +638,9 @@ impl ConverterApi for ConverterContract<'_> {
             .add_attribute("owner", delegator.clone());
 
         let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
+
+        // Recalculate the price when unbond
+        let amount = self.invert_price(ctx.deps.as_ref(), amount)?;
         let packet = ConsumerPacket::InternalUnstake {
             delegator,
             validator,
