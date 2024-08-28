@@ -17,10 +17,10 @@ use sylvia::multitest::{App, Proxy};
 use mesh_apis::vault_api::sv::mt::VaultApiProxy;
 use mesh_external_staking::test_methods::sv::mt::TestMethodsProxy;
 
-use crate::contract;
-use crate::contract::sv::mt::VaultContractProxy;
-use crate::contract::VaultContract;
 use crate::error::ContractError;
+use crate::mock::sv::mt::CodeId as VaultCodeId;
+use crate::mock::sv::mt::VaultMockProxy;
+use crate::mock::VaultMock;
 use crate::msg::{
     AccountResponse, AllAccountsResponseItem, AllActiveExternalStakingResponse, LienResponse,
     LocalStakingInfo, StakingInitInfo,
@@ -31,8 +31,6 @@ const STAR: &str = "star";
 
 /// 10% slashing on the remote chain
 const SLASHING_PERCENTAGE: u64 = 10;
-
-/// Test utils
 
 /// App initialization
 fn init_app(users: &[&str], amounts: &[u128]) -> App<MtApp> {
@@ -89,7 +87,7 @@ fn setup<'app>(
     slash_percent: u64,
     unbond_period: u64,
 ) -> (
-    Proxy<'app, MtApp, VaultContract<'app>>,
+    Proxy<'app, MtApp, VaultMock<'app>>,
     Proxy<'app, MtApp, NativeStakingContract<'app>>,
     Proxy<'app, MtApp, ExternalStakingContract<'app>>,
 ) {
@@ -104,7 +102,7 @@ fn setup_without_local_staking<'app>(
     slash_percent: u64,
     unbond_period: u64,
 ) -> (
-    Proxy<'app, MtApp, VaultContract<'app>>,
+    Proxy<'app, MtApp, VaultMock<'app>>,
     Proxy<'app, MtApp, ExternalStakingContract<'app>>,
 ) {
     let (vault, _, external) = setup_inner(app, owner, slash_percent, unbond_period, false);
@@ -119,11 +117,11 @@ fn setup_inner<'app>(
     unbond_period: u64,
     local_staking: bool,
 ) -> (
-    Proxy<'app, MtApp, VaultContract<'app>>,
+    Proxy<'app, MtApp, VaultMock<'app>>,
     Option<Proxy<'app, MtApp, NativeStakingContract<'app>>>,
     Proxy<'app, MtApp, ExternalStakingContract<'app>>,
 ) {
-    let vault_code = contract::sv::mt::CodeId::store_code(app);
+    let vault_code = VaultCodeId::store_code(app);
 
     let staking_init_info = if local_staking {
         let native_staking_code = mesh_native_staking::contract::sv::mt::CodeId::store_code(app);
@@ -152,7 +150,6 @@ fn setup_inner<'app>(
         .with_label("Vault")
         .call(owner)
         .unwrap();
-
     let native_staking_addr = vault.config().unwrap().local_staking.map(Addr::unchecked);
     let native_staking = native_staking_addr.map(|addr| Proxy::new(addr, app));
 
@@ -163,7 +160,7 @@ fn setup_inner<'app>(
 fn setup_cross_stake<'app>(
     app: &'app App<MtApp>,
     owner: &'app str,
-    vault: &Proxy<'app, MtApp, VaultContract<'app>>,
+    vault: &Proxy<'app, MtApp, VaultMock<'app>>,
     slash_percent: u64,
     unbond_period: u64,
 ) -> Proxy<'app, MtApp, ExternalStakingContract<'app>> {
@@ -207,7 +204,7 @@ fn set_active_validators(
 }
 
 /// Bond some tokens
-fn bond(vault: &Proxy<'_, MtApp, VaultContract<'_>>, user: &str, amount: u128) {
+fn bond(vault: &Proxy<'_, MtApp, VaultMock<'_>>, user: &str, amount: u128) {
     vault
         .bond()
         .with_funds(&coins(amount, OSMO))
@@ -216,7 +213,7 @@ fn bond(vault: &Proxy<'_, MtApp, VaultContract<'_>>, user: &str, amount: u128) {
 }
 
 fn stake_locally(
-    vault: &Proxy<'_, MtApp, VaultContract<'_>>,
+    vault: &Proxy<'_, MtApp, VaultMock<'_>>,
     user: &str,
     stake: u128,
     validator: &str,
@@ -231,7 +228,7 @@ fn stake_locally(
 }
 
 fn stake_remotely(
-    vault: &Proxy<'_, MtApp, VaultContract<'_>>,
+    vault: &Proxy<'_, MtApp, VaultMock<'_>>,
     cross_staking: &Proxy<'_, MtApp, ExternalStakingContract<'_>>,
     user: &str,
     validators: &[&str],
@@ -288,7 +285,7 @@ fn process_staking_unbondings(app: &App<MtApp>) {
 }
 
 #[track_caller]
-fn get_last_vault_pending_tx_id(contract: &Proxy<'_, MtApp, VaultContract<'_>>) -> Option<u64> {
+fn get_last_vault_pending_tx_id(contract: &Proxy<'_, MtApp, VaultMock<'_>>) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(Tx::id)
 }
