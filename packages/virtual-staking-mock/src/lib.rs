@@ -181,6 +181,9 @@ impl Module for VirtualStakingModule {
             mesh_bindings::VirtualStakeQuery::SlashRatio {} => {
                 to_json_binary(&self.slash_ratio.load(storage)?)?
             }
+            mesh_bindings::VirtualStakeQuery::TotalDelegation { contract, validator } => {
+                to_json_binary(&self.bonds.load(storage, (Addr::unchecked(&contract), Addr::unchecked(&validator)))?)?
+            }
         };
 
         Ok(to_json_binary(&result)?)

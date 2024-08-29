@@ -3,7 +3,7 @@ mod query;
 
 pub use msg::{ProviderCustomMsg, ProviderMsg, VirtualStakeCustomMsg, VirtualStakeMsg};
 pub use query::{
-    BondStatusResponse, SlashRatioResponse, TokenQuerier, VirtualStakeCustomQuery,
+    BondStatusResponse, SlashRatioResponse, TotalDelegationResponse, TokenQuerier, VirtualStakeCustomQuery,
     VirtualStakeQuery,
 };
 

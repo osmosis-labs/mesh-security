@@ -2,8 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cosmwasm_std::{
-    coin, ensure_eq, to_json_binary, Coin, CosmosMsg, CustomQuery, DepsMut, DistributionMsg, Env,
-    Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg,
+    coin, ensure_eq, to_json_binary, Coin, CosmosMsg, CustomQuery, DepsMut, DistributionMsg, Env, Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -237,7 +236,7 @@ fn pop_target(deps: DepsMut<VirtualStakeCustomQuery>) -> StdResult<(String, bool
 fn calculate_rebalance(
     current: Vec<(String, Uint128)>,
     desired: Vec<(String, Uint128)>,
-    tombstoned_list: HashSet<String>,
+    tombstoned_list: HashMap<String, Coin>,
     denom: &str,
 ) -> Vec<CosmosMsg<VirtualStakeCustomMsg>> {
     let mut desired: BTreeMap<_, _> = desired.into_iter().collect();
@@ -246,8 +245,8 @@ fn calculate_rebalance(
     let mut msgs = vec![];
     for (validator, prev) in current {
         let next = desired.remove(&validator).unwrap_or_else(Uint128::zero);
-        if tombstoned_list.contains(&validator) && !next.is_zero() {
-            let amount = coin(next.u128(), denom);
+        if tombstoned_list.contains_key(&validator) && !next.is_zero() {
+            let amount = tombstoned_list.get(&validator).unwrap().clone();
             msgs.push(VirtualStakeMsg::Unbond { validator, amount }.into());
             continue;
         }
@@ -569,19 +568,17 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         }
 
         // Force the tombstoned validator to auto unbond
-        let tombstoned_list = inactive_list
-            .iter()
-            .filter_map(|(val, is_tombstoned)| {
-                if *is_tombstoned {
-                    Some(val.to_string())
-                } else {
-                    None
-                }
-            })
-            .collect::<HashSet<_>>();
+        let mut tombstoned_list: HashMap<String, Coin> = HashMap::new();
+        for (val, is_tombstoned) in inactive_list.iter() {
+            if *is_tombstoned {
+                let resp = TokenQuerier::new(&deps.querier).total_delegations(env.contract.address.to_string(), val.to_string())?;
+                tombstoned_list.insert(val.to_string(), resp.delegation);
+            }
+        }
+
         let mut request_with_tombstoned = requests.clone();
         for (val, amount) in request_with_tombstoned.iter_mut() {
-            if tombstoned_list.contains(val) {
+            if tombstoned_list.contains_key(val) {
                 *amount = Uint128::zero();
                 // Update new value for the bond requests
                 self.bond_requests.save(deps.storage, val, amount)?;
@@ -636,7 +633,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
 
         // Update inactive list.
         // We ignore `unjailed` as it's not clear they make the validator active again or not.
-        if !removals.is_empty() || !additions.is_empty() {
+        if !removals.is_empty() || !additions.is_empty() || !tombstoned.is_empty() {
             self.inactive.update(deps.storage, |mut old| {
                 // Add removals
                 old.extend_from_slice(
@@ -645,10 +642,6 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
                         .map(|t| (t.to_string(), true))
                         .collect::<Vec<_>>(),
                 );
-                let removals = removals
-                    .iter()
-                    .filter(|r| !tombstoned.contains(r))
-                    .collect::<Vec<_>>();
                 old.extend_from_slice(
                     &removals
                         .iter()
@@ -705,7 +698,7 @@ mod tests {
         testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
         Decimal,
     };
-    use mesh_bindings::{BondStatusResponse, SlashRatioResponse};
+    use mesh_bindings::{BondStatusResponse, SlashRatioResponse, TotalDelegationResponse};
 
     use super::*;
 
@@ -1273,6 +1266,9 @@ mod tests {
             slash_fraction_downtime: "0.1".to_string(),
             slash_fraction_double_sign: "0.25".to_string(),
         });
+        let total_delegation = MockTotalDelegation::new(TotalDelegationResponse {
+            delegation: coin(0, "DOES NOT MATTER"),
+        });
 
         let handler = {
             let bs_copy = bond_status.clone();
@@ -1287,6 +1283,11 @@ mod tests {
                     mesh_bindings::VirtualStakeQuery::SlashRatio {} => {
                         cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
                             to_json_binary(&*slash_ratio.borrow()).unwrap(),
+                        ))
+                    }
+                    mesh_bindings::VirtualStakeQuery::TotalDelegation { .. } => {
+                        cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
+                            to_json_binary(&*total_delegation.borrow()).unwrap(),
                         ))
                     }
                 }
@@ -1338,6 +1339,21 @@ mod tests {
             self.0.borrow()
         }
     }
+
+
+    #[derive(Clone)]
+    struct MockTotalDelegation(Rc<RefCell<TotalDelegationResponse>>);
+
+    impl MockTotalDelegation {
+        fn new(res: TotalDelegationResponse) -> Self {
+            Self(Rc::new(RefCell::new(res)))
+        }
+
+        fn borrow(&self) -> Ref<'_, TotalDelegationResponse> {
+            self.0.borrow()
+        }
+    }
+
 
     fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
         REWARD_TARGETS
@@ -1546,7 +1562,7 @@ mod tests {
             self.handle_valset_update(
                 deps,
                 None,
-                Some(vec![val.to_string()]),
+                None,
                 None,
                 None,
                 None,

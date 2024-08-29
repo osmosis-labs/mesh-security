@@ -21,6 +21,10 @@ pub enum VirtualStakeQuery {
     /// Returns the blockchain's slashing ratios.
     #[returns(SlashRatioResponse)]
     SlashRatio {},
+
+    /// Returns total delegations of the give validator
+    #[returns(TotalDelegationResponse)]
+    TotalDelegation { contract: String, validator: String },
 }
 
 /// Bookkeeping info in the virtual staking sdk module
@@ -40,6 +44,11 @@ pub struct SlashRatioResponse {
     pub slash_fraction_downtime: String,
     /// Slash ratio due to double signing. Applied when a validator is permanently jailed (tombstoned).
     pub slash_fraction_double_sign: String,
+}
+
+#[cw_serde]
+pub struct TotalDelegationResponse {
+    pub delegation: Coin
 }
 
 impl CustomQuery for VirtualStakeCustomQuery {}
@@ -69,4 +78,9 @@ impl<'a> TokenQuerier<'a> {
         let slash_ratio_query = VirtualStakeQuery::SlashRatio {};
         self.querier.query(&slash_ratio_query.into())
     }
+
+    pub fn total_delegations(&self, contract: String, validator: String) -> StdResult<TotalDelegationResponse> {
+        let total_delegations_query = VirtualStakeQuery::TotalDelegation { contract, validator };
+        self.querier.query(&total_delegations_query.into())
+    }    
 }
