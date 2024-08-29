@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 use mesh_apis::converter_api::{RewardInfo, ValidatorSlashInfo};
 use sylvia::contract;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 
 use mesh_apis::cross_staking_api::{self};
 use mesh_apis::ibc::{AddValidator, ProviderPacket};
@@ -65,6 +65,7 @@ impl Default for ExternalStakingContract<'_> {
 #[sv::error(ContractError)]
 #[sv::messages(cross_staking_api as CrossStakingApi)]
 #[sv::messages(crate::test_methods as TestMethods)]
+
 impl ExternalStakingContract<'_> {
     pub fn new() -> Self {
         Self {
@@ -796,6 +797,24 @@ impl ExternalStakingContract<'_> {
         {
             let _ = send_msg;
         }
+
+        Ok(resp)
+    }
+
+    // sudo msg for tombstone from mesh-security-sdk
+    #[sv::msg(sudo)]
+    pub fn tombstone(&self, ctx: SudoCtx, valoper: String, height: u64, time: u64) -> Result<Response, ContractError>{
+        let cfg = self.config.load(ctx.deps.storage)?;
+        self.val_set.tombstone_validator(ctx.deps.storage, valoper.as_str(), height, time)?;
+        let max_time = ctx.env
+            .block
+            .time
+            .seconds()
+            .saturating_sub(cfg.unbonding_period);
+        // Maintain
+        self.val_set.drain_older(ctx.deps.storage, &valoper, max_time)?;
+        let resp = Response::new()
+            .add_attribute("tombstoned", valoper);
 
         Ok(resp)
     }

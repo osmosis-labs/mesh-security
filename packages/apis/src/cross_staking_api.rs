@@ -46,6 +46,7 @@ pub trait CrossStakingApi {
     /// Returns the maximum percentage that can be slashed
     #[sv::msg(query)]
     fn max_slash(&self, ctx: QueryCtx) -> Result<SlashRatioResponse, Self::Error>;
+
 }
 
 #[cw_serde]
