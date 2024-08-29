@@ -48,7 +48,7 @@ pub struct SlashRatioResponse {
 
 #[cw_serde]
 pub struct TotalDelegationResponse {
-    pub delegation: Coin
+    pub delegation: Coin,
 }
 
 impl CustomQuery for VirtualStakeCustomQuery {}
@@ -79,8 +79,15 @@ impl<'a> TokenQuerier<'a> {
         self.querier.query(&slash_ratio_query.into())
     }
 
-    pub fn total_delegations(&self, contract: String, validator: String) -> StdResult<TotalDelegationResponse> {
-        let total_delegations_query = VirtualStakeQuery::TotalDelegation { contract, validator };
+    pub fn total_delegations(
+        &self,
+        contract: String,
+        validator: String,
+    ) -> StdResult<TotalDelegationResponse> {
+        let total_delegations_query = VirtualStakeQuery::TotalDelegation {
+            contract,
+            validator,
+        };
         self.querier.query(&total_delegations_query.into())
-    }    
+    }
 }

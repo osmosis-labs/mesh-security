@@ -2,7 +2,8 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cosmwasm_std::{
-    coin, ensure_eq, to_json_binary, Coin, CosmosMsg, CustomQuery, DepsMut, DistributionMsg, Env, Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg
+    coin, ensure_eq, to_json_binary, Coin, CosmosMsg, CustomQuery, DepsMut, DistributionMsg, Env,
+    Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -571,7 +572,8 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         let mut tombstoned_list: HashMap<String, Coin> = HashMap::new();
         for (val, is_tombstoned) in inactive_list.iter() {
             if *is_tombstoned {
-                let resp = TokenQuerier::new(&deps.querier).total_delegations(env.contract.address.to_string(), val.to_string())?;
+                let resp = TokenQuerier::new(&deps.querier)
+                    .total_delegations(env.contract.address.to_string(), val.to_string())?;
                 tombstoned_list.insert(val.to_string(), resp.delegation);
             }
         }
@@ -1340,7 +1342,6 @@ mod tests {
         }
     }
 
-
     #[derive(Clone)]
     struct MockTotalDelegation(Rc<RefCell<TotalDelegationResponse>>);
 
@@ -1353,7 +1354,6 @@ mod tests {
             self.0.borrow()
         }
     }
-
 
     fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
         REWARD_TARGETS
