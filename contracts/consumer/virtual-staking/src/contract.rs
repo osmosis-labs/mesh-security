@@ -248,7 +248,9 @@ fn calculate_rebalance(
         let next = desired.remove(&validator).unwrap_or_else(Uint128::zero);
         if tombstoned_list.contains_key(&validator) && !next.is_zero() {
             let amount = tombstoned_list.get(&validator).unwrap().clone();
-            msgs.push(VirtualStakeMsg::Unbond { validator, amount }.into());
+            if !amount.amount.is_zero() {
+                msgs.push(VirtualStakeMsg::Unbond { validator, amount }.into());
+            }
             continue;
         }
         match next.cmp(&prev) {
