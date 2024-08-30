@@ -294,7 +294,11 @@ impl NativeStakingProxyContract<'_> {
             ContractError::InvalidDenom(amount.denom)
         );
 
-        let msg = ProviderMsg::Unstake { delegator: ctx.info.sender.to_string(), validator, amount };
+        let msg = ProviderMsg::Unstake {
+            delegator: ctx.info.sender.to_string(),
+            validator,
+            amount,
+        };
         Ok(Response::new().add_message(msg))
     }
 

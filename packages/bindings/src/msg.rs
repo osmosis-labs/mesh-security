@@ -92,7 +92,11 @@ pub enum ProviderMsg {
     ///
     /// If these conditions are met, it will instantly unstake
     /// amount.amount tokens from the native staking proxy contract.
-    Unstake { delegator: String, validator: String, amount: Coin },
+    Unstake {
+        delegator: String,
+        validator: String,
+        amount: Coin,
+    },
 }
 
 impl ProviderMsg {
@@ -118,7 +122,12 @@ impl ProviderMsg {
         }
     }
 
-    pub fn unstake(denom: &str, delegator:&str, validator: &str, amount: impl Into<Uint128>) -> ProviderMsg {
+    pub fn unstake(
+        denom: &str,
+        delegator: &str,
+        validator: &str,
+        amount: impl Into<Uint128>,
+    ) -> ProviderMsg {
         let coin = Coin {
             amount: amount.into(),
             denom: denom.into(),
