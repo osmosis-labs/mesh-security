@@ -3,22 +3,21 @@ mod utils;
 use anyhow::Result as AnyResult;
 
 use cosmwasm_std::{coin, coins, to_json_binary, Decimal, Uint128};
+use cw_multi_test::App as MtApp;
 use mesh_native_staking::contract::sv::mt::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::sv::InstantiateMsg as NativeStakingInstantiateMsg;
-use mesh_native_staking_proxy::contract::sv::mt::CodeId as NativeStakingProxyCodeId;
-use mesh_vault::contract::sv::mt::CodeId as VaultCodeId;
-use mesh_vault::contract::VaultContract;
+use mesh_native_staking_proxy::mock::sv::mt::CodeId as NativeStakingProxyCodeId;
+use mesh_vault::mock::sv::mt::{CodeId as VaultCodeId, VaultMockProxy};
+use mesh_vault::mock::VaultMock;
 use mesh_vault::msg::{LocalStakingInfo, StakingInitInfo};
 
 use mesh_sync::ValueRange;
 
-use cw_multi_test::App as MtApp;
 use sylvia::multitest::{App, Proxy};
 
 use crate::contract::sv::mt::ExternalStakingContractProxy;
 use crate::test_methods::sv::mt::TestMethodsProxy;
 use mesh_apis::cross_staking_api::sv::mt::CrossStakingApiProxy;
-use mesh_vault::contract::sv::mt::VaultContractProxy;
 
 use crate::contract::sv::mt::CodeId;
 use crate::contract::ExternalStakingContract;
@@ -47,7 +46,7 @@ fn setup<'app>(
     owner: &'app str,
     unbond_period: u64,
 ) -> AnyResult<(
-    Proxy<'app, MtApp, VaultContract<'app>>,
+    Proxy<'app, MtApp, VaultMock<'app>>,
     Proxy<'app, MtApp, ExternalStakingContract<'app>>,
 )> {
     let native_staking_proxy_code = NativeStakingProxyCodeId::store_code(app);

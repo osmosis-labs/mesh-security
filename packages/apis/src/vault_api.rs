@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_json_binary, Addr, Coin, Response, StdError, Uint128, WasmMsg};
+use cosmwasm_std::{to_json_binary, Addr, Coin, CustomMsg, Response, StdError, Uint128, WasmMsg};
 use sylvia::types::ExecCtx;
 use sylvia::{interface, schemars};
 
@@ -8,6 +8,7 @@ use sylvia::{interface, schemars};
 #[interface]
 pub trait VaultApi {
     type Error: From<StdError>;
+    type ExecC: CustomMsg;
 
     /// This must be called by the remote staking contract to release this claim
     #[sv::msg(exec)]
@@ -18,7 +19,7 @@ pub trait VaultApi {
         owner: String,
         // amount to unstake on that contract
         amount: Coin,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// This must be called by the local staking contract to release this claim
     /// Amount of tokens unstaked are those included in ctx.info.funds
@@ -28,17 +29,17 @@ pub trait VaultApi {
         ctx: ExecCtx,
         // address of the user who originally called stake_remote
         owner: String,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// This must be called by the remote staking contract to commit the remote staking call on success.
     /// Transaction ID is used to identify the original (vault contract originated) transaction.
     #[sv::msg(exec)]
-    fn commit_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
+    fn commit_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// This must be called by the remote staking contract to rollback the remote staking call on failure.
     /// Transaction ID is used to identify the original (vault contract originated) transaction.
     #[sv::msg(exec)]
-    fn rollback_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response, Self::Error>;
+    fn rollback_tx(&self, ctx: ExecCtx, tx_id: u64) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// This must be called by the native staking contract to process a slashing event
     /// because of a misbehaviour on the Provider chain.
@@ -50,7 +51,7 @@ pub trait VaultApi {
         ctx: ExecCtx,
         slashes: Vec<SlashInfo>,
         validator: String,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// This must be called by the external staking contract to process a slashing event
     /// because of a misbehaviour on the Consumer chain.
@@ -62,7 +63,7 @@ pub trait VaultApi {
         ctx: ExecCtx,
         slashes: Vec<SlashInfo>,
         validator: String,
-    ) -> Result<Response, Self::Error>;
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
 }
 
 #[cw_serde]

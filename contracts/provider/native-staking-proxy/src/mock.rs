@@ -7,7 +7,6 @@ use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
 use cw_utils::{must_pay, nonpayable};
-use mesh_bindings::{ProviderCustomMsg, ProviderMsg};
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
@@ -19,16 +18,14 @@ use crate::state::Config;
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub struct NativeStakingProxyContract<'a> {
+pub struct NativeStakingProxyMock<'a> {
     config: Item<'a, Config>,
     burned: Item<'a, u128>,
 }
 
-#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[sv::error(ContractError)]
-#[sv::custom(msg=ProviderCustomMsg)]
-impl NativeStakingProxyContract<'_> {
+impl NativeStakingProxyMock<'_> {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -45,7 +42,7 @@ impl NativeStakingProxyContract<'_> {
         denom: String,
         owner: String,
         validator: String,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         let config = Config {
             denom,
             parent: ctx.info.sender.clone(),
@@ -78,11 +75,7 @@ impl NativeStakingProxyContract<'_> {
     /// Stakes the tokens from `info.funds` to the given validator.
     /// Can only be called by the parent contract
     #[sv::msg(exec)]
-    fn stake(
-        &self,
-        ctx: ExecCtx,
-        validator: String,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    fn stake(&self, ctx: ExecCtx, validator: String) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
 
@@ -103,7 +96,7 @@ impl NativeStakingProxyContract<'_> {
         ctx: ExecCtx,
         validator: Option<String>,
         amount: Coin,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.parent, ctx.info.sender, ContractError::Unauthorized {});
 
@@ -192,7 +185,7 @@ impl NativeStakingProxyContract<'_> {
         src_validator: String,
         dst_validator: String,
         amount: Coin,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
@@ -219,7 +212,7 @@ impl NativeStakingProxyContract<'_> {
         ctx: ExecCtx,
         proposal_id: u64,
         vote: VoteOption,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
@@ -236,7 +229,7 @@ impl NativeStakingProxyContract<'_> {
         ctx: ExecCtx,
         proposal_id: u64,
         vote: Vec<WeightedVoteOption>,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
@@ -253,7 +246,7 @@ impl NativeStakingProxyContract<'_> {
     /// send the tokens to the caller.
     /// NOTE: must make sure not to release unbonded tokens
     #[sv::msg(exec)]
-    fn withdraw_rewards(&self, ctx: ExecCtx) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    fn withdraw_rewards(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
@@ -282,7 +275,7 @@ impl NativeStakingProxyContract<'_> {
         ctx: ExecCtx,
         validator: String,
         amount: Coin,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
@@ -294,11 +287,7 @@ impl NativeStakingProxyContract<'_> {
             ContractError::InvalidDenom(amount.denom)
         );
 
-        let msg = ProviderMsg::Unstake {
-            delegator: ctx.info.sender.to_string(),
-            validator,
-            amount,
-        };
+        let msg = StakingMsg::Undelegate { validator, amount };
         Ok(Response::new().add_message(msg))
     }
 
@@ -306,7 +295,7 @@ impl NativeStakingProxyContract<'_> {
     /// This will go back to the parent via `release_proxy_stake`.
     /// Errors if the proxy doesn't have any liquid tokens
     #[sv::msg(exec)]
-    fn release_unbonded(&self, ctx: ExecCtx) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    fn release_unbonded(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let cfg = self.config.load(ctx.deps.storage)?;
         ensure_eq!(cfg.owner, ctx.info.sender, ContractError::Unauthorized {});
 
@@ -361,8 +350,8 @@ mod tests {
     static OWNER: &str = "user";
     static VALIDATOR: &str = "validator";
 
-    fn do_instantiate(deps: DepsMut) -> (ExecCtx, NativeStakingProxyContract) {
-        let contract = NativeStakingProxyContract::new();
+    fn do_instantiate(deps: DepsMut) -> (ExecCtx, NativeStakingProxyMock) {
+        let contract = NativeStakingProxyMock::new();
         let mut ctx = InstantiateCtx {
             deps,
             env: mock_env(),
@@ -388,7 +377,7 @@ mod tests {
     #[test]
     fn instantiating() {
         let mut deps = mock_dependencies();
-        let contract = NativeStakingProxyContract::new();
+        let contract = NativeStakingProxyMock::new();
         let mut ctx = InstantiateCtx {
             deps: deps.as_mut(),
             env: mock_env(),

@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    coin, ensure, to_json_binary, Addr, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply,
+    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Empty, Fraction, Order, Reply,
     Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -12,13 +12,14 @@ use mesh_apis::local_staking_api::{
     sv::LocalStakingApiQueryMsg, LocalStakingApiHelper, SlashRatioResponse,
 };
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
-use mesh_bindings::{ProviderCustomMsg, ProviderMsg};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
-
 use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
+use crate::contract::{
+    CONTRACT_NAME, CONTRACT_VERSION, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, REPLY_ID_INSTANTIATE,
+};
 use crate::error::ContractError;
 use crate::msg::{
     AccountClaimsResponse, AccountDetailsResponse, AccountResponse, AllAccountsResponse,
@@ -28,49 +29,29 @@ use crate::msg::{
 use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
 
-pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
-pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-pub const REPLY_ID_INSTANTIATE: u64 = 1;
-
-pub const DEFAULT_PAGE_LIMIT: u32 = 10;
-pub const MAX_PAGE_LIMIT: u32 = 30;
-
-/// Aligns pagination limit
 fn clamp_page_limit(limit: Option<u32>) -> usize {
     limit.unwrap_or(DEFAULT_PAGE_LIMIT).max(MAX_PAGE_LIMIT) as usize
 }
 
-/// Default falseness for serde
 fn def_false() -> bool {
     false
 }
 
-pub struct VaultContract<'a> {
-    /// General contract configuration
+/// This is a stub implementation of the virtual staking contract, for test purposes only.
+pub struct VaultMock<'a> {
     pub config: Item<'a, Config>,
-    /// Local staking info
     pub local_staking: Item<'a, Option<LocalStaking>>,
-    /// All liens in the protocol
-    ///
-    /// Liens are indexed with (user, lien_holder), as this pair has to be unique
     pub liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
-    /// Per-user information
     pub users: Map<'a, &'a Addr, UserInfo>,
-    /// All active external staking contracts in use by this vault
     pub active_external: Map<'a, &'a Addr, ()>,
-    /// Pending txs information
     pub tx_count: Item<'a, u64>,
     pub pending: Txs<'a>,
 }
 
-#[cfg_attr(not(feature = "library"), sylvia::entry_points)]
 #[contract]
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
-/// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
-#[sv::custom(msg=ProviderCustomMsg)]
-impl VaultContract<'_> {
+impl VaultMock<'_> {
     pub fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -95,7 +76,7 @@ impl VaultContract<'_> {
         ctx: InstantiateCtx,
         denom: String,
         local_staking: Option<LocalStakingInfo>,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = Config { denom };
@@ -123,7 +104,6 @@ impl VaultContract<'_> {
                     Ok(Response::new())
                 }
                 LocalStakingInfo::New(local_staking) => {
-                    // instantiate local_staking and handle reply
                     let msg = WasmMsg::Instantiate {
                         admin: local_staking.admin,
                         code_id: local_staking.code_id,
@@ -144,45 +124,31 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(exec)]
-    fn bond(
-        &self,
-        ctx: ExecCtx,
-        amount: Coin,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
-        nonpayable(&ctx.info)?;
-
+    fn bond(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let denom = self.config.load(ctx.deps.storage)?.denom;
-        ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
+        let amount = must_pay(&ctx.info, &denom)?;
 
         let mut user = self
             .users
             .may_load(ctx.deps.storage, &ctx.info.sender)?
             .unwrap_or_default();
-        user.collateral += amount.amount;
+        user.collateral += amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
-        let amt = amount.amount;
-        let msg = ProviderMsg::Bond {
-            delegator: ctx.info.sender.clone().into_string(),
-            amount,
-        };
+
         let resp = Response::new()
-            .add_message(msg)
-            .add_attribute("action", "unbond")
+            .add_attribute("action", "bond")
             .add_attribute("sender", ctx.info.sender)
-            .add_attribute("amount", amt.to_string());
+            .add_attribute("amount", amount.to_string());
 
         Ok(resp)
     }
 
     #[sv::msg(exec)]
-    fn unbond(
-        &self,
-        ctx: ExecCtx,
-        amount: Coin,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    fn unbond(&self, ctx: ExecCtx, amount: Coin) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
+
         ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
 
         let mut user = self
@@ -198,73 +164,19 @@ impl VaultContract<'_> {
 
         user.collateral -= amount.amount;
         self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
-        let amt = amount.amount;
-        let msg = ProviderMsg::Unbond {
-            delegator: ctx.info.sender.clone().into_string(),
-            amount,
+
+        let msg = BankMsg::Send {
+            to_address: ctx.info.sender.to_string(),
+            amount: vec![amount.clone()],
         };
+
         let resp = Response::new()
             .add_message(msg)
             .add_attribute("action", "unbond")
             .add_attribute("sender", ctx.info.sender)
-            .add_attribute("amount", amt.to_string());
+            .add_attribute("amount", amount.to_string());
 
         Ok(resp)
-    }
-
-    #[sv::msg(exec)]
-    fn restake(
-        &self,
-        mut ctx: ExecCtx,
-        amount: Coin,
-        validator: String,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
-        nonpayable(&ctx.info)?;
-
-        let denom = self.config.load(ctx.deps.storage)?.denom;
-        ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
-
-        let mut user = self
-            .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
-            .unwrap_or_default();
-        user.collateral += amount.amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
-
-        let amt = amount.amount;
-        let mut resp = Response::new()
-            .add_attribute("action", "restake")
-            .add_attribute("sender", ctx.info.sender.clone().into_string())
-            .add_attribute("amount", amt.to_string());
-        let restake_msg = ProviderMsg::Restake {
-            delegator: ctx.info.sender.clone().into_string(),
-            validator: validator.clone(),
-            amount: amount.clone(),
-        };
-        resp = resp.add_message(restake_msg);
-
-        let config = self.config.load(ctx.deps.storage)?;
-        if let Some(local_staking) = self.local_staking.load(ctx.deps.storage)? {
-            self.stake(
-                &mut ctx,
-                &config,
-                &local_staking.contract.0,
-                local_staking.max_slash,
-                amount.clone(),
-                false,
-            )?;
-
-            let stake_msg = local_staking.contract.receive_stake(
-                ctx.info.sender.to_string(),
-                to_json_binary(&mesh_native_staking::msg::StakeMsg { validator }).unwrap(),
-                vec![amount],
-            )?;
-
-            resp = resp.add_message(stake_msg);
-            Ok(resp)
-        } else {
-            Err(ContractError::NoLocalStaking)
-        }
     }
 
     /// This assigns a claim of amount tokens to the remote contract, which can take some action with it
@@ -278,7 +190,7 @@ impl VaultContract<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -325,7 +237,7 @@ impl VaultContract<'_> {
         amount: Coin,
         // action to take with that stake
         msg: Binary,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         let config = self.config.load(ctx.deps.storage)?;
@@ -532,9 +444,6 @@ impl VaultContract<'_> {
         Ok(resp)
     }
 
-    /// Queries for all pending txs.
-    /// Reports txs in descending order (newest first).
-    /// `start_after` is the last tx id included in previous page
     #[sv::msg(query)]
     fn all_pending_txs_desc(
         &self,
@@ -562,11 +471,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(
-        &self,
-        ctx: ReplyCtx,
-        reply: Reply,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
         match reply.id {
             REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
             _ => Err(ContractError::InvalidReplyId(reply.id)),
@@ -577,7 +482,7 @@ impl VaultContract<'_> {
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+    ) -> Result<Response, ContractError> {
         let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let local_staking = Addr::unchecked(init_data.contract_address);
 
@@ -599,17 +504,7 @@ impl VaultContract<'_> {
         Ok(Response::new())
     }
 
-    /// Updates the local stake for staking on any contract
-    ///
-    /// Stake (both local and remote) is always called by the tokens owner, so the `sender` is
-    /// ued as an owner address.
-    ///
-    /// Config is taken in argument as it sometimes is used outside of this function, so
-    /// we want to avoid double-fetching it
-    ///
-    /// Remote indicates if the stake is remote or local. Remote staking involves transaction
-    /// processing.
-    fn stake(
+    pub fn stake(
         &self,
         ctx: &mut ExecCtx,
         config: &Config,
@@ -1049,15 +944,15 @@ impl VaultContract<'_> {
     }
 }
 
-impl Default for VaultContract<'_> {
+impl Default for VaultMock<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl VaultApi for VaultContract<'_> {
+impl VaultApi for VaultMock<'_> {
     type Error = ContractError;
-    type ExecC = ProviderCustomMsg;
+    type ExecC = Empty;
 
     /// This must be called by the remote staking contract to release this claim
     fn release_cross_stake(

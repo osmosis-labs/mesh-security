@@ -6,12 +6,12 @@ use cw_multi_test::{App as MtApp, StakingInfo};
 use sylvia::multitest::{App, Proxy};
 
 use mesh_apis::local_staking_api::sv::mt::LocalStakingApiProxy;
-use mesh_native_staking_proxy::contract::sv::mt::{
-    CodeId as NativeStakingProxyCodeId, NativeStakingProxyContractProxy,
+use mesh_native_staking_proxy::mock::sv::mt::{
+    CodeId as NativeStakingProxyCodeId, NativeStakingProxyMockProxy,
 };
-use mesh_native_staking_proxy::contract::NativeStakingProxyContract;
+use mesh_native_staking_proxy::mock::NativeStakingProxyMock;
 use mesh_sync::ValueRange;
-use mesh_vault::contract::sv::mt::VaultContractProxy;
+use mesh_vault::mock::sv::mt::VaultMockProxy;
 use mesh_vault::msg::LocalStakingInfo;
 
 use crate::contract;
@@ -256,7 +256,7 @@ fn releasing_proxy_stake() {
     let app = app(&[(user, (300, OSMO))], &[validator]);
 
     // Contracts setup
-    let vault_code = mesh_vault::contract::sv::mt::CodeId::store_code(&app);
+    let vault_code = mesh_vault::mock::sv::mt::CodeId::store_code(&app);
     let staking_code = contract::sv::mt::CodeId::store_code(&app);
     let staking_proxy_code = NativeStakingProxyCodeId::store_code(&app);
 
@@ -291,7 +291,7 @@ fn releasing_proxy_stake() {
     );
 
     // Access staking instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // User bonds some funds to the vault
