@@ -2615,4 +2615,13 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn convert_str_decimal() {
+        let slash_ratio = match String::from("0.100000000000000000").parse::<Decimal>() {
+            Ok(ratio) => ratio,
+            Err(err) => panic!("err: {}", err),
+        };
+        println!("slash_ratio: {:#?}", slash_ratio);
+    }
 }

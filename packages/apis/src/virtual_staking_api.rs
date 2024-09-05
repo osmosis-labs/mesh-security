@@ -116,4 +116,6 @@ pub struct ValidatorSlash {
     /// The (nominal) slash ratio for the validator.
     /// Useful in case we don't know if it's a double sign or downtime slash.
     pub slash_ratio: String,
+    /// Validator is tombstoned or not.
+    pub is_tombstoned: bool,
 }
