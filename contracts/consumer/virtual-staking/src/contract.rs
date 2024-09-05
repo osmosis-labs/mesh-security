@@ -544,7 +544,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
                 delegator,
                 validator: validator.clone(),
             },
-            VirtualStakeMsg::Unbond { amount, validator }
+            VirtualStakeMsg::Unbond { amount, validator },
         ];
         Ok(Response::new().add_messages(msgs))
     }
@@ -595,7 +595,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             let all_delegations = TokenQuerier::new(&deps.querier)
                 .all_delegations(env.contract.address.to_string(), config.max_retrieve)?;
             if all_delegations.delegations.len() == 0 {
-                return Ok(resp.add_message(VirtualStakeMsg::DeleteAllScheduledTasks{}));
+                return Ok(resp.add_message(VirtualStakeMsg::DeleteAllScheduledTasks {}));
             }
             let mut msgs = vec![];
             for delegation in all_delegations.delegations {

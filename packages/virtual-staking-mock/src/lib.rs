@@ -136,7 +136,9 @@ impl Module for VirtualStakingModule {
                 }
             }
             mesh_bindings::VirtualStakeMsg::UpdateDelegation { .. } => Ok(AppResponse::default()),
-            mesh_bindings::VirtualStakeMsg::DeleteAllScheduledTasks {  } => Ok(AppResponse::default()),
+            mesh_bindings::VirtualStakeMsg::DeleteAllScheduledTasks { .. } => {
+                Ok(AppResponse::default())
+            }
         }
     }
 

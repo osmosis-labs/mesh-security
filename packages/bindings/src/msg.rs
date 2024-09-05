@@ -39,7 +39,7 @@ pub enum VirtualStakeMsg {
         validator: String,
     },
     /// Delete all scheduled tasks after zero max cap and unbond all delegations
-    DeleteAllScheduledTasks {}
+    DeleteAllScheduledTasks {},
 }
 
 impl VirtualStakeMsg {
