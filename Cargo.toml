@@ -18,7 +18,6 @@ mesh-apis = { path = "./packages/apis" }
 mesh-bindings = { path = "./packages/bindings" }
 mesh-burn = { path = "./packages/burn" }
 mesh-sync = { path = "./packages/sync" }
-mesh-virtual-staking-mock = { path = "./packages/virtual-staking-mock" }
 
 mesh-vault = { path = "./contracts/provider/vault" }
 mesh-external-staking = { path = "./contracts/provider/external-staking" }
