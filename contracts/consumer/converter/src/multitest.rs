@@ -63,6 +63,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
             JUNO.to_owned(),
             virtual_staking_code.code_id(),
             Some(admin.to_owned()),
+            50,
         )
         .with_label("Juno Converter")
         .with_admin(admin)
@@ -172,17 +173,17 @@ fn ibc_stake_and_unstake() {
 
     // let's stake some
     converter
-        .test_stake(val1.to_string(), coin(1000, JUNO))
+        .test_stake(owner.to_string(), val1.to_string(), coin(1000, JUNO))
         .call(owner)
         .unwrap();
     converter
-        .test_stake(val2.to_string(), coin(4000, JUNO))
+        .test_stake(owner.to_string(), val2.to_string(), coin(4000, JUNO))
         .call(owner)
         .unwrap();
 
     // and unstake some
     converter
-        .test_unstake(val2.to_string(), coin(2000, JUNO))
+        .test_unstake(owner.to_string(), val2.to_string(), coin(2000, JUNO))
         .call(owner)
         .unwrap();
 
@@ -258,11 +259,11 @@ fn ibc_stake_and_burn() {
 
     // let's stake some
     converter
-        .test_stake(val1.to_string(), coin(1000, JUNO))
+        .test_stake(owner.to_string(), val1.to_string(), coin(1000, JUNO))
         .call(owner)
         .unwrap();
     converter
-        .test_stake(val2.to_string(), coin(4000, JUNO))
+        .test_stake(owner.to_string(), val2.to_string(), coin(4000, JUNO))
         .call(owner)
         .unwrap();
 
