@@ -678,6 +678,7 @@ dependencies = [
  "cw2",
  "derivative",
  "mesh-apis",
+ "mesh-bindings",
  "mesh-burn",
  "mesh-native-staking",
  "mesh-vault",
