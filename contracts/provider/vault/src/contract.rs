@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply, Response,
-    StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coin, ensure, to_json_binary, Addr, Binary, Coin, Decimal, DepsMut, Fraction, Order, Reply,
+    Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -210,6 +210,61 @@ impl VaultContract<'_> {
             .add_attribute("amount", amt.to_string());
 
         Ok(resp)
+    }
+
+    #[sv::msg(exec)]
+    fn restake(
+        &self,
+        mut ctx: ExecCtx,
+        amount: Coin,
+        validator: String,
+    ) -> Result<Response<ProviderCustomMsg>, ContractError> {
+        nonpayable(&ctx.info)?;
+
+        let denom = self.config.load(ctx.deps.storage)?.denom;
+        ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
+
+        let mut user = self
+            .users
+            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .unwrap_or_default();
+        user.collateral += amount.amount;
+        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+
+        let amt = amount.amount;
+        let mut resp = Response::new()
+            .add_attribute("action", "restake")
+            .add_attribute("sender", ctx.info.sender.clone().into_string())
+            .add_attribute("amount", amt.to_string());
+        let restake_msg = ProviderMsg::Restake {
+            delegator: ctx.info.sender.clone().into_string(),
+            validator: validator.clone(),
+            amount: amount.clone(),
+        };
+        resp = resp.add_message(restake_msg);
+
+        let config = self.config.load(ctx.deps.storage)?;
+        if let Some(local_staking) = self.local_staking.load(ctx.deps.storage)? {
+            self.stake(
+                &mut ctx,
+                &config,
+                &local_staking.contract.0,
+                local_staking.max_slash,
+                amount.clone(),
+                false,
+            )?;
+
+            let stake_msg = local_staking.contract.receive_stake(
+                ctx.info.sender.to_string(),
+                to_json_binary(&mesh_native_staking::msg::StakeMsg { validator }).unwrap(),
+                vec![amount],
+            )?;
+
+            resp = resp.add_message(stake_msg);
+            Ok(resp)
+        } else {
+            Err(ContractError::NoLocalStaking)
+        }
     }
 
     /// This assigns a claim of amount tokens to the remote contract, which can take some action with it

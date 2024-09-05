@@ -130,6 +130,16 @@ pub enum ProviderMsg {
         validator: String,
         amount: Coin,
     },
+    /// Restake ensures that amount.denom is the native staking denom and
+    /// the calling contract is the native staking proxy contract.
+    ///
+    /// If these conditions are met, it will instantly restake
+    /// amount.amount tokens from staking module to local staking contract.
+    Restake {
+        delegator: String,
+        validator: String,
+        amount: Coin,
+    },
 }
 
 impl ProviderMsg {
@@ -166,6 +176,23 @@ impl ProviderMsg {
             denom: denom.into(),
         };
         ProviderMsg::Unstake {
+            delegator: delegator.to_string(),
+            validator: validator.to_string(),
+            amount: coin,
+        }
+    }
+
+    pub fn restake(
+        denom: &str,
+        delegator: &str,
+        validator: &str,
+        amount: impl Into<Uint128>,
+    ) -> ProviderMsg {
+        let coin = Coin {
+            amount: amount.into(),
+            denom: denom.into(),
+        };
+        ProviderMsg::Restake {
             delegator: delegator.to_string(),
             validator: validator.to_string(),
             amount: coin,
