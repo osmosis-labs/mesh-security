@@ -578,7 +578,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         if max_cap.is_zero() {
             let all_delegations = TokenQuerier::new(&deps.querier)
                 .all_delegations(env.contract.address.to_string(), config.max_retrieve)?;
-            if all_delegations.delegations.len() == 0 {
+            if all_delegations.delegations.is_empty() {
                 return Ok(resp.add_message(VirtualStakeMsg::DeleteAllScheduledTasks {}));
             }
             let mut msgs = vec![];
