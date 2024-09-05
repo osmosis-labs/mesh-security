@@ -1083,6 +1083,7 @@ mod tests {
 
         // Val1 is being tombstoned
         contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(5));
+        knobs.total_delegation.update_total_delegation(15u128, &denom);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after tombstoning
@@ -1125,6 +1126,7 @@ mod tests {
 
         // And it's being tombstoned at the same time
         contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
+        knobs.total_delegation.update_total_delegation(28u128, &denom);
 
         contract
             .hit_epoch(deps.as_mut())
@@ -1276,6 +1278,7 @@ mod tests {
 
         let handler = {
             let bs_copy = bond_status.clone();
+            let td_copy = total_delegation.clone();
             move |msg: &_| {
                 let VirtualStakeCustomQuery::VirtualStake(msg) = msg;
                 match msg {
@@ -1291,7 +1294,7 @@ mod tests {
                     }
                     mesh_bindings::VirtualStakeQuery::TotalDelegation { .. } => {
                         cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
-                            to_json_binary(&*total_delegation.borrow()).unwrap(),
+                            to_json_binary(&*td_copy.borrow()).unwrap(),
                         ))
                     }
                 }
@@ -1305,12 +1308,13 @@ mod tests {
                 querier: MockQuerier::new(&[]).with_custom_handler(handler),
                 custom_query_type: PhantomData,
             },
-            StakingKnobs { bond_status },
+            StakingKnobs { bond_status, total_delegation },
         )
     }
 
     struct StakingKnobs {
         bond_status: MockBondStatus,
+        total_delegation: MockTotalDelegation,
     }
 
     #[derive(Clone)]
@@ -1354,6 +1358,14 @@ mod tests {
 
         fn borrow(&self) -> Ref<'_, TotalDelegationResponse> {
             self.0.borrow()
+        }
+
+        fn update_total_delegation(&self, amount: impl Into<Uint128>, denom: impl Into<String>) {
+            let mut mut_obj = self.0.borrow_mut();
+            mut_obj.delegation = Coin{
+                amount: amount.into(),
+                denom: denom.into(),
+            };
         }
     }
 
