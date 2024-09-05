@@ -1171,6 +1171,9 @@ mod tests {
 
         // Val1 is being tombstoned
         contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(5));
+        knobs
+            .total_delegation
+            .update_total_delegation(15u128, &denom);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after tombstoning
@@ -1191,6 +1194,89 @@ mod tests {
 
         // Subsequent rewards msgs are removed after validator is tombstoned
         contract.hit_epoch(deps.as_mut()).assert_rewards(&["val2"]);
+    }
+
+    #[test]
+    fn validator_tombstoning_pending_bond() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (10u128, &denom))])
+            .assert_rewards(&[]);
+
+        // Val1 is bonding some more
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 20);
+
+        // And it's being tombstoned at the same time
+        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
+        knobs
+            .total_delegation
+            .update_total_delegation(28u128, &denom);
+
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // Tombstoned validators will be auto unbond
+            .assert_unbond(&[("val1", (28u128, &denom))])
+            .assert_rewards(&[]); // Rewards are still being gathered
+
+        // Check that the previously bonded amounts of val1 have been slashed for double sign (25%)
+        let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
+        assert_eq!(
+            bonded,
+            [
+                ("val1".to_string(), Uint128::new(0)), // Due to rounding up
+            ]
+        );
+
+        // Subsequent rewards msgs are removed after validator is tombstoned
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // Tombstoned validators can still bond
+            .assert_unbond(&[])
+            .assert_rewards(&[]);
+    }
+
+    #[test]
+    fn validator_tombstoning_pending_unbond() {
+        let (mut deps, knobs) = mock_dependencies();
+
+        let contract = VirtualStakingContract::new();
+        contract.quick_inst(deps.as_mut());
+        let denom = contract.config.load(&deps.storage).unwrap().denom;
+
+        knobs.bond_status.update_cap(100u128);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[("val1", (10u128, &denom))])
+            .assert_rewards(&[]);
+
+        // Val1 is unbonding
+        contract.quick_unbond(deps.as_mut(), "owner", "val1", 10);
+
+        // And it's being tombstoned at the same time
+        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
+
+        contract
+            .hit_epoch(deps.as_mut())
+            .assert_bond(&[]) // No bond msgs after jailing
+            .assert_unbond(&[("val1", (8u128, &denom))]) // Unbond adjusted for double sign slashing
+            .assert_rewards(&[]); // Rewards are still being gathered
+
+        // Check that bonded accounting has been adjusted
+        let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
+        //  FIXME: Remove zero amounts
+        assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
+
+        // Subsequent rewards msgs are removed after validator is tombstoned
+        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
     }
 
     #[test]
@@ -1287,6 +1373,7 @@ mod tests {
 
         let handler = {
             let bs_copy = bond_status.clone();
+            let td_copy = total_delegation.clone();
             move |msg: &_| {
                 let VirtualStakeCustomQuery::VirtualStake(msg) = msg;
                 match msg {
@@ -1307,7 +1394,7 @@ mod tests {
                     }
                     mesh_bindings::VirtualStakeQuery::TotalDelegation { .. } => {
                         cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
-                            to_json_binary(&*total_delegation.borrow()).unwrap(),
+                            to_json_binary(&*td_copy.borrow()).unwrap(),
                         ))
                     }
                 }
@@ -1321,12 +1408,16 @@ mod tests {
                 querier: MockQuerier::new(&[]).with_custom_handler(handler),
                 custom_query_type: PhantomData,
             },
-            StakingKnobs { bond_status },
+            StakingKnobs {
+                bond_status,
+                total_delegation,
+            },
         )
     }
 
     struct StakingKnobs {
         bond_status: MockBondStatus,
+        total_delegation: MockTotalDelegation,
     }
 
     #[derive(Clone)]
@@ -1383,6 +1474,14 @@ mod tests {
 
         fn borrow(&self) -> Ref<'_, TotalDelegationResponse> {
             self.0.borrow()
+        }
+
+        fn update_total_delegation(&self, amount: impl Into<Uint128>, denom: impl Into<String>) {
+            let mut mut_obj = self.0.borrow_mut();
+            mut_obj.delegation = Coin {
+                amount: amount.into(),
+                denom: denom.into(),
+            };
         }
     }
 
