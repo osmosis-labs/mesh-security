@@ -1083,7 +1083,9 @@ mod tests {
 
         // Val1 is being tombstoned
         contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(5));
-        knobs.total_delegation.update_total_delegation(15u128, &denom);
+        knobs
+            .total_delegation
+            .update_total_delegation(15u128, &denom);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after tombstoning
@@ -1126,7 +1128,9 @@ mod tests {
 
         // And it's being tombstoned at the same time
         contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
-        knobs.total_delegation.update_total_delegation(28u128, &denom);
+        knobs
+            .total_delegation
+            .update_total_delegation(28u128, &denom);
 
         contract
             .hit_epoch(deps.as_mut())
@@ -1308,7 +1312,10 @@ mod tests {
                 querier: MockQuerier::new(&[]).with_custom_handler(handler),
                 custom_query_type: PhantomData,
             },
-            StakingKnobs { bond_status, total_delegation },
+            StakingKnobs {
+                bond_status,
+                total_delegation,
+            },
         )
     }
 
@@ -1362,7 +1369,7 @@ mod tests {
 
         fn update_total_delegation(&self, amount: impl Into<Uint128>, denom: impl Into<String>) {
             let mut mut_obj = self.0.borrow_mut();
-            mut_obj.delegation = Coin{
+            mut_obj.delegation = Coin {
                 amount: amount.into(),
                 denom: denom.into(),
             };
