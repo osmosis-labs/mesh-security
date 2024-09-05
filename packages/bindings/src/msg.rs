@@ -38,6 +38,8 @@ pub enum VirtualStakeMsg {
         delegator: String,
         validator: String,
     },
+    /// Delete all scheduled tasks after zero max cap and unbond all delegations
+    DeleteAllScheduledTasks {}
 }
 
 impl VirtualStakeMsg {
@@ -80,6 +82,10 @@ impl VirtualStakeMsg {
             delegator: delgator.to_string(),
             validator: validator.to_string(),
         }
+    }
+
+    pub fn delete_all_scheduled_tasks() -> VirtualStakeMsg {
+        VirtualStakeMsg::DeleteAllScheduledTasks {}
     }
 }
 
