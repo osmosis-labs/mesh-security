@@ -139,7 +139,7 @@ pub enum ProviderMsg {
         delegator: String,
         validator: String,
         amount: Coin,
-    }
+    },
 }
 
 impl ProviderMsg {
