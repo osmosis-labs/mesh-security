@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, CustomQuery, QuerierWrapper, QueryRequest, StdResult};
+use cosmwasm_std::{Coin, CustomQuery, QuerierWrapper, QueryRequest, StdResult, Uint128};
 
 #[cw_serde]
 #[derive(QueryResponses)]
@@ -25,6 +25,10 @@ pub enum VirtualStakeQuery {
     /// Returns total delegations of the give validator
     #[returns(TotalDelegationResponse)]
     TotalDelegation { contract: String, validator: String },
+
+    /// Returns a max retrieve amount of delegations for the given contract
+    #[returns(AllDelegationsResponse)]
+    AllDelegations { contract: String, max_retrieve: u16 },
 }
 
 /// Bookkeeping info in the virtual staking sdk module
@@ -49,6 +53,17 @@ pub struct SlashRatioResponse {
 #[cw_serde]
 pub struct TotalDelegationResponse {
     pub delegation: Coin,
+}
+#[cw_serde]
+pub struct AllDelegationsResponse {
+    pub delegations: Vec<Delegation>,
+}
+
+#[cw_serde]
+pub struct Delegation {
+    pub delegator: String,
+    pub validator: String,
+    pub amount: Uint128,
 }
 
 impl CustomQuery for VirtualStakeCustomQuery {}
@@ -89,5 +104,16 @@ impl<'a> TokenQuerier<'a> {
             validator,
         };
         self.querier.query(&total_delegations_query.into())
+    }
+    pub fn all_delegations(
+        &self,
+        contract: String,
+        max_retrieve: u16,
+    ) -> StdResult<AllDelegationsResponse> {
+        let all_delegations_query = VirtualStakeQuery::AllDelegations {
+            contract,
+            max_retrieve,
+        };
+        self.querier.query(&all_delegations_query.into())
     }
 }

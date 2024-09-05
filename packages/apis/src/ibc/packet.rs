@@ -12,6 +12,7 @@ use crate::converter_api::{RewardInfo, ValidatorSlashInfo};
 pub enum ProviderPacket {
     /// This should be called when we lock more tokens to virtually stake on a given validator
     Stake {
+        delegator: String,
         validator: String,
         /// This is the local (provider-side) denom that is held in the vault.
         /// It will be converted to the consumer-side staking token in the converter with help
@@ -22,6 +23,7 @@ pub enum ProviderPacket {
     },
     /// This should be called when we begin the unbonding period of some more tokens previously virtually staked
     Unstake {
+        delegator: String,
         validator: String,
         /// This is the local (provider-side) denom that is held in the vault.
         /// It will be converted to the consumer-side staking token in the converter with help
@@ -109,6 +111,17 @@ pub enum ConsumerPacket {
         /// for that validator.
         /// This has precedence over all other events in the same packet.
         slashed: Vec<ValidatorSlashInfo>,
+    },
+    /// This is a part of zero max cap process
+    /// The consumer chain will send this packet to provider, force user to unbond token
+    InternalUnstake {
+        delegator: String,
+        validator: String,
+        /// This is the local (provider-side) denom that is held in the vault.
+        /// It will be converted to the consumer-side staking token in the converter with help
+        /// of the price feed.
+        normalize_amount: Coin,
+        inverted_amount: Coin,
     },
     /// This is part of the rewards protocol
     Distribute {

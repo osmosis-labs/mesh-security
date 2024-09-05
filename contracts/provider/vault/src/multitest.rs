@@ -8,8 +8,8 @@ use mesh_external_staking::state::SlashRatio;
 use mesh_external_staking::state::Stake;
 use mesh_native_staking::contract::sv::mt::NativeStakingContractProxy;
 use mesh_native_staking::contract::NativeStakingContract;
-use mesh_native_staking_proxy::contract::sv::mt::NativeStakingProxyContractProxy;
-use mesh_native_staking_proxy::contract::NativeStakingProxyContract;
+use mesh_native_staking_proxy::mock::sv::mt::NativeStakingProxyMockProxy;
+use mesh_native_staking_proxy::mock::NativeStakingProxyMock;
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{Tx, ValueRange};
 use sylvia::multitest::{App, Proxy};
@@ -126,7 +126,7 @@ fn setup_inner<'app>(
     let staking_init_info = if local_staking {
         let native_staking_code = mesh_native_staking::contract::sv::mt::CodeId::store_code(app);
         let native_staking_proxy_code =
-            mesh_native_staking_proxy::contract::sv::mt::CodeId::store_code(app);
+            mesh_native_staking_proxy::mock::sv::mt::CodeId::store_code(app);
 
         let native_staking_inst_msg = mesh_native_staking::contract::sv::InstantiateMsg {
             denom: OSMO.to_string(),
@@ -262,7 +262,7 @@ fn proxy_for_user<'a>(
     local_staking: &Proxy<'_, MtApp, NativeStakingContract<'_>>,
     user: &str,
     app: &'a App<MtApp>,
-) -> Proxy<'a, MtApp, NativeStakingProxyContract<'a>> {
+) -> Proxy<'a, MtApp, NativeStakingProxyMock<'a>> {
     let proxy_addr = local_staking
         .proxy_by_owner(user.to_string())
         .unwrap()

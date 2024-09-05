@@ -133,6 +133,7 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     fn bond(
         &self,
         ctx: ExecCtx<Self::QueryC>,
+        _delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<Self::ExecC>, Self::Error> {
@@ -160,6 +161,7 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
     fn unbond(
         &self,
         ctx: ExecCtx<Self::QueryC>,
+        _delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<Self::ExecC>, Self::Error> {
@@ -239,6 +241,16 @@ impl VirtualStakingApi for VirtualStakingMock<'_> {
         }
 
         Ok(Response::new())
+    }
+
+    fn internal_unbond(
+        &self,
+        _ctx: ExecCtx<Self::QueryC>,
+        _delegator: String,
+        _validator: String,
+        _amount: Coin,
+    ) -> Result<Response<Self::ExecC>, Self::Error> {
+        unimplemented!()
     }
 
     /// SudoMsg::HandleEpoch{} should be called once per epoch by the sdk (in EndBlock).

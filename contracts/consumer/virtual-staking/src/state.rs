@@ -11,4 +11,7 @@ pub struct Config {
 
     /// If it enable, tombstoned validators will be unbond automatically
     pub tombstoned_unbond_enable: bool,
+
+    /// Maximum delegations per query
+    pub max_retrieve: u16,
 }

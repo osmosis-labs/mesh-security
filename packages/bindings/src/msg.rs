@@ -30,6 +30,16 @@ pub enum VirtualStakeMsg {
     /// It will then burn those tokens from the caller's account,
     /// and update the currently minted amount.
     Unbond { amount: Coin, validator: String },
+    /// After each bonding or unbond process, a msg will be sent to the chain
+    /// Consumer chain will save the data - represent each delegator's stake amount
+    UpdateDelegation {
+        amount: Coin,
+        is_deduct: bool,
+        delegator: String,
+        validator: String,
+    },
+    /// Delete all scheduled tasks after zero max cap and unbond all delegations
+    DeleteAllScheduledTasks {},
 }
 
 impl VirtualStakeMsg {
@@ -53,6 +63,29 @@ impl VirtualStakeMsg {
             amount: coin,
             validator: validator.to_string(),
         }
+    }
+
+    pub fn update_delegation(
+        denom: &str,
+        is_deduct: bool,
+        amount: impl Into<Uint128>,
+        delgator: &str,
+        validator: &str,
+    ) -> VirtualStakeMsg {
+        let coin = Coin {
+            amount: amount.into(),
+            denom: denom.into(),
+        };
+        VirtualStakeMsg::UpdateDelegation {
+            amount: coin,
+            is_deduct,
+            delegator: delgator.to_string(),
+            validator: validator.to_string(),
+        }
+    }
+
+    pub fn delete_all_scheduled_tasks() -> VirtualStakeMsg {
+        VirtualStakeMsg::DeleteAllScheduledTasks {}
     }
 }
 
@@ -87,6 +120,16 @@ pub enum ProviderMsg {
     /// If these conditions are met, it will instantly unbond
     /// amount.amount tokens from the vault contract.
     Unbond { delegator: String, amount: Coin },
+    /// Unstake ensures that amount.denom is the native staking denom and
+    /// the calling contract is the native staking proxy contract.
+    ///
+    /// If these conditions are met, it will instantly unstake
+    /// amount.amount tokens from the native staking proxy contract.
+    Unstake {
+        delegator: String,
+        validator: String,
+        amount: Coin,
+    },
 }
 
 impl ProviderMsg {
@@ -108,6 +151,23 @@ impl ProviderMsg {
         };
         ProviderMsg::Unbond {
             delegator: delegator.to_string(),
+            amount: coin,
+        }
+    }
+
+    pub fn unstake(
+        denom: &str,
+        delegator: &str,
+        validator: &str,
+        amount: impl Into<Uint128>,
+    ) -> ProviderMsg {
+        let coin = Coin {
+            amount: amount.into(),
+            denom: denom.into(),
+        };
+        ProviderMsg::Unstake {
+            delegator: delegator.to_string(),
+            validator: validator.to_string(),
             amount: coin,
         }
     }

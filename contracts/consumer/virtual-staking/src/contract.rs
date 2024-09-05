@@ -74,6 +74,7 @@ impl VirtualStakingContract<'_> {
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx<VirtualStakeCustomQuery>,
+        max_retrieve: u16,
         tombstoned_unbond_enable: bool,
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
@@ -81,6 +82,7 @@ impl VirtualStakingContract<'_> {
         let config = Config {
             denom,
             converter: ctx.info.sender,
+            max_retrieve,
             tombstoned_unbond_enable,
         };
         self.config.save(ctx.deps.storage, &config)?;
@@ -370,6 +372,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     fn bond(
         &self,
         ctx: ExecCtx<VirtualStakeCustomQuery>,
+        delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
@@ -391,7 +394,13 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         self.bond_requests
             .save(ctx.deps.storage, &validator, &bonded)?;
 
-        Ok(Response::new())
+        let msg = VirtualStakeMsg::UpdateDelegation {
+            amount,
+            is_deduct: false,
+            delegator,
+            validator,
+        };
+        Ok(Response::new().add_message(msg))
     }
 
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
@@ -400,6 +409,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
     fn unbond(
         &self,
         ctx: ExecCtx<VirtualStakeCustomQuery>,
+        delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
@@ -420,7 +430,13 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         self.bond_requests
             .save(ctx.deps.storage, &validator, &bonded)?;
 
-        Ok(Response::new())
+        let msg = VirtualStakeMsg::UpdateDelegation {
+            amount,
+            is_deduct: true,
+            delegator,
+            validator,
+        };
+        Ok(Response::new().add_message(msg))
     }
 
     /// Requests to unbond and burn tokens from a list of validators. Unbonding will be actually handled at the next epoch.
@@ -485,6 +501,54 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         Ok(Response::new())
     }
 
+    /// Immediately unbond the given amount due to zero max cap
+    fn internal_unbond(
+        &self,
+        ctx: ExecCtx<VirtualStakeCustomQuery>,
+        delegator: String,
+        validator: String,
+        amount: Coin,
+    ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
+        nonpayable(&ctx.info)?;
+        let cfg = self.config.load(ctx.deps.storage)?;
+        ensure_eq!(ctx.info.sender, cfg.converter, ContractError::Unauthorized); // only the converter can call this
+        ensure_eq!(
+            amount.denom,
+            cfg.denom,
+            ContractError::WrongDenom(cfg.denom)
+        );
+
+        // Immediately unbond
+        let bonded = self.bond_requests.load(ctx.deps.storage, &validator)?;
+        let bonded = bonded
+            .checked_sub(amount.amount)
+            .map_err(|_| ContractError::InsufficientBond(validator.clone(), amount.amount))?;
+        self.bond_requests
+            .save(ctx.deps.storage, &validator, &bonded)?;
+
+        let requests: Vec<(String, Uint128)> = self
+            .bond_requests
+            .range(
+                ctx.deps.as_ref().storage,
+                None,
+                None,
+                cosmwasm_std::Order::Ascending,
+            )
+            .collect::<Result<_, _>>()?;
+        self.bonded.save(ctx.deps.storage, &requests)?;
+
+        let msgs = vec![
+            VirtualStakeMsg::UpdateDelegation {
+                amount: amount.clone(),
+                is_deduct: true,
+                delegator,
+                validator: validator.clone(),
+            },
+            VirtualStakeMsg::Unbond { amount, validator },
+        ];
+        Ok(Response::new().add_messages(msgs))
+    }
+
     // FIXME: need to handle custom message types and queries
     /**
      * This is called once per epoch to withdraw all rewards and rebalance the bonded tokens.
@@ -523,15 +587,39 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         let bond =
             TokenQuerier::new(&deps.querier).bond_status(env.contract.address.to_string())?;
         let max_cap = bond.cap.amount;
+
+        let config = self.config.load(deps.storage)?;
         // If 0 max cap, then we assume all tokens were force unbonded already, and just return the withdraw rewards
         // call and set bonded to empty
         // TODO: verify this behavior with SDK module (otherwise we send unbond message)
         if max_cap.is_zero() {
-            self.bonded.save(deps.storage, &vec![])?;
-            return Ok(resp);
+            let all_delegations = TokenQuerier::new(&deps.querier)
+                .all_delegations(env.contract.address.to_string(), config.max_retrieve)?;
+            if all_delegations.delegations.len() == 0 {
+                return Ok(resp.add_message(VirtualStakeMsg::DeleteAllScheduledTasks {}));
+            }
+            let mut msgs = vec![];
+            for delegation in all_delegations.delegations {
+                let validator = delegation.validator.clone();
+                // Send unstake request to converter contract
+                let msg = converter_api::sv::ExecMsg::InternalUnstake {
+                    delegator: delegation.delegator,
+                    validator,
+                    amount: Coin {
+                        denom: config.denom.clone(),
+                        amount: delegation.amount,
+                    },
+                };
+                let msg = WasmMsg::Execute {
+                    contract_addr: config.converter.to_string(),
+                    msg: to_json_binary(&msg)?,
+                    funds: vec![],
+                };
+                msgs.push(msg);
+            }
+            return Ok(resp.add_messages(msgs));
         }
 
-        let config = self.config.load(deps.storage)?;
         // Make current bonded mutable
         let mut current = bonded;
         // Process slashes due to tombstoning (unbonded) or jailing, over bond_requests and current
@@ -700,7 +788,7 @@ mod tests {
     use cosmwasm_std::{
         coins, from_json,
         testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
-        Decimal,
+        AllDelegationsResponse, Decimal,
     };
     use mesh_bindings::{BondStatusResponse, SlashRatioResponse, TotalDelegationResponse};
 
@@ -718,7 +806,7 @@ mod tests {
         contract.quick_inst(deps.as_mut());
 
         knobs.bond_status.update_cap(0u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
             .assert_no_bonding()
@@ -734,7 +822,7 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(10u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (5u128, &denom))])
@@ -750,8 +838,8 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(10u128);
-        contract.quick_bond(deps.as_mut(), "val1", 6);
-        contract.quick_bond(deps.as_mut(), "val2", 4);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 6);
+        contract.quick_bond(deps.as_mut(), "owner", "val2", 4);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (6u128, &denom)), ("val2", (4u128, &denom))])
@@ -769,8 +857,8 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(5u128);
-        contract.quick_bond(deps.as_mut(), "val1", 10);
-        contract.quick_bond(deps.as_mut(), "val2", 40);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
+        contract.quick_bond(deps.as_mut(), "owner", "val2", 40);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (1u128, &denom)), ("val2", (4u128, &denom))])
@@ -786,13 +874,13 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(10u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (5u128, &denom))])
             .assert_rewards(&[]);
 
-        contract.quick_unbond(deps.as_mut(), "val1", 5);
+        contract.quick_unbond(deps.as_mut(), "owner", "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
             .assert_unbond(&[("val1", (5u128, &denom))])
@@ -808,7 +896,7 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(10u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (5u128, &denom))])
@@ -830,8 +918,8 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
-        contract.quick_bond(deps.as_mut(), "val2", 20);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 5);
+        contract.quick_bond(deps.as_mut(), "owner", "val2", 20);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (5u128, &denom)), ("val2", (20u128, &denom))])
@@ -855,8 +943,8 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
-        contract.quick_bond(deps.as_mut(), "val2", 10);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 5);
+        contract.quick_bond(deps.as_mut(), "owner", "val2", 10);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (5u128, &denom)), ("val2", (10u128, &denom))])
@@ -880,8 +968,8 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
-        contract.quick_bond(deps.as_mut(), "val2", 10);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 5);
+        contract.quick_bond(deps.as_mut(), "owner", "val2", 10);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (5u128, &denom)), ("val2", (10u128, &denom))])
@@ -903,8 +991,8 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "val1", 10);
-        contract.quick_bond(deps.as_mut(), "val2", 20);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
+        contract.quick_bond(deps.as_mut(), "owner", "val2", 20);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (10u128, &denom)), ("val2", (20u128, &denom))])
@@ -967,14 +1055,14 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "val1", 10);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (10u128, &denom))])
             .assert_rewards(&[]);
 
         // Val1 is bonding some more
-        contract.quick_bond(deps.as_mut(), "val1", 20);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 20);
 
         // And it's being jailed at the same time
         contract.jail(deps.as_mut(), "val1", Decimal::percent(10), Uint128::one());
@@ -999,14 +1087,14 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "val1", 10);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (10u128, &denom))])
             .assert_rewards(&[]);
 
         // Val1 is unbonding
-        contract.quick_unbond(deps.as_mut(), "val1", 10);
+        contract.quick_unbond(deps.as_mut(), "owner", "val1", 10);
 
         // And it's being jailed at the same time
         contract.jail(deps.as_mut(), "val1", Decimal::percent(10), Uint128::one());
@@ -1046,7 +1134,7 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(10u128);
-        contract.quick_bond(deps.as_mut(), "val1", 5);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 5);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (5u128, &denom))])
@@ -1074,8 +1162,8 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "val1", 20);
-        contract.quick_bond(deps.as_mut(), "val2", 20);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 20);
+        contract.quick_bond(deps.as_mut(), "owner", "val2", 20);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (20u128, &denom)), ("val2", (20u128, &denom))])
@@ -1117,14 +1205,14 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "val1", 10);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (10u128, &denom))])
             .assert_rewards(&[]);
 
         // Val1 is bonding some more
-        contract.quick_bond(deps.as_mut(), "val1", 20);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 20);
 
         // And it's being tombstoned at the same time
         contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
@@ -1164,14 +1252,14 @@ mod tests {
         let denom = contract.config.load(&deps.storage).unwrap().denom;
 
         knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "val1", 10);
+        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[("val1", (10u128, &denom))])
             .assert_rewards(&[]);
 
         // Val1 is unbonding
-        contract.quick_unbond(deps.as_mut(), "val1", 10);
+        contract.quick_unbond(deps.as_mut(), "owner", "val1", 10);
 
         // And it's being tombstoned at the same time
         contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
@@ -1279,6 +1367,9 @@ mod tests {
         let total_delegation = MockTotalDelegation::new(TotalDelegationResponse {
             delegation: coin(0, "DOES NOT MATTER"),
         });
+        let all_delegations = MockAllDelegations::new(AllDelegationsResponse {
+            delegations: vec![],
+        });
 
         let handler = {
             let bs_copy = bond_status.clone();
@@ -1299,6 +1390,11 @@ mod tests {
                     mesh_bindings::VirtualStakeQuery::TotalDelegation { .. } => {
                         cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
                             to_json_binary(&*td_copy.borrow()).unwrap(),
+                        ))
+                    }
+                    mesh_bindings::VirtualStakeQuery::AllDelegations { .. } => {
+                        cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
+                            to_json_binary(&*all_delegations.borrow()).unwrap(),
                         ))
                     }
                 }
@@ -1375,6 +1471,18 @@ mod tests {
             };
         }
     }
+    #[derive(Clone)]
+    struct MockAllDelegations(Rc<RefCell<AllDelegationsResponse>>);
+
+    impl MockAllDelegations {
+        fn new(res: AllDelegationsResponse) -> Self {
+            Self(Rc::new(RefCell::new(res)))
+        }
+
+        fn borrow(&self) -> Ref<'_, AllDelegationsResponse> {
+            self.0.borrow()
+        }
+    }
 
     fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
         REWARD_TARGETS
@@ -1389,8 +1497,8 @@ mod tests {
         fn quick_inst(&self, deps: DepsMut);
         fn push_rewards(&self, deps: &mut OwnedDeps, amount: u128) -> PushRewardsResult;
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult;
-        fn quick_bond(&self, deps: DepsMut, validator: &str, amount: u128);
-        fn quick_unbond(&self, deps: DepsMut, validator: &str, amount: u128);
+        fn quick_bond(&self, deps: DepsMut, delegator: &str, validator: &str, amount: u128);
+        fn quick_unbond(&self, deps: DepsMut, delegator: &str, validator: &str, amount: u128);
         fn quick_burn(
             &self,
             deps: DepsMut,
@@ -1424,6 +1532,7 @@ mod tests {
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },
+                50,
                 true,
             )
             .unwrap();
@@ -1466,7 +1575,7 @@ mod tests {
             HitEpochResult::new(self.handle_epoch(deps).unwrap())
         }
 
-        fn quick_bond(&self, deps: DepsMut, validator: &str, amount: u128) {
+        fn quick_bond(&self, deps: DepsMut, delegator: &str, validator: &str, amount: u128) {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.bond(
@@ -1475,13 +1584,14 @@ mod tests {
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },
+                delegator.to_string(),
                 validator.to_string(),
                 coin(amount, denom),
             )
             .unwrap();
         }
 
-        fn quick_unbond(&self, deps: DepsMut, validator: &str, amount: u128) {
+        fn quick_unbond(&self, deps: DepsMut, delegator: &str, validator: &str, amount: u128) {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.unbond(
@@ -1490,6 +1600,7 @@ mod tests {
                     env: mock_env(),
                     info: mock_info("me", &[]),
                 },
+                delegator.to_string(),
                 validator.to_string(),
                 coin(amount, denom),
             )
@@ -1725,9 +1836,9 @@ mod tests {
 
         #[track_caller]
         fn assert_no_bonding(&self) -> &Self {
-            if !self.virtual_stake_msgs.is_empty() {
+            if self.virtual_stake_msgs.len() > 1 {
                 panic!(
-                    "hit_epoch result was expected to be a noop, but has these: {:?}",
+                    "hit_epoch result was expected to only contain DeleteAllScheduledTasks, but has these: {:?}",
                     self.virtual_stake_msgs
                 );
             }

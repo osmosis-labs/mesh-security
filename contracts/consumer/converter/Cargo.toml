@@ -23,6 +23,7 @@ fake-custom = [ "mesh-simple-price-feed/fake-custom" ]
 [dependencies]
 mesh-apis = { workspace = true }
 mesh-bindings = { workspace = true }
+mesh-sync = { workspace = true }
 mesh-virtual-staking = { workspace = true }
 
 sylvia = { workspace = true }
