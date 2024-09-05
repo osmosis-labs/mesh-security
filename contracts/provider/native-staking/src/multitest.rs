@@ -6,10 +6,10 @@ use cw_multi_test::{App as MtApp, StakingInfo};
 use sylvia::multitest::{App, Proxy};
 
 use mesh_apis::local_staking_api::sv::mt::LocalStakingApiProxy;
-use mesh_native_staking_proxy::contract::sv::mt::{
-    CodeId as NativeStakingProxyCodeId, NativeStakingProxyContractProxy,
+use mesh_native_staking_proxy::mock::sv::mt::{
+    CodeId as NativeStakingProxyCodeId, NativeStakingProxyMockProxy,
 };
-use mesh_native_staking_proxy::contract::NativeStakingProxyContract;
+use mesh_native_staking_proxy::mock::NativeStakingProxyMock;
 use mesh_sync::ValueRange;
 use mesh_vault::mock::sv::mt::VaultMockProxy;
 use mesh_vault::msg::LocalStakingInfo;
@@ -291,7 +291,7 @@ fn releasing_proxy_stake() {
     );
 
     // Access staking instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyContract<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // User bonds some funds to the vault

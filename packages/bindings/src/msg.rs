@@ -114,6 +114,16 @@ pub enum ProviderMsg {
     /// If these conditions are met, it will instantly unbond
     /// amount.amount tokens from the vault contract.
     Unbond { delegator: String, amount: Coin },
+    /// Unstake ensures that amount.denom is the native staking denom and
+    /// the calling contract is the native staking proxy contract.
+    ///
+    /// If these conditions are met, it will instantly unstake
+    /// amount.amount tokens from the native staking proxy contract.
+    Unstake {
+        delegator: String,
+        validator: String,
+        amount: Coin,
+    },
 }
 
 impl ProviderMsg {
@@ -135,6 +145,23 @@ impl ProviderMsg {
         };
         ProviderMsg::Unbond {
             delegator: delegator.to_string(),
+            amount: coin,
+        }
+    }
+
+    pub fn unstake(
+        denom: &str,
+        delegator: &str,
+        validator: &str,
+        amount: impl Into<Uint128>,
+    ) -> ProviderMsg {
+        let coin = Coin {
+            amount: amount.into(),
+            denom: denom.into(),
+        };
+        ProviderMsg::Unstake {
+            delegator: delegator.to_string(),
+            validator: validator.to_string(),
             amount: coin,
         }
     }
