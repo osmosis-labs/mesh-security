@@ -103,7 +103,7 @@ impl ConverterContract<'_> {
             max_retrieve,
             tombstoned_unbond_enable,
         })?;
-        
+
         // Instantiate virtual staking contract
         let init_msg = WasmMsg::Instantiate {
             admin,
