@@ -136,6 +136,7 @@ impl Module for VirtualStakingModule {
                 }
             }
             mesh_bindings::VirtualStakeMsg::UpdateDelegation { .. } => Ok(AppResponse::default()),
+            mesh_bindings::VirtualStakeMsg::DeleteAllScheduledTasks {  } => Ok(AppResponse::default()),
         }
     }
 
@@ -187,6 +188,13 @@ impl Module for VirtualStakingModule {
                     delegations: vec![],
                 })?
             }
+            mesh_bindings::VirtualStakeQuery::TotalDelegation {
+                contract,
+                validator,
+            } => to_json_binary(&self.bonds.load(
+                storage,
+                (Addr::unchecked(&contract), Addr::unchecked(&validator)),
+            )?)?,
         };
 
         Ok(to_json_binary(&result)?)

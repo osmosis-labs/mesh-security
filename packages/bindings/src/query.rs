@@ -25,6 +25,10 @@ pub enum VirtualStakeQuery {
     /// Returns a max retrieve amount of delegations for the given contract
     #[returns(AllDelegationsResponse)]
     AllDelegations { contract: String, max_retrieve: u16 },
+
+    /// Returns total delegations of the give validator
+    #[returns(TotalDelegationResponse)]
+    TotalDelegation { contract: String, validator: String },
 }
 
 /// Bookkeeping info in the virtual staking sdk module
@@ -56,6 +60,11 @@ pub struct Delegation {
     pub delegator: String,
     pub validator: String,
     pub amount: Uint128,
+}
+
+#[cw_serde]
+pub struct TotalDelegationResponse {
+    pub delegation: Coin,
 }
 
 impl CustomQuery for VirtualStakeCustomQuery {}
@@ -96,5 +105,16 @@ impl<'a> TokenQuerier<'a> {
             max_retrieve,
         };
         self.querier.query(&all_delegations_query.into())
+    }
+    pub fn total_delegations(
+        &self,
+        contract: String,
+        validator: String,
+    ) -> StdResult<TotalDelegationResponse> {
+        let total_delegations_query = VirtualStakeQuery::TotalDelegation {
+            contract,
+            validator,
+        };
+        self.querier.query(&total_delegations_query.into())
     }
 }

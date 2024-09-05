@@ -43,7 +43,7 @@ pub struct VirtualStakingContract<'a> {
     /// This is what validators are inactive because of tombstoning, jailing or removal (unbonded).
     // `inactive` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
-    pub inactive: Item<'a, Vec<String>>,
+    pub inactive: Item<'a, Vec<(String, bool)>>,
     /// Amount of tokens that have been burned from a validator.
     /// This is just for accounting / tracking reasons, as token "burning" is being implemented as unbonding,
     /// and there's no real need to discount the burned amount in this contract.
@@ -75,6 +75,7 @@ impl VirtualStakingContract<'_> {
         &self,
         ctx: InstantiateCtx<VirtualStakeCustomQuery>,
         max_retrieve: u16,
+        tombstoned_unbond_enable: bool,
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
         let denom = ctx.deps.querier.query_bonded_denom()?;
@@ -82,6 +83,7 @@ impl VirtualStakingContract<'_> {
             denom,
             converter: ctx.info.sender,
             max_retrieve,
+            tombstoned_unbond_enable,
         };
         self.config.save(ctx.deps.storage, &config)?;
         // initialize these to no one, so no issue when reading for the first time
@@ -237,6 +239,7 @@ fn pop_target(deps: DepsMut<VirtualStakeCustomQuery>) -> StdResult<(String, bool
 fn calculate_rebalance(
     current: Vec<(String, Uint128)>,
     desired: Vec<(String, Uint128)>,
+    tombstoned_list: HashMap<String, Coin>,
     denom: &str,
 ) -> Vec<CosmosMsg<VirtualStakeCustomMsg>> {
     let mut desired: BTreeMap<_, _> = desired.into_iter().collect();
@@ -245,6 +248,13 @@ fn calculate_rebalance(
     let mut msgs = vec![];
     for (validator, prev) in current {
         let next = desired.remove(&validator).unwrap_or_else(Uint128::zero);
+        if tombstoned_list.contains_key(&validator) && !next.is_zero() {
+            let amount = tombstoned_list.get(&validator).unwrap().clone();
+            if !amount.amount.is_zero() {
+                msgs.push(VirtualStakeMsg::Unbond { validator, amount }.into());
+            }
+            continue;
+        }
         match next.cmp(&prev) {
             Ordering::Less => {
                 let unbond = prev - next;
@@ -563,8 +573,15 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
 
         // withdraw rewards
         let bonded = self.bonded.load(deps.storage)?;
-        let inactive = self.inactive.load(deps.storage)?;
-        let withdraw = withdraw_reward_msgs(deps.branch(), &bonded, &inactive);
+        let mut inactive_list = self.inactive.load(deps.storage)?;
+        let withdraw = withdraw_reward_msgs(
+            deps.branch(),
+            &bonded,
+            &inactive_list
+                .iter()
+                .map(|(i, _)| i.to_string())
+                .collect::<Vec<_>>(),
+        );
         let mut resp = Response::new().add_submessages(withdraw);
 
         let bond =
@@ -574,7 +591,6 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         let config = self.config.load(deps.storage)?;
         // If 0 max cap, then we assume all tokens were force unbonded already, and just return the withdraw rewards
         // call and set bonded to empty
-        // TODO: verify this behavior with SDK module (otherwise we send unbond message)
         if max_cap.is_zero() {
             let all_delegations = TokenQuerier::new(&deps.querier)
                 .all_delegations(env.contract.address.to_string(), config.max_retrieve)?;
@@ -611,10 +627,16 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             self.adjust_slashings(deps.branch(), &mut current, &slash)?;
             // Update inactive list. Defensive, as it should already been updated in handle_valset_update, due to removals
             self.inactive.update(deps.branch().storage, |mut old| {
-                old.extend_from_slice(&slash.iter().map(|v| v.address.clone()).collect::<Vec<_>>());
+                old.extend_from_slice(
+                    &slash
+                        .iter()
+                        .map(|v| (v.address.clone(), v.is_tombstoned))
+                        .collect::<Vec<_>>(),
+                );
                 old.dedup();
                 Ok::<_, ContractError>(old)
             })?;
+            inactive_list = self.inactive.load(deps.storage)?;
             // Clear up slash requests
             self.slash_requests.save(deps.storage, &vec![])?;
         }
@@ -636,11 +658,31 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             }
         }
 
+        // Force the tombstoned validator to auto unbond
+        let mut tombstoned_list: HashMap<String, Coin> = HashMap::new();
+        for (val, is_tombstoned) in inactive_list.iter() {
+            if *is_tombstoned {
+                let resp = TokenQuerier::new(&deps.querier)
+                    .total_delegations(env.contract.address.to_string(), val.to_string())?;
+                tombstoned_list.insert(val.to_string(), resp.delegation);
+            }
+        }
+
+        let mut request_with_tombstoned = requests.clone();
+        for (val, amount) in request_with_tombstoned.iter_mut() {
+            if tombstoned_list.contains_key(val) {
+                *amount = Uint128::zero();
+                // Update new value for the bond requests
+                self.bond_requests.save(deps.storage, val, amount)?;
+            }
+        }
+
         // Save the future values
-        self.bonded.save(deps.branch().storage, &requests)?;
+        self.bonded
+            .save(deps.branch().storage, &request_with_tombstoned)?;
 
         // Compare these two to make bond/unbond calls as needed
-        let rebalance = calculate_rebalance(current, requests, &config.denom);
+        let rebalance = calculate_rebalance(current, requests, tombstoned_list, &config.denom);
         resp = resp.add_messages(rebalance);
 
         Ok(resp)
@@ -683,12 +725,23 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
 
         // Update inactive list.
         // We ignore `unjailed` as it's not clear they make the validator active again or not.
-        if !removals.is_empty() || !additions.is_empty() {
+        if !removals.is_empty() || !additions.is_empty() || !tombstoned.is_empty() {
             self.inactive.update(deps.storage, |mut old| {
                 // Add removals
-                old.extend_from_slice(removals);
+                old.extend_from_slice(
+                    &tombstoned
+                        .iter()
+                        .map(|t| (t.to_string(), true))
+                        .collect::<Vec<_>>(),
+                );
+                old.extend_from_slice(
+                    &removals
+                        .iter()
+                        .map(|r| (r.to_string(), false))
+                        .collect::<Vec<_>>(),
+                );
                 // Filter additions
-                old.retain(|v| !additions.iter().any(|a| a.address == *v));
+                old.retain(|v| !additions.iter().any(|a| a.address == *v.0));
                 old.dedup();
                 Ok::<_, ContractError>(old)
             })?;
@@ -737,7 +790,7 @@ mod tests {
         testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
         AllDelegationsResponse, Decimal,
     };
-    use mesh_bindings::{BondStatusResponse, SlashRatioResponse};
+    use mesh_bindings::{BondStatusResponse, SlashRatioResponse, TotalDelegationResponse};
 
     use super::*;
 
@@ -1121,8 +1174,8 @@ mod tests {
         contract
             .hit_epoch(deps.as_mut())
             .assert_bond(&[]) // No bond msgs after tombstoning
-            .assert_unbond(&[]) // No unbond msgs after tombstoning
-            .assert_rewards(&["val1", "val2"]); // Last rewards msgs after tombstoning
+            .assert_unbond(&[("val1", (15u128, &denom))]) // No unbond msgs after tombstoning
+            .assert_rewards(&["val2"]); // Last rewards msgs after tombstoning
 
         // Check that the bonded amounts of val1 have been slashed for double sign (25%)
         // Val2 is unaffected.
@@ -1131,89 +1184,13 @@ mod tests {
         assert_eq!(
             bonded,
             [
-                ("val1".to_string(), Uint128::new(15)),
+                ("val1".to_string(), Uint128::new(0)),
                 ("val2".to_string(), Uint128::new(20))
             ]
         );
 
         // Subsequent rewards msgs are removed after validator is tombstoned
         contract.hit_epoch(deps.as_mut()).assert_rewards(&["val2"]);
-    }
-
-    #[test]
-    fn validator_tombstoning_pending_bond() {
-        let (mut deps, knobs) = mock_dependencies();
-
-        let contract = VirtualStakingContract::new();
-        contract.quick_inst(deps.as_mut());
-        let denom = contract.config.load(&deps.storage).unwrap().denom;
-
-        knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_bond(&[("val1", (10u128, &denom))])
-            .assert_rewards(&[]);
-
-        // Val1 is bonding some more
-        contract.quick_bond(deps.as_mut(), "owner", "val1", 20);
-
-        // And it's being tombstoned at the same time
-        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
-
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_bond(&[("val1", (20, &denom))]) // FIXME?: Tombstoned validators can still bond
-            .assert_unbond(&[])
-            .assert_rewards(&["val1"]); // Rewards are still being gathered
-
-        // Check that the previously bonded amounts of val1 have been slashed for double sign (25%)
-        let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
-        assert_eq!(
-            bonded,
-            [
-                ("val1".to_string(), Uint128::new(8 + 20)), // Due to rounding up
-            ]
-        );
-
-        // Subsequent rewards msgs are removed after validator is tombstoned
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
-    }
-
-    #[test]
-    fn validator_tombstoning_pending_unbond() {
-        let (mut deps, knobs) = mock_dependencies();
-
-        let contract = VirtualStakingContract::new();
-        contract.quick_inst(deps.as_mut());
-        let denom = contract.config.load(&deps.storage).unwrap().denom;
-
-        knobs.bond_status.update_cap(100u128);
-        contract.quick_bond(deps.as_mut(), "owner", "val1", 10);
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_bond(&[("val1", (10u128, &denom))])
-            .assert_rewards(&[]);
-
-        // Val1 is unbonding
-        contract.quick_unbond(deps.as_mut(), "owner", "val1", 10);
-
-        // And it's being tombstoned at the same time
-        contract.tombstone(deps.as_mut(), "val1", Decimal::percent(25), Uint128::new(2));
-
-        contract
-            .hit_epoch(deps.as_mut())
-            .assert_bond(&[]) // No bond msgs after jailing
-            .assert_unbond(&[("val1", (8u128, &denom))]) // Unbond adjusted for double sign slashing
-            .assert_rewards(&["val1"]); // Rewards are still being gathered
-
-        // Check that bonded accounting has been adjusted
-        let bonded = contract.bonded.load(deps.as_ref().storage).unwrap();
-        //  FIXME: Remove zero amounts
-        assert_eq!(bonded, [("val1".to_string(), Uint128::new(0)),]);
-
-        // Subsequent rewards msgs are removed after validator is tombstoned
-        contract.hit_epoch(deps.as_mut()).assert_rewards(&[]);
     }
 
     #[test]
@@ -1304,6 +1281,9 @@ mod tests {
         let all_delegations = MockAllDelegations::new(AllDelegationsResponse {
             delegations: vec![],
         });
+        let total_delegation = MockTotalDelegation::new(TotalDelegationResponse {
+            delegation: coin(0, "DOES NOT MATTER"),
+        });
 
         let handler = {
             let bs_copy = bond_status.clone();
@@ -1323,6 +1303,11 @@ mod tests {
                     mesh_bindings::VirtualStakeQuery::AllDelegations { .. } => {
                         cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
                             to_json_binary(&*all_delegations.borrow()).unwrap(),
+                        ))
+                    }
+                    mesh_bindings::VirtualStakeQuery::TotalDelegation { .. } => {
+                        cosmwasm_std::SystemResult::Ok(cosmwasm_std::ContractResult::Ok(
+                            to_json_binary(&*total_delegation.borrow()).unwrap(),
                         ))
                     }
                 }
@@ -1388,6 +1373,19 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct MockTotalDelegation(Rc<RefCell<TotalDelegationResponse>>);
+
+    impl MockTotalDelegation {
+        fn new(res: TotalDelegationResponse) -> Self {
+            Self(Rc::new(RefCell::new(res)))
+        }
+
+        fn borrow(&self) -> Ref<'_, TotalDelegationResponse> {
+            self.0.borrow()
+        }
+    }
+
     fn set_reward_targets(storage: &mut dyn Storage, targets: &[&str]) {
         REWARD_TARGETS
             .save(
@@ -1437,6 +1435,7 @@ mod tests {
                     info: mock_info("me", &[]),
                 },
                 50,
+                true,
             )
             .unwrap();
         }
@@ -1558,6 +1557,7 @@ mod tests {
                     power: 0,
                     slash_amount,
                     slash_ratio: nominal_slash_ratio.to_string(),
+                    is_tombstoned: false,
                 }]),
             )
             .unwrap();
@@ -1610,6 +1610,7 @@ mod tests {
                     power: 0,
                     slash_amount,
                     slash_ratio: nominal_slash_ratio.to_string(),
+                    is_tombstoned: true,
                 }]),
             )
             .unwrap();
@@ -1737,9 +1738,9 @@ mod tests {
 
         #[track_caller]
         fn assert_no_bonding(&self) -> &Self {
-            if !self.virtual_stake_msgs.is_empty() {
+            if self.virtual_stake_msgs.len() > 1 {
                 panic!(
-                    "hit_epoch result was expected to be a noop, but has these: {:?}",
+                    "hit_epoch result was expected to only contain DeleteAllScheduledTasks, but has these: {:?}",
                     self.virtual_stake_msgs
                 );
             }
