@@ -188,11 +188,29 @@ pub(crate) fn valset_update_msg(
 /// On closed channel, we take all tokens from reflect contract to this contract.
 /// We also delete the channel entry from accounts.
 pub fn ibc_channel_close(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _msg: IbcChannelCloseMsg,
+    msg: IbcChannelCloseMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    todo!();
+    match msg {
+        IbcChannelCloseMsg::CloseInit { .. } => {
+            return Err(ContractError::IbcChannelCloseInitDisallowed)
+        }
+        IbcChannelCloseMsg::CloseConfirm { channel } => {
+            if channel.ne(&IBC_CHANNEL.load(deps.storage)?) {
+                return Err(ContractError::IbcChannelNotMatch);
+            }
+        }
+    };
+
+    let contract = ConverterContract::new();
+    let msg = virtual_staking_api::sv::ExecMsg::HandleCloseChannel {};
+    let msg = WasmMsg::Execute {
+        contract_addr: contract.virtual_stake.load(deps.storage)?.into(),
+        msg: to_json_binary(&msg)?,
+        funds: vec![],
+    };
+    Ok(IbcBasicResponse::new().add_message(msg))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

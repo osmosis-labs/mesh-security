@@ -11,5 +11,5 @@ pub struct Config {
 
     /// Maximum
     ///
-    pub max_retrieve: u16,
+    pub max_retrieve: u32,
 }

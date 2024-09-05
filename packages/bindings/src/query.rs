@@ -24,7 +24,7 @@ pub enum VirtualStakeQuery {
 
     /// Returns a max retrieve amount of delegations for the given contract
     #[returns(AllDelegationsResponse)]
-    AllDelegations { contract: String, max_retrieve: u16 },
+    AllDelegations { contract: String, max_retrieve: u32 },
 }
 
 /// Bookkeeping info in the virtual staking sdk module
@@ -89,7 +89,7 @@ impl<'a> TokenQuerier<'a> {
     pub fn all_delegations(
         &self,
         contract: String,
-        max_retrieve: u16,
+        max_retrieve: u32,
     ) -> StdResult<AllDelegationsResponse> {
         let all_delegations_query = VirtualStakeQuery::AllDelegations {
             contract,

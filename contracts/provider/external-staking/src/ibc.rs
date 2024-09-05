@@ -104,11 +104,25 @@ pub fn ibc_channel_connect(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn ibc_channel_close(
-    _deps: DepsMut,
-    _env: Env,
-    _msg: IbcChannelCloseMsg,
+    deps: DepsMut,
+    env: Env,
+    msg: IbcChannelCloseMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    todo!();
+    match msg {
+        IbcChannelCloseMsg::CloseInit { channel } => {
+            if channel.ne(&IBC_CHANNEL.load(deps.storage)?) {
+                return Err(ContractError::IbcChannelNotMatch);
+            }
+        }
+        IbcChannelCloseMsg::CloseConfirm { .. } => {
+            return Err(ContractError::IbcChannelCloseConfirmDisallowed)
+        }
+    };
+
+    let contract = ExternalStakingContract::new();
+    contract.handle_close_channel(deps, env)?;
+
+    Ok(IbcBasicResponse::new())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

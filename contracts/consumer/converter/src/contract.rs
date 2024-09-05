@@ -74,7 +74,7 @@ impl ConverterContract<'_> {
         remote_denom: String,
         virtual_staking_code_id: u64,
         admin: Option<String>,
-        max_retrieve: u16,
+        max_retrieve: u32,
     ) -> Result<custom::Response, ContractError> {
         nonpayable(&ctx.info)?;
         // validate args
