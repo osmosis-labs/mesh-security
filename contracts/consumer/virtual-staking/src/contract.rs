@@ -664,7 +664,6 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         let config = self.config.load(deps.storage)?;
         // If 0 max cap, then we assume all tokens were force unbonded already, and just return the withdraw rewards
         // call and set bonded to empty
-        // TODO: verify this behavior with SDK module (otherwise we send unbond message)
         if max_cap.is_zero() {
             let all_delegations = TokenQuerier::new(&deps.querier)
                 .all_delegations(env.contract.address.to_string(), config.max_retrieve)?;
