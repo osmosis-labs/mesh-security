@@ -18,7 +18,7 @@ use sylvia::{contract, schemars};
 use mesh_apis::virtual_staking_api::{self, ValidatorSlash, VirtualStakingApi};
 
 use crate::error::ContractError;
-use crate::msg::ConfigResponse;
+use crate::msg::{AllStakeResponse, ConfigResponse, StakeResponse};
 use crate::state::Config;
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
@@ -225,6 +225,63 @@ impl VirtualStakingContract<'_> {
             Ok(Response::new())
         }
     }
+
+    /// This is only used for tests.
+    /// Ideally we want conditional compilation of these whole methods and the enum variants
+    #[sv::msg(exec)]
+    pub fn test_handle_epoch(
+        &self,
+        ctx: ExecCtx<VirtualStakeCustomQuery>,
+    ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
+        #[cfg(any(test, feature = "mt"))]
+        {
+            let ExecCtx { mut deps, .. } = ctx;
+            let requests: Vec<(String, Uint128)> = self
+                .bond_requests
+                .range(
+                    deps.as_ref().storage,
+                    None,
+                    None,
+                    cosmwasm_std::Order::Ascending,
+                )
+                .collect::<Result<_, _>>()?;
+
+            // Save the future values
+            self.bonded.save(deps.branch().storage, &requests)?;
+            Ok(Response::new())
+        }
+        #[cfg(not(any(test, feature = "mt")))]
+        {
+            let _ = ctx;
+            Err(ContractError::Unauthorized)
+        }
+    }
+
+    #[sv::msg(query)]
+    fn get_stake(
+        &self,
+        ctx: QueryCtx<VirtualStakeCustomQuery>,
+        validator: String,
+    ) -> Result<StakeResponse, ContractError> {
+        let bonded = self.bonded.load(ctx.deps.storage)?;
+
+        if let Some(stake) = bonded.iter().find(|&x| x.0 == validator) {
+            Ok(StakeResponse { stake: stake.1 })
+        } else {
+            Ok(StakeResponse {
+                stake: Uint128::zero(),
+            })
+        }
+    }
+
+    #[sv::msg(query)]
+    fn get_all_stake(
+        &self,
+        ctx: QueryCtx<VirtualStakeCustomQuery>,
+    ) -> Result<AllStakeResponse, ContractError> {
+        let stakes = self.bonded.load(ctx.deps.storage)?;
+        Ok(AllStakeResponse { stakes })
+    }
 }
 
 /// Returns a tuple containing the reward target and a boolean value
@@ -400,7 +457,17 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             delegator,
             validator,
         };
-        Ok(Response::new().add_message(msg))
+        #[cfg(any(feature = "mt", test))]
+        {
+            _ = msg;
+            Ok(Response::new())
+        }
+        #[cfg(not(any(test, feature = "mt")))]
+        {
+            let resp = Response::new().add_message(msg);
+            Ok(resp)
+        }
+        
     }
 
     /// Requests to unbond tokens from a validator. This will be actually handled at the next epoch.
@@ -436,7 +503,16 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             delegator,
             validator,
         };
-        Ok(Response::new().add_message(msg))
+        #[cfg(any(feature = "mt", test))]
+        {
+            _ = msg;
+            Ok(Response::new())
+        }
+        #[cfg(not(any(test, feature = "mt")))]
+        {
+            let resp = Response::new().add_message(msg);
+            Ok(resp)
+        }
     }
 
     /// Requests to unbond and burn tokens from a list of validators. Unbonding will be actually handled at the next epoch.
