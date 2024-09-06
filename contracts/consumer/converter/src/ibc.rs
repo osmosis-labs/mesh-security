@@ -188,11 +188,18 @@ pub(crate) fn valset_update_msg(
 /// On closed channel, we take all tokens from reflect contract to this contract.
 /// We also delete the channel entry from accounts.
 pub fn ibc_channel_close(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
     _msg: IbcChannelCloseMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    todo!();
+    let contract = ConverterContract::new();
+    let msg = virtual_staking_api::sv::ExecMsg::HandleCloseChannel {};
+    let msg = WasmMsg::Execute {
+        contract_addr: contract.virtual_stake.load(deps.storage)?.into(),
+        msg: to_json_binary(&msg)?,
+        funds: vec![],
+    };
+    Ok(IbcBasicResponse::new().add_message(msg))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -228,7 +235,7 @@ pub fn ibc_packet_receive(
             tx_id: _,
         } => {
             let response = contract.unstake(deps, delegator, validator, unstake)?;
-            let ack = ack_success(&UnstakeAck {})?;
+            let ack: cosmwasm_std::Binary = ack_success(&UnstakeAck {})?;
             IbcReceiveResponse::new()
                 .set_ack(ack)
                 .add_submessages(response.messages)
@@ -247,9 +254,16 @@ pub fn ibc_packet_receive(
         ProviderPacket::TransferRewards {
             rewards, recipient, ..
         } => {
-            let msg = contract.transfer_rewards(deps.as_ref(), recipient, rewards)?;
+            let msg =
+                contract.transfer_rewards(deps.as_ref(), recipient.clone(), rewards.clone())?;
+            let event = Event::new("mesh-transfer-rewards")
+                .add_attribute("recipient", &recipient)
+                .add_attribute("rewards", &rewards.amount.to_string());
             let ack = ack_success(&TransferRewardsAck {})?;
-            IbcReceiveResponse::new().set_ack(ack).add_message(msg)
+            IbcReceiveResponse::new()
+                .set_ack(ack)
+                .add_message(msg)
+                .add_event(event)
         }
     };
     Ok(res)

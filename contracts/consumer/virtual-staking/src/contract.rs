@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::u32;
 
 use cosmwasm_std::{
     coin, ensure_eq, to_json_binary, Coin, CosmosMsg, CustomQuery, DepsMut, DistributionMsg, Env,
@@ -74,7 +75,7 @@ impl VirtualStakingContract<'_> {
     pub fn instantiate(
         &self,
         ctx: InstantiateCtx<VirtualStakeCustomQuery>,
-        max_retrieve: u16,
+        max_retrieve: u32,
         tombstoned_unbond_enable: bool,
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         nonpayable(&ctx.info)?;
@@ -619,6 +620,52 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             },
             VirtualStakeMsg::Unbond { amount, validator },
         ];
+        Ok(Response::new().add_messages(msgs))
+    }
+
+    fn handle_close_channel(
+        &self,
+        ctx: ExecCtx<Self::QueryC>,
+    ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
+        nonpayable(&ctx.info)?;
+        let ExecCtx { deps, env, info } = ctx;
+        let config = self.config.load(deps.storage)?;
+        ensure_eq!(info.sender, config.converter, ContractError::Unauthorized); // only the converter can call this
+
+        let all_delegations = TokenQuerier::new(&deps.querier)
+            .all_delegations(env.contract.address.to_string(), u32::MAX)?;
+
+        let mut msgs = vec![VirtualStakeMsg::DeleteAllScheduledTasks {}];
+        for delegation in all_delegations.delegations.iter() {
+            let amount = Coin {
+                denom: config.denom.clone(),
+                amount: delegation.amount,
+            };
+            msgs.push(VirtualStakeMsg::UpdateDelegation {
+                amount: amount.clone(),
+                is_deduct: true,
+                delegator: delegation.delegator.clone(),
+                validator: delegation.validator.clone(),
+            });
+            msgs.push(VirtualStakeMsg::Unbond {
+                amount,
+                validator: delegation.validator.clone(),
+            });
+            self.bond_requests
+                .save(deps.storage, &delegation.validator, &Uint128::zero())?;
+        }
+
+        let requests: Vec<(String, Uint128)> = self
+            .bond_requests
+            .range(
+                deps.as_ref().storage,
+                None,
+                None,
+                cosmwasm_std::Order::Ascending,
+            )
+            .collect::<Result<_, _>>()?;
+        self.bonded.save(deps.storage, &requests)?;
+
         Ok(Response::new().add_messages(msgs))
     }
 

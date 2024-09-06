@@ -45,6 +45,12 @@ pub enum ContractError {
     #[error("You must start the channel handshake on the other side, it doesn't support OpenInit")]
     IbcOpenInitDisallowed,
 
+    #[error("IBC channels not match")]
+    IbcChannelNotMatch,
+
+    #[error("You must start the channel close on this side")]
+    IbcChannelCloseConfirmDisallowed,
+
     #[error("Invalid authorized endpoint: {0}")]
     InvalidEndpoint(String),
 

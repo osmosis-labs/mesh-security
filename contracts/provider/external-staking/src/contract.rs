@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, ensure_eq, to_json_binary, Coin, Decimal, DepsMut, Env, Event, IbcMsg, Order,
-    Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
+    coin, ensure, ensure_eq, to_json_binary, Addr, Coin, Decimal, DepsMut, Env, Event, IbcMsg,
+    Order, Response, StdResult, Storage, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -495,6 +495,55 @@ impl ExternalStakingContract<'_> {
             .add_attribute("amount", amount.to_string());
 
         Ok(event)
+    }
+
+    pub(crate) fn handle_close_channel(
+        &self,
+        deps: DepsMut,
+        env: Env,
+    ) -> Result<(), ContractError> {
+        let stakes: Vec<((Addr, String), Stake)> = self
+            .stakes
+            .stake
+            .range(
+                deps.as_ref().storage,
+                None,
+                None,
+                cosmwasm_std::Order::Ascending,
+            )
+            .collect::<Result<_, _>>()?;
+
+        for ((user, validator), stake) in stakes.iter() {
+            let mut new_stake = stake.clone();
+            let amount = new_stake.stake.low().clone();
+            let unbond = PendingUnbond {
+                amount,
+                release_at: env.block.time,
+            };
+            new_stake.pending_unbonds.push(unbond);
+            new_stake.stake = ValueRange::new_val(Uint128::zero());
+
+            let mut distribution = self
+                .distribution
+                .may_load(deps.storage, &validator)?
+                .unwrap_or_default();
+            new_stake
+                .points_alignment
+                .stake_decreased(amount, distribution.points_per_stake);
+
+            distribution.total_stake -= amount;
+
+            // Save stake
+            self.stakes
+                .stake
+                .save(deps.storage, (user, validator), &new_stake)?;
+
+            // Save distribution
+            self.distribution
+                .save(deps.storage, validator, &distribution)?;
+        }
+
+        Ok(())
     }
 
     /// In non-test code, this is called from `ibc_packet_ack`

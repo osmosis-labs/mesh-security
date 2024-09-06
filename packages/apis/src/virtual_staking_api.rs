@@ -65,6 +65,14 @@ pub trait VirtualStakingApi {
         amount: Coin,
     ) -> Result<Response<Self::ExecC>, Self::Error>;
 
+    /// Handle the close channel process.
+    /// Unbond all tokens from contract and delete scheduled tasks.
+    #[sv::msg(exec)]
+    fn handle_close_channel(
+        &self,
+        ctx: ExecCtx<Self::QueryC>,
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
+
     /// SudoMsg::HandleEpoch{} should be called once per epoch by the sdk (in EndBlock).
     /// It allows the virtual staking contract to bond or unbond any pending requests, as well
     /// as to perform a rebalance if needed (over the max cap).
