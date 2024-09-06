@@ -192,19 +192,8 @@ pub fn ibc_channel_close(
     _env: Env,
     msg: IbcChannelCloseMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    match msg {
-        IbcChannelCloseMsg::CloseInit { .. } => {
-            return Err(ContractError::IbcChannelCloseInitDisallowed)
-        }
-        IbcChannelCloseMsg::CloseConfirm { channel } => {
-            if channel.ne(&IBC_CHANNEL.load(deps.storage)?) {
-                return Err(ContractError::IbcChannelNotMatch);
-            }
-        }
-    };
-
     let contract = ConverterContract::new();
-    let msg = virtual_staking_api::sv::ExecMsg::HandleCloseChannel {};
+    let msg = virtual_staking_api::sv::ExecMsg::HandleCloseChannel{};
     let msg = WasmMsg::Execute {
         contract_addr: contract.virtual_stake.load(deps.storage)?.into(),
         msg: to_json_binary(&msg)?,
@@ -246,7 +235,7 @@ pub fn ibc_packet_receive(
             tx_id: _,
         } => {
             let response = contract.unstake(deps, delegator, validator, unstake)?;
-            let ack = ack_success(&UnstakeAck {})?;
+            let ack: cosmwasm_std::Binary = ack_success(&UnstakeAck {})?;
             IbcReceiveResponse::new()
                 .set_ack(ack)
                 .add_submessages(response.messages)
@@ -266,8 +255,13 @@ pub fn ibc_packet_receive(
             rewards, recipient, ..
         } => {
             let msg = contract.transfer_rewards(deps.as_ref(), recipient, rewards)?;
+            let event = Event::new("mesh-transfer-rewards")
+                .add_attribute("recipient", &recipient)
+                .add_attribute("rewards", &rewards.amount.to_string());
             let ack = ack_success(&TransferRewardsAck {})?;
-            IbcReceiveResponse::new().set_ack(ack).add_message(msg)
+            IbcReceiveResponse::new()
+            .set_ack(ack).add_message(msg)
+            .add_event(event)
         }
     };
     Ok(res)
