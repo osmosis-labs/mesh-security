@@ -193,7 +193,7 @@ pub fn ibc_channel_close(
     msg: IbcChannelCloseMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
     let contract = ConverterContract::new();
-    let msg = virtual_staking_api::sv::ExecMsg::HandleCloseChannel{};
+    let msg = virtual_staking_api::sv::ExecMsg::HandleCloseChannel {};
     let msg = WasmMsg::Execute {
         contract_addr: contract.virtual_stake.load(deps.storage)?.into(),
         msg: to_json_binary(&msg)?,
@@ -260,8 +260,9 @@ pub fn ibc_packet_receive(
                 .add_attribute("rewards", &rewards.amount.to_string());
             let ack = ack_success(&TransferRewardsAck {})?;
             IbcReceiveResponse::new()
-            .set_ack(ack).add_message(msg)
-            .add_event(event)
+                .set_ack(ack)
+                .add_message(msg)
+                .add_event(event)
         }
     };
     Ok(res)

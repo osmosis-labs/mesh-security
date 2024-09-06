@@ -9,12 +9,10 @@ pub struct Config {
     /// The address of the converter contract (that is authorized to bond/unbond and will receive rewards)
     pub converter: Addr,
   
-    ///
+    /// Maximum delegations per query
     pub max_retrieve: u32,
   
     /// If it enable, tombstoned validators will be unbond automatically
     pub tombstoned_unbond_enable: bool,
 
-    /// Maximum delegations per query
-    pub max_retrieve: u16,
 }
