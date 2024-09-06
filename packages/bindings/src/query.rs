@@ -22,6 +22,10 @@ pub enum VirtualStakeQuery {
     #[returns(SlashRatioResponse)]
     SlashRatio {},
 
+    /// Returns total delegations of the give validator
+    #[returns(TotalDelegationResponse)]
+    TotalDelegation { contract: String, validator: String },
+
     /// Returns a max retrieve amount of delegations for the given contract
     #[returns(AllDelegationsResponse)]
     AllDelegations { contract: String, max_retrieve: u32 },
@@ -46,6 +50,10 @@ pub struct SlashRatioResponse {
     pub slash_fraction_double_sign: String,
 }
 
+#[cw_serde]
+pub struct TotalDelegationResponse {
+    pub delegation: Coin,
+}
 #[cw_serde]
 pub struct AllDelegationsResponse {
     pub delegations: Vec<Delegation>,
@@ -86,6 +94,17 @@ impl<'a> TokenQuerier<'a> {
         self.querier.query(&slash_ratio_query.into())
     }
 
+    pub fn total_delegations(
+        &self,
+        contract: String,
+        validator: String,
+    ) -> StdResult<TotalDelegationResponse> {
+        let total_delegations_query = VirtualStakeQuery::TotalDelegation {
+            contract,
+            validator,
+        };
+        self.querier.query(&total_delegations_query.into())
+    }
     pub fn all_delegations(
         &self,
         contract: String,
