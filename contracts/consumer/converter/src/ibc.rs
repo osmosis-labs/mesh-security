@@ -190,7 +190,7 @@ pub(crate) fn valset_update_msg(
 pub fn ibc_channel_close(
     deps: DepsMut,
     _env: Env,
-    msg: IbcChannelCloseMsg,
+    _msg: IbcChannelCloseMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
     let contract = ConverterContract::new();
     let msg = virtual_staking_api::sv::ExecMsg::HandleCloseChannel {};
@@ -254,7 +254,7 @@ pub fn ibc_packet_receive(
         ProviderPacket::TransferRewards {
             rewards, recipient, ..
         } => {
-            let msg = contract.transfer_rewards(deps.as_ref(), recipient, rewards)?;
+            let msg = contract.transfer_rewards(deps.as_ref(), recipient.clone(), rewards.clone())?;
             let event = Event::new("mesh-transfer-rewards")
                 .add_attribute("recipient", &recipient)
                 .add_attribute("rewards", &rewards.amount.to_string());
