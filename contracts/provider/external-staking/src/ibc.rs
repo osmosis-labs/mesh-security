@@ -104,11 +104,25 @@ pub fn ibc_channel_connect(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn ibc_channel_close(
-    _deps: DepsMut,
-    _env: Env,
-    _msg: IbcChannelCloseMsg,
+    deps: DepsMut,
+    env: Env,
+    msg: IbcChannelCloseMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    todo!();
+    match msg {
+        IbcChannelCloseMsg::CloseInit { channel } => {
+            if channel.ne(&IBC_CHANNEL.load(deps.storage)?) {
+                return Err(ContractError::IbcChannelNotMatch);
+            }
+        }
+        IbcChannelCloseMsg::CloseConfirm { .. } => {
+            return Err(ContractError::IbcChannelCloseConfirmDisallowed)
+        }
+    };
+
+    let contract = ExternalStakingContract::new();
+    contract.handle_close_channel(deps, env)?;
+
+    Ok(IbcBasicResponse::new())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -154,6 +168,17 @@ pub fn ibc_packet_receive(
                 .set_ack(ack)
                 .add_event(evt)
                 .add_messages(msgs)
+        }
+        ConsumerPacket::InternalUnstake {
+            delegator,
+            validator,
+            normalize_amount: _,
+            inverted_amount,
+        } => {
+            let evt =
+                contract.internal_unstake(deps, env, delegator, validator, inverted_amount)?;
+            let ack = ack_success(&DistributeAck {})?;
+            IbcReceiveResponse::new().set_ack(ack).add_event(evt)
         }
         ConsumerPacket::Distribute { validator, rewards } => {
             let evt = contract.distribute_rewards(deps, &validator, rewards)?;

@@ -1,21 +1,20 @@
-mod virtual_staking_mock;
-
 use cosmwasm_std::{coin, coins, Addr, Decimal, StdError, Uint128, Validator};
 use cw_multi_test::{no_init, AppBuilder};
 use mesh_apis::converter_api::sv::mt::ConverterApiProxy;
 use mesh_apis::converter_api::RewardInfo;
 use mesh_simple_price_feed::contract::sv::mt::CodeId as PriceFeedCodeId;
 use mesh_simple_price_feed::contract::SimplePriceFeedContract;
+use mesh_virtual_staking::contract::sv::mt::{
+    CodeId as VirtualStakingCodeId, VirtualStakingContractProxy,
+};
+use mesh_virtual_staking::contract::VirtualStakingContract;
 use sylvia::multitest::{App, Proxy};
-use virtual_staking_mock::sv::mt::CodeId as VirtualStakingCodeId;
-use virtual_staking_mock::VirtualStakingMock;
 
 use crate::contract::sv::mt::CodeId as ConverterCodeId;
 use crate::contract::sv::mt::ConverterContractProxy;
 use crate::contract::{custom, ConverterContract};
 use crate::error::ContractError;
 use crate::error::ContractError::Unauthorized;
-use crate::multitest::virtual_staking_mock::sv::mt::VirtualStakingMockProxy;
 
 const JUNO: &str = "ujuno";
 
@@ -31,7 +30,7 @@ struct SetupArgs<'a> {
 struct SetupResponse<'a> {
     price_feed: Proxy<'a, MtApp, SimplePriceFeedContract<'a>>,
     converter: Proxy<'a, MtApp, ConverterContract<'a>>,
-    virtual_staking: Proxy<'a, MtApp, VirtualStakingMock<'a>>,
+    virtual_staking: Proxy<'a, MtApp, VirtualStakingContract<'a>>,
 }
 
 fn new_app() -> App<MtApp> {
@@ -62,7 +61,9 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
             discount,
             JUNO.to_owned(),
             virtual_staking_code.code_id(),
+            true,
             Some(admin.to_owned()),
+            50,
         )
         .with_label("Juno Converter")
         .with_admin(admin)
@@ -152,10 +153,10 @@ fn ibc_stake_and_unstake() {
     // no one is staked
     let val1 = "Val Kilmer";
     let val2 = "Valley Girl";
-    assert!(virtual_staking.all_stake().unwrap().stakes.is_empty());
+    assert!(virtual_staking.get_all_stake().unwrap().stakes.is_empty());
     assert_eq!(
         virtual_staking
-            .stake(val1.to_string())
+            .get_stake(val1.to_string())
             .unwrap()
             .stake
             .u128(),
@@ -163,7 +164,7 @@ fn ibc_stake_and_unstake() {
     );
     assert_eq!(
         virtual_staking
-            .stake(val2.to_string())
+            .get_stake(val2.to_string())
             .unwrap()
             .stake
             .u128(),
@@ -172,24 +173,27 @@ fn ibc_stake_and_unstake() {
 
     // let's stake some
     converter
-        .test_stake(val1.to_string(), coin(1000, JUNO))
+        .test_stake(owner.to_string(), val1.to_string(), coin(1000, JUNO))
         .call(owner)
         .unwrap();
     converter
-        .test_stake(val2.to_string(), coin(4000, JUNO))
+        .test_stake(owner.to_string(), val2.to_string(), coin(4000, JUNO))
         .call(owner)
         .unwrap();
 
     // and unstake some
     converter
-        .test_unstake(val2.to_string(), coin(2000, JUNO))
+        .test_unstake(owner.to_string(), val2.to_string(), coin(2000, JUNO))
         .call(owner)
         .unwrap();
+
+    // new epoch to update all stake values
+    virtual_staking.test_handle_epoch().call(owner).unwrap();
 
     // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
     assert_eq!(
         virtual_staking
-            .stake(val1.to_string())
+            .get_stake(val1.to_string())
             .unwrap()
             .stake
             .u128(),
@@ -197,14 +201,14 @@ fn ibc_stake_and_unstake() {
     );
     assert_eq!(
         virtual_staking
-            .stake(val2.to_string())
+            .get_stake(val2.to_string())
             .unwrap()
             .stake
             .u128(),
         600
     );
     assert_eq!(
-        virtual_staking.all_stake().unwrap().stakes,
+        virtual_staking.get_all_stake().unwrap().stakes,
         vec![
             (val1.to_string(), Uint128::new(300)),
             (val2.to_string(), Uint128::new(600)),
@@ -238,10 +242,10 @@ fn ibc_stake_and_burn() {
     // no one is staked
     let val1 = "Val Kilmer";
     let val2 = "Valley Girl";
-    assert!(virtual_staking.all_stake().unwrap().stakes.is_empty());
+    assert!(virtual_staking.get_all_stake().unwrap().stakes.is_empty());
     assert_eq!(
         virtual_staking
-            .stake(val1.to_string())
+            .get_stake(val1.to_string())
             .unwrap()
             .stake
             .u128(),
@@ -249,7 +253,7 @@ fn ibc_stake_and_burn() {
     );
     assert_eq!(
         virtual_staking
-            .stake(val2.to_string())
+            .get_stake(val2.to_string())
             .unwrap()
             .stake
             .u128(),
@@ -258,11 +262,11 @@ fn ibc_stake_and_burn() {
 
     // let's stake some
     converter
-        .test_stake(val1.to_string(), coin(1000, JUNO))
+        .test_stake(owner.to_string(), val1.to_string(), coin(1000, JUNO))
         .call(owner)
         .unwrap();
     converter
-        .test_stake(val2.to_string(), coin(4000, JUNO))
+        .test_stake(owner.to_string(), val2.to_string(), coin(4000, JUNO))
         .call(owner)
         .unwrap();
 
@@ -272,10 +276,12 @@ fn ibc_stake_and_burn() {
         .call(owner)
         .unwrap();
 
+    // new epoch to update all stake values
+    virtual_staking.test_handle_epoch().call(owner).unwrap();
     // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
     assert_eq!(
         virtual_staking
-            .stake(val1.to_string())
+            .get_stake(val1.to_string())
             .unwrap()
             .stake
             .u128(),
@@ -283,14 +289,14 @@ fn ibc_stake_and_burn() {
     );
     assert_eq!(
         virtual_staking
-            .stake(val2.to_string())
+            .get_stake(val2.to_string())
             .unwrap()
             .stake
             .u128(),
         600
     );
     assert_eq!(
-        virtual_staking.all_stake().unwrap().stakes,
+        virtual_staking.get_all_stake().unwrap().stakes,
         vec![
             (val1.to_string(), Uint128::new(300)),
             (val2.to_string(), Uint128::new(600)),

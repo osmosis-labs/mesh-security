@@ -19,7 +19,6 @@ mesh-bindings = { path = "./packages/bindings" }
 mesh-burn = { path = "./packages/burn" }
 mesh-price-feed = { path = "./packages/price-feed" }
 mesh-sync = { path = "./packages/sync" }
-mesh-virtual-staking-mock = { path = "./packages/virtual-staking-mock" }
 
 mesh-vault = { path = "./contracts/provider/vault" }
 mesh-external-staking = { path = "./contracts/provider/external-staking" }

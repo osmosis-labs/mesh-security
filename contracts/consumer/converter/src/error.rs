@@ -26,6 +26,12 @@ pub enum ContractError {
     #[error("You must start the channel handshake on this side, it doesn't support OpenTry")]
     IbcOpenTryDisallowed,
 
+    #[error("IBC channels not match")]
+    IbcChannelNotMatch,
+
+    #[error("You must start the channel close on provider side")]
+    IbcChannelCloseInitDisallowed,
+
     #[error("Sent wrong denom over IBC: {sent}, expected {expected}")]
     WrongDenom { sent: String, expected: String },
 

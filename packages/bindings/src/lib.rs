@@ -1,10 +1,10 @@
 mod msg;
 mod query;
 
-pub use msg::{VirtualStakeCustomMsg, VirtualStakeMsg};
+pub use msg::{ProviderCustomMsg, ProviderMsg, VirtualStakeCustomMsg, VirtualStakeMsg};
 pub use query::{
-    BondStatusResponse, SlashRatioResponse, TokenQuerier, VirtualStakeCustomQuery,
-    VirtualStakeQuery,
+    BondStatusResponse, SlashRatioResponse, TokenQuerier, TotalDelegationResponse,
+    VirtualStakeCustomQuery, VirtualStakeQuery,
 };
 
 // This is a signal, such that any contract that imports these helpers

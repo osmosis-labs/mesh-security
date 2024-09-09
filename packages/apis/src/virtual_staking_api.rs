@@ -25,6 +25,7 @@ pub trait VirtualStakingApi {
     fn bond(
         &self,
         ctx: ExecCtx<Self::QueryC>,
+        delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<Self::ExecC>, Self::Error>;
@@ -36,6 +37,7 @@ pub trait VirtualStakingApi {
     fn unbond(
         &self,
         ctx: ExecCtx<Self::QueryC>,
+        delegator: String,
         validator: String,
         amount: Coin,
     ) -> Result<Response<Self::ExecC>, Self::Error>;
@@ -49,6 +51,26 @@ pub trait VirtualStakingApi {
         ctx: ExecCtx<Self::QueryC>,
         validators: Vec<String>,
         amount: Coin,
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
+
+    /// Immediately unbond the given amount due to zero max cap
+    /// When the consumer chain receives ack packet from provider - which means the unbond process from provider is success,
+    /// consumer chain will trigger this function to unbond this contract actor staking base on the delegate amount.
+    #[sv::msg(exec)]
+    fn internal_unbond(
+        &self,
+        ctx: ExecCtx<Self::QueryC>,
+        delegator: String,
+        validator: String,
+        amount: Coin,
+    ) -> Result<Response<Self::ExecC>, Self::Error>;
+
+    /// Handle the close channel process.
+    /// Unbond all tokens from contract and delete scheduled tasks.
+    #[sv::msg(exec)]
+    fn handle_close_channel(
+        &self,
+        ctx: ExecCtx<Self::QueryC>,
     ) -> Result<Response<Self::ExecC>, Self::Error>;
 
     /// SudoMsg::HandleEpoch{} should be called once per epoch by the sdk (in EndBlock).
@@ -102,4 +124,6 @@ pub struct ValidatorSlash {
     /// The (nominal) slash ratio for the validator.
     /// Useful in case we don't know if it's a double sign or downtime slash.
     pub slash_ratio: String,
+    /// Validator is tombstoned or not.
+    pub is_tombstoned: bool,
 }

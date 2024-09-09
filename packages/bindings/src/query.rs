@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, CustomQuery, QuerierWrapper, QueryRequest, StdResult};
+use cosmwasm_std::{Coin, CustomQuery, QuerierWrapper, QueryRequest, StdResult, Uint128};
 
 #[cw_serde]
 #[derive(QueryResponses)]
@@ -21,6 +21,14 @@ pub enum VirtualStakeQuery {
     /// Returns the blockchain's slashing ratios.
     #[returns(SlashRatioResponse)]
     SlashRatio {},
+
+    /// Returns total delegations of the give validator
+    #[returns(TotalDelegationResponse)]
+    TotalDelegation { contract: String, validator: String },
+
+    /// Returns a max retrieve amount of delegations for the given contract
+    #[returns(AllDelegationsResponse)]
+    AllDelegations { contract: String, max_retrieve: u32 },
 }
 
 /// Bookkeeping info in the virtual staking sdk module
@@ -40,6 +48,22 @@ pub struct SlashRatioResponse {
     pub slash_fraction_downtime: String,
     /// Slash ratio due to double signing. Applied when a validator is permanently jailed (tombstoned).
     pub slash_fraction_double_sign: String,
+}
+
+#[cw_serde]
+pub struct TotalDelegationResponse {
+    pub delegation: Coin,
+}
+#[cw_serde]
+pub struct AllDelegationsResponse {
+    pub delegations: Vec<Delegation>,
+}
+
+#[cw_serde]
+pub struct Delegation {
+    pub delegator: String,
+    pub validator: String,
+    pub amount: Uint128,
 }
 
 impl CustomQuery for VirtualStakeCustomQuery {}
@@ -68,5 +92,28 @@ impl<'a> TokenQuerier<'a> {
     pub fn slash_ratio(&self) -> StdResult<SlashRatioResponse> {
         let slash_ratio_query = VirtualStakeQuery::SlashRatio {};
         self.querier.query(&slash_ratio_query.into())
+    }
+
+    pub fn total_delegations(
+        &self,
+        contract: String,
+        validator: String,
+    ) -> StdResult<TotalDelegationResponse> {
+        let total_delegations_query = VirtualStakeQuery::TotalDelegation {
+            contract,
+            validator,
+        };
+        self.querier.query(&total_delegations_query.into())
+    }
+    pub fn all_delegations(
+        &self,
+        contract: String,
+        max_retrieve: u32,
+    ) -> StdResult<AllDelegationsResponse> {
+        let all_delegations_query = VirtualStakeQuery::AllDelegations {
+            contract,
+            max_retrieve,
+        };
+        self.querier.query(&all_delegations_query.into())
     }
 }
