@@ -8,9 +8,7 @@ use cosmwasm_std::{
     StdError, Uint128,
 };
 use cw_band::{OracleResponsePacketData, Output, ResolveStatus};
-use mesh_apis::ibc::{
-    ack_fail, ack_success, validate_channel_order, PriceFeedAck, ProtocolVersion,
-};
+use mesh_apis::ibc::{ack_fail, ack_success, PriceFeedAck};
 use obi::OBIDecode;
 
 use crate::contract::RemotePriceFeedContract;
@@ -91,7 +89,7 @@ pub fn ibc_channel_connect(
 
     // Version negotiation over, we can only store the channel
     let contract = RemotePriceFeedContract::new();
-    contract.channel.save(deps.storage, &channel)?;
+    contract.channel.save(deps.storage, channel)?;
 
     Ok(IbcBasicResponse::default())
 }

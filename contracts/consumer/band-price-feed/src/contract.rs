@@ -1,6 +1,5 @@
 use cosmwasm_std::{
-    to_json_binary, Binary, Coin, DepsMut, Env, IbcChannel, IbcEndpoint, IbcMsg, IbcTimeout,
-    Response, Uint64,
+    to_json_binary, Binary, Coin, DepsMut, Env, IbcChannel, IbcMsg, IbcTimeout, Response, Uint64,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
