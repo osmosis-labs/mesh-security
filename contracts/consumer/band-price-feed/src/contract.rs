@@ -10,7 +10,7 @@ use mesh_apis::price_feed_api::{PriceFeedApi, PriceResponse};
 use crate::error::ContractError;
 use crate::state::{Config, TradingPair};
 
-use sylvia::types::{InstantiateCtx, QueryCtx, SudoCtx};
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use cw_band::{Input, OracleRequestPacketData};
@@ -58,7 +58,7 @@ impl RemotePriceFeedContract {
     #[sv::msg(instantiate)]
     pub fn instantiate(
         &self,
-        ctx: InstantiateCtx,
+        mut ctx: InstantiateCtx,
         trading_pair: TradingPair,
         client_id: String,
         oracle_script_id: Uint64,
@@ -68,12 +68,12 @@ impl RemotePriceFeedContract {
         prepare_gas: Uint64,
         execute_gas: Uint64,
         minimum_sources: u8,
+        price_info_ttl_in_secs: u64,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
 
         set_contract_version(ctx.deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
         self.trading_pair.save(ctx.deps.storage, &trading_pair)?;
-
         self.config.save(
             ctx.deps.storage,
             &Config {
@@ -87,9 +87,27 @@ impl RemotePriceFeedContract {
                 minimum_sources,
             },
         )?;
-
+        self.price_keeper
+            .init(&mut ctx.deps, price_info_ttl_in_secs)?;
         Ok(Response::new())
     }
+
+    #[sv::msg(query)]
+    pub fn get_price(&self, ctx: QueryCtx) -> Result<PriceResponse, ContractError> {
+        Ok(self
+            .price_keeper
+            .price(ctx.deps, &ctx.env)
+            .map(|rate| PriceResponse {
+                native_per_foreign: rate,
+            })?)
+    }
+
+    #[sv::msg(exec)]
+    pub fn request(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
+        let ExecCtx { deps, env, info: _ } = ctx;
+        try_request(deps, &env)
+    }
+
 }
 
 impl PriceFeedApi for RemotePriceFeedContract {
@@ -197,6 +215,7 @@ mod tests {
                 Uint64::new(100000),
                 Uint64::new(200000),
                 1,
+                60,
             )
             .unwrap();
     }

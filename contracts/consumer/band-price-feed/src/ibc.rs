@@ -173,7 +173,8 @@ pub fn ibc_packet_ack(
     _env: Env,
     _msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    Err(ContractError::IbcAckNotAccepted)
+    // We ignore acknowledgement from BandChain becuase it doesn't neccessary to know request id when handle result.
+    Ok(IbcBasicResponse::new().add_attribute("action", "ibc_packet_ack"))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
