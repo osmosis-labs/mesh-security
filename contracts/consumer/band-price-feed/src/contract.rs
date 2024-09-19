@@ -92,16 +92,6 @@ impl RemotePriceFeedContract {
         Ok(Response::new())
     }
 
-    #[sv::msg(query)]
-    pub fn get_price(&self, ctx: QueryCtx) -> Result<PriceResponse, ContractError> {
-        Ok(self
-            .price_keeper
-            .price(ctx.deps, &ctx.env)
-            .map(|rate| PriceResponse {
-                native_per_foreign: rate,
-            })?)
-    }
-
     #[sv::msg(exec)]
     pub fn request(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
         let ExecCtx { deps, env, info: _ } = ctx;
