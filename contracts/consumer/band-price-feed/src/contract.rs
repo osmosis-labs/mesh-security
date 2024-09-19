@@ -97,7 +97,6 @@ impl RemotePriceFeedContract {
         let ExecCtx { deps, env, info: _ } = ctx;
         try_request(deps, &env)
     }
-
 }
 
 impl PriceFeedApi for RemotePriceFeedContract {

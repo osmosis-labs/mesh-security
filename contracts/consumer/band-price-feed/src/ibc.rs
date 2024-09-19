@@ -2,7 +2,10 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_json, Decimal, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcOrder, IbcPacket, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, StdError, Uint128
+    from_json, Decimal, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse,
+    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcOrder,
+    IbcPacket, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse,
+    StdError, Uint128,
 };
 use cw_band::{OracleResponsePacketData, Output, ResolveStatus};
 use mesh_apis::ibc::{
@@ -30,7 +33,7 @@ pub fn ibc_channel_open(
     // ensure we are called with OpenInit
     let channel = msg.channel();
     let counterparty_version = msg.counterparty_version();
-    
+
     if channel.version != IBC_APP_VERSION {
         return Err(ContractError::InvalidIbcVersion {
             version: channel.version.clone(),
@@ -66,10 +69,10 @@ pub fn ibc_channel_connect(
     if contract.channel.may_load(deps.storage)?.is_some() {
         return Err(ContractError::IbcChannelAlreadyOpen);
     }
-   
+
     let channel = msg.channel();
     let counterparty_version = msg.counterparty_version();
-    
+
     if channel.version != IBC_APP_VERSION {
         return Err(ContractError::InvalidIbcVersion {
             version: channel.version.clone(),
