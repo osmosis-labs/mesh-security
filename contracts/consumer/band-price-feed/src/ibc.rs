@@ -2,10 +2,7 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_json, Decimal, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse,
-    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcPacket,
-    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, StdError,
-    Uint128,
+    from_json, Decimal, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcOrder, IbcPacket, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, StdError, Uint128
 };
 use cw_band::{OracleResponsePacketData, Output, ResolveStatus};
 use mesh_apis::ibc::{
@@ -16,10 +13,7 @@ use obi::OBIDecode;
 use crate::contract::RemotePriceFeedContract;
 use crate::error::ContractError;
 
-/// This is the maximum version of the Mesh Security protocol that we support
-const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.1.0";
-/// This is the minimum version that we are compatible with
-const MIN_IBC_PROTOCOL_VERSION: &str = "0.1.0";
+pub const IBC_APP_VERSION: &str = "bandchain-1";
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 /// enforces ordering and versioning constraints
@@ -34,33 +28,27 @@ pub fn ibc_channel_open(
         return Err(ContractError::IbcChannelAlreadyOpen);
     }
     // ensure we are called with OpenInit
-    let (channel, counterparty_version) = match msg {
-        IbcChannelOpenMsg::OpenInit { .. } => return Err(ContractError::IbcOpenInitDisallowed),
-        IbcChannelOpenMsg::OpenTry {
-            channel,
-            counterparty_version,
-        } => (channel, counterparty_version),
-    };
-
-    // verify the ordering is correct
-    validate_channel_order(&channel.order)?;
-
-    // assert expected endpoint
-    let config = contract.config.load(deps.storage)?;
-    if config.connection_id != channel.connection_id
-        || config.endpoint.port_id != channel.counterparty_endpoint.port_id
-    {
-        // FIXME: do we need a better error here?
-        return Err(ContractError::Unauthorized);
+    let channel = msg.channel();
+    let counterparty_version = msg.counterparty_version();
+    
+    if channel.version != IBC_APP_VERSION {
+        return Err(ContractError::InvalidIbcVersion {
+            version: channel.version.clone(),
+        });
+    }
+    if let Some(version) = counterparty_version {
+        if version != IBC_APP_VERSION {
+            return Err(ContractError::InvalidIbcVersion {
+                version: version.to_string(),
+            });
+        }
+    }
+    if channel.order != IbcOrder::Unordered {
+        return Err(ContractError::OnlyUnorderedChannel {});
     }
 
-    // we handshake with the counterparty version, it must not be empty
-    let v: ProtocolVersion = from_json(counterparty_version.as_bytes())?;
-    // if we can build a response to this, then it is compatible. And we use the highest version there
-    let version = v.build_response(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?;
-
     let response = Ibc3ChannelOpenResponse {
-        version: version.to_string()?,
+        version: channel.version.clone(),
     };
     Ok(Some(response))
 }
@@ -78,11 +66,25 @@ pub fn ibc_channel_connect(
     if contract.channel.may_load(deps.storage)?.is_some() {
         return Err(ContractError::IbcChannelAlreadyOpen);
     }
-    // ensure we are called with OpenConfirm
-    let channel = match msg {
-        IbcChannelConnectMsg::OpenConfirm { channel } => channel,
-        IbcChannelConnectMsg::OpenAck { .. } => return Err(ContractError::IbcOpenInitDisallowed),
-    };
+   
+    let channel = msg.channel();
+    let counterparty_version = msg.counterparty_version();
+    
+    if channel.version != IBC_APP_VERSION {
+        return Err(ContractError::InvalidIbcVersion {
+            version: channel.version.clone(),
+        });
+    }
+    if let Some(version) = counterparty_version {
+        if version != IBC_APP_VERSION {
+            return Err(ContractError::InvalidIbcVersion {
+                version: version.to_string(),
+            });
+        }
+    }
+    if channel.order != IbcOrder::Unordered {
+        return Err(ContractError::OnlyUnorderedChannel {});
+    }
 
     // Version negotiation over, we can only store the channel
     let contract = RemotePriceFeedContract::new();
@@ -97,7 +99,7 @@ pub fn ibc_channel_close(
     _env: Env,
     _msg: IbcChannelCloseMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    todo!();
+    unimplemented!();
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

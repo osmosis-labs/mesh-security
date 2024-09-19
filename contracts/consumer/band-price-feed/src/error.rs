@@ -1,6 +1,5 @@
 use cosmwasm_std::StdError;
 use cw_utils::PaymentError;
-use mesh_apis::ibc::VersionError;
 use thiserror::Error;
 
 use mesh_price_feed::PriceKeeperError;
@@ -26,8 +25,11 @@ pub enum ContractError {
     #[error("Request didn't suceess")]
     RequestNotSuccess {},
 
-    #[error("{0}")]
-    IbcVersion(#[from] VersionError),
+    #[error("Only supports channel with ibc version bandchain-1, got {version}")]
+    InvalidIbcVersion { version: String },
+
+    #[error("Only supports unordered channel")]
+    OnlyUnorderedChannel {},
 
     #[error("The provided IBC channel is not open")]
     IbcChannelNotOpen,

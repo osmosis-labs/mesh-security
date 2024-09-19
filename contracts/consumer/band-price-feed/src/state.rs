@@ -1,13 +1,10 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, IbcEndpoint, Uint64};
+use cosmwasm_std::{Coin, Uint64};
 
 #[cw_serde]
 pub struct Config {
     // A unique ID for the oracle request
     pub client_id: String,
-    pub connection_id: String,
-    // Endpoint to validate when open channel
-    pub endpoint: IbcEndpoint,
     // The oracle script ID to query
     pub oracle_script_id: Uint64,
     // The number of validators that are requested to respond
