@@ -515,7 +515,7 @@ impl ExternalStakingContract<'_> {
 
         for ((user, validator), stake) in stakes.iter() {
             let mut new_stake = stake.clone();
-            let amount = new_stake.stake.low().clone();
+            let amount = new_stake.stake.low();
             let unbond = PendingUnbond {
                 amount,
                 release_at: env.block.time,
@@ -525,7 +525,7 @@ impl ExternalStakingContract<'_> {
 
             let mut distribution = self
                 .distribution
-                .may_load(deps.storage, &validator)?
+                .may_load(deps.storage, validator)?
                 .unwrap_or_default();
             new_stake
                 .points_alignment

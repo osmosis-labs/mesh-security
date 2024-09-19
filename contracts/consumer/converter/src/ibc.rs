@@ -258,7 +258,7 @@ pub fn ibc_packet_receive(
                 contract.transfer_rewards(deps.as_ref(), recipient.clone(), rewards.clone())?;
             let event = Event::new("mesh-transfer-rewards")
                 .add_attribute("recipient", &recipient)
-                .add_attribute("rewards", &rewards.amount.to_string());
+                .add_attribute("rewards", rewards.amount.to_string());
             let ack = ack_success(&TransferRewardsAck {})?;
             IbcReceiveResponse::new()
                 .set_ack(ack)
