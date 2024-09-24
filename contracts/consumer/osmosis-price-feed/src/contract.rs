@@ -10,9 +10,8 @@ use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
 use crate::error::ContractError;
 use crate::ibc::{make_ibc_packet, AUTH_ENDPOINT};
 use crate::msg::AuthorizedEndpoint;
-use crate::price_keeper::PriceKeeper;
-use crate::scheduler::{Action, Scheduler};
 use crate::state::TradingPair;
+use mesh_price_feed::{Action, PriceKeeper, Scheduler};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -21,7 +20,7 @@ pub struct RemotePriceFeedContract {
     pub channel: Item<'static, IbcChannel>,
     pub trading_pair: Item<'static, TradingPair>,
     pub price_keeper: PriceKeeper,
-    pub scheduler: Scheduler<Box<dyn Action>>,
+    pub scheduler: Scheduler<Box<dyn Action<ContractError>>, ContractError>,
 }
 
 impl Default for RemotePriceFeedContract {

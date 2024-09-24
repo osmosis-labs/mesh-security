@@ -167,6 +167,9 @@ pub struct ValsetUpdateAck {}
 #[cw_serde]
 pub struct DistributeAck {}
 
+#[cw_serde]
+pub struct PriceFeedAck {}
+
 /// This is a generic ICS acknowledgement format.
 /// Protobuf defined here: https://github.com/cosmos/cosmos-sdk/blob/v0.42.0/proto/ibc/core/channel/v1/channel.proto#L141-L147
 /// This is compatible with the JSON serialization.

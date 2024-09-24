@@ -1,7 +1,12 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Decimal, Deps, DepsMut, Env, Timestamp};
 use cw_storage_plus::Item;
 
-use crate::state::PriceInfo;
+#[cw_serde]
+pub struct PriceInfo {
+    pub time: Timestamp,
+    pub native_per_foreign: Decimal,
+}
 
 /// A component that keeps track of the latest price info.
 pub struct PriceKeeper {
