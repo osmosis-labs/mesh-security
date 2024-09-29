@@ -1,7 +1,10 @@
 use std::error::Error;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{to_json_binary, Binary, Coin, Decimal, StdResult, Timestamp};
+use cosmwasm_std::{to_json_binary, Binary, Coin, StdError, StdResult};
+use osmosis_std::shim::Timestamp as OsmosisTimestamp;
+use osmosis_std::types::tendermint::abci::RequestQuery;
+use prost::Message;
 
 use crate::converter_api::{RewardInfo, ValidatorSlashInfo};
 
@@ -193,15 +196,132 @@ pub fn ack_fail<E: Error>(err: E) -> StdResult<Binary> {
 }
 
 #[cw_serde]
-pub enum PriceFeedProviderAck {
-    Update { time: Timestamp, twap: Decimal },
+pub struct InterchainQueryPacketData {
+    data: Binary,
+    memo: String,
+}
+
+pub fn ibc_query_packet(packet: CosmosQuery) -> InterchainQueryPacketData {
+    InterchainQueryPacketData {
+        data: Binary(packet.encode_to_vec()),
+        memo: "".to_string(),
+    }
+}
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    ::prost::Message,
+    ::serde::Serialize,
+    ::serde::Deserialize,
+    ::schemars::JsonSchema,
+)]
+pub struct CosmosQuery {
+    #[prost(message, repeated, tag = "1")]
+    pub requests: ::prost::alloc::vec::Vec<RequestQuery>,
+}
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    ::prost::Message,
+    ::serde::Serialize,
+    ::serde::Deserialize,
+    ::schemars::JsonSchema,
+)]
+pub struct ArithmeticTwapToNowRequest {
+    #[prost(uint64, tag = "1")]
+    #[serde(alias = "poolID")]
+    pub pool_id: u64,
+    #[prost(string, tag = "2")]
+    pub base_asset: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub quote_asset: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub start_time: ::core::option::Option<OsmosisTimestamp>,
+}
+
+pub fn encode_request(request: &ArithmeticTwapToNowRequest) -> Vec<u8> {
+    return request.encode_to_vec();
+}
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    ::prost::Message,
+    ::serde::Serialize,
+    ::serde::Deserialize,
+    ::schemars::JsonSchema,
+)]
+pub struct CosmosResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub responses: ::prost::alloc::vec::Vec<ResponseQuery>,
+}
+
+pub fn decode_response(bytes: &[u8]) -> StdResult<CosmosResponse> {
+    return CosmosResponse::decode(bytes)
+        .map_err(|err| StdError::generic_err(format!("fail to decode response query: {}", err)));
+}
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    ::prost::Message,
+    ::serde::Serialize,
+    ::serde::Deserialize,
+    ::schemars::JsonSchema,
+)]
+pub struct ResponseQuery {
+    #[prost(uint32, tag = "1")]
+    pub code: u32,
+
+    #[prost(int64, tag = "2")]
+    pub index: i64,
+
+    #[prost(bytes = "vec", tag = "3")]
+    pub key: ::prost::alloc::vec::Vec<u8>,
+
+    #[prost(bytes = "vec", tag = "4")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
+
+    #[prost(int64, tag = "5")]
+    pub height: i64,
+}
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    ::prost::Message,
+    ::serde::Serialize,
+    ::serde::Deserialize,
+    ::schemars::JsonSchema,
+)]
+pub struct QueryArithmeticTwapToNowResponse {
+    #[prost(string, tag = "1")]
+    pub arithmetic_twap: ::prost::alloc::string::String,
+}
+
+pub fn decode_twap_response(bytes: &[u8]) -> StdResult<QueryArithmeticTwapToNowResponse> {
+    return QueryArithmeticTwapToNowResponse::decode(bytes)
+        .map_err(|err| StdError::generic_err(format!("fail to decode twap: {}", err)));
 }
 
 #[cw_serde]
-pub enum RemotePriceFeedPacket {
-    QueryTwap {
-        pool_id: u64,
-        base_asset: String,
-        quote_asset: String,
-    },
+pub struct AcknowledgementResult {
+    pub result: Binary,
+}
+
+#[cw_serde]
+pub struct InterchainQueryPacketAck {
+    pub data: Binary,
 }

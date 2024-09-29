@@ -585,6 +585,8 @@ version = "0.10.0-alpha.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "osmosis-std",
+ "prost 0.11.9",
  "schemars",
  "semver",
  "serde",
@@ -736,28 +738,11 @@ dependencies = [
  "derivative",
  "mesh-apis",
  "mesh-price-feed",
- "schemars",
- "serde",
- "sylvia",
- "test-case",
- "thiserror",
-]
-
-[[package]]
-name = "mesh-osmosis-price-provider"
-version = "0.10.0-alpha.1"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-storage-plus",
- "cw-utils",
- "cw2",
- "mesh-apis",
- "mesh-bindings",
  "osmosis-std",
  "schemars",
  "serde",
  "sylvia",
+ "test-case",
  "thiserror",
 ]
 

@@ -1,20 +1,26 @@
+use std::vec;
+
 use cosmwasm_std::{Decimal, DepsMut, Env, IbcChannel, Response, Timestamp};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
-use sylvia::types::{InstantiateCtx, QueryCtx, SudoCtx};
+use mesh_apis::ibc::{encode_request, ibc_query_packet, ArithmeticTwapToNowRequest, CosmosQuery};
+use osmosis_std::shim::Timestamp as OsmosisTimestamp;
+use osmosis_std::types::tendermint::abci::RequestQuery;
+use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
 
 use crate::error::ContractError;
-use crate::ibc::{make_ibc_packet, AUTH_ENDPOINT};
-use crate::msg::AuthorizedEndpoint;
+use crate::ibc::make_ibc_packet;
 use crate::state::TradingPair;
 use mesh_price_feed::{Action, PriceKeeper, Scheduler};
 
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub const OSMOSIS_QUERY_TWAP_PATH: &str = "/osmosis.twap.v1beta1.Query/ArithmeticTwapToNow";
 
 pub struct RemotePriceFeedContract {
     pub channel: Item<'static, IbcChannel>,
@@ -53,7 +59,6 @@ impl RemotePriceFeedContract {
         &self,
         mut ctx: InstantiateCtx,
         trading_pair: TradingPair,
-        auth_endpoint: AuthorizedEndpoint,
         epoch_in_secs: u64,
         price_info_ttl_in_secs: u64,
     ) -> Result<Response, ContractError> {
@@ -65,10 +70,13 @@ impl RemotePriceFeedContract {
         self.price_keeper
             .init(&mut ctx.deps, price_info_ttl_in_secs)?;
         self.scheduler.init(&mut ctx.deps, epoch_in_secs)?;
-
-        AUTH_ENDPOINT.save(ctx.deps.storage, &auth_endpoint)?;
-
         Ok(Response::new())
+    }
+
+    #[sv::msg(exec)]
+    pub fn request(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
+        let ExecCtx { deps, env, info: _ } = ctx;
+        query_twap(deps, &env)
     }
 
     pub(crate) fn update_twap(
@@ -116,19 +124,39 @@ pub fn query_twap(deps: DepsMut, env: &Env) -> Result<Response, ContractError> {
         .may_load(deps.storage)?
         .ok_or(ContractError::IbcChannelNotOpen)?;
 
-    let packet = mesh_apis::ibc::RemotePriceFeedPacket::QueryTwap {
+    let request = ArithmeticTwapToNowRequest {
         pool_id,
         base_asset,
         quote_asset,
+        start_time: Some(OsmosisTimestamp {
+            seconds: env.block.time.seconds() as i64,
+            nanos: 0,
+        }),
     };
-    let msg = make_ibc_packet(&env.block.time, channel, packet)?;
+    let packet = CosmosQuery {
+        requests: vec![RequestQuery {
+            path: OSMOSIS_QUERY_TWAP_PATH.to_string(),
+            data: encode_request(&request),
+            height: 0,
+            prove: false,
+        }],
+    };
+
+    let msg = make_ibc_packet(&env.block.time, channel, ibc_query_packet(packet))?;
 
     Ok(Response::new().add_message(msg))
 }
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::{
+        from_json,
+        testing::{mock_dependencies, mock_env, mock_info},
+        Binary,
+    };
+    use mesh_apis::ibc::{
+        decode_response, AcknowledgementResult, CosmosResponse, InterchainQueryPacketAck,
+    };
 
     use super::*;
 
@@ -144,10 +172,6 @@ mod tests {
             base_asset: "base".to_string(),
             quote_asset: "quote".to_string(),
         };
-        let auth_endpoint = AuthorizedEndpoint {
-            connection_id: "connection".to_string(),
-            port_id: "port".to_string(),
-        };
 
         contract
             .instantiate(
@@ -157,10 +181,29 @@ mod tests {
                     info,
                 },
                 trading_pair,
-                auth_endpoint,
                 10,
                 50,
             )
             .unwrap();
+    }
+
+    #[test]
+    fn json_binary() {
+        let resp = Binary::from_base64("eyJyZXN1bHQiOiJleUprWVhSaElqb2lRMmhqTmtaUmIxUk5WRUYzVFVSQmQwMUVRWGROUkVGM1RVUkJkMDFFUVhkTlFUMDlJbjA9In0=").unwrap();
+
+        let ack_result: AcknowledgementResult = from_json(&resp).unwrap();
+        assert_eq!(
+            ack_result.result.to_string(),
+            String::from("eyJkYXRhIjoiQ2hjNkZRb1RNVEF3TURBd01EQXdNREF3TURBd01EQXdNQT09In0=")
+        );
+
+        let packet_ack: InterchainQueryPacketAck = from_json(&ack_result.result).unwrap();
+        assert_eq!(
+            packet_ack.data.to_string(),
+            String::from("Chc6FQoTMTAwMDAwMDAwMDAwMDAwMDAwMA==")
+        );
+
+        let response: CosmosResponse = decode_response(&packet_ack.data.to_vec()).unwrap();
+        assert_eq!(response.responses.len(), 1);
     }
 }

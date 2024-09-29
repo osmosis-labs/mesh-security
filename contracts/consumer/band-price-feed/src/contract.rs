@@ -67,6 +67,7 @@ impl RemotePriceFeedContract {
         prepare_gas: Uint64,
         execute_gas: Uint64,
         minimum_sources: u8,
+        epoch_in_secs: u64,
         price_info_ttl_in_secs: u64,
     ) -> Result<Response, ContractError> {
         nonpayable(&ctx.info)?;
@@ -86,6 +87,7 @@ impl RemotePriceFeedContract {
                 minimum_sources,
             },
         )?;
+        self.scheduler.init(&mut ctx.deps, epoch_in_secs)?;
         self.price_keeper
             .init(&mut ctx.deps, price_info_ttl_in_secs)?;
         Ok(Response::new())
@@ -203,6 +205,7 @@ mod tests {
                 Uint64::new(100000),
                 Uint64::new(200000),
                 1,
+                60,
                 60,
             )
             .unwrap();

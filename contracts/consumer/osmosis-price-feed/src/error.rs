@@ -25,6 +25,18 @@ pub enum ContractError {
     #[error("Invalid authorized endpoint: {0}")]
     InvalidEndpoint(String),
 
+    #[error("Only supports channel with ibc version icq-1, got {version}")]
+    InvalidIbcVersion { version: String },
+
+    #[error("invalid ibc packet, result should only contains 1 ResponseQuery")]
+    InvalidResponseQuery,
+
+    #[error("failed to send interchain query")]
+    InvalidResponseQueryCode,
+
+    #[error("twap data is empty")]
+    EmptyTwap,
+
     #[error("Contract doesn't have an open IBC channel")]
     IbcChannelNotOpen,
 

@@ -1,5 +1,6 @@
 use cosmwasm_std::StdError;
 use cw_utils::PaymentError;
+use mesh_apis::ibc::VersionError;
 use thiserror::Error;
 
 use mesh_price_feed::PriceKeeperError;
@@ -15,6 +16,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     Payment(#[from] PaymentError),
+
+    #[error("{0}")]
+    IbcVersion(#[from] VersionError),
 
     #[error("{0}")]
     PriceKeeper(#[from] PriceKeeperError),

@@ -8,7 +8,7 @@ use cosmwasm_std::{
     StdError, Uint128,
 };
 use cw_band::{OracleResponsePacketData, Output, ResolveStatus};
-use mesh_apis::ibc::{ack_fail, ack_success, PriceFeedAck};
+use mesh_apis::ibc::{ack_fail, ack_success, validate_channel_order, PriceFeedAck};
 use obi::OBIDecode;
 
 use crate::contract::RemotePriceFeedContract;
@@ -28,9 +28,11 @@ pub fn ibc_channel_open(
     if contract.channel.may_load(deps.storage)?.is_some() {
         return Err(ContractError::IbcChannelAlreadyOpen);
     }
-    // ensure we are called with OpenInit
     let channel = msg.channel();
     let counterparty_version = msg.counterparty_version();
+
+    // verify the ordering is correct
+    validate_channel_order(&channel.order)?;
 
     if channel.version != IBC_APP_VERSION {
         return Err(ContractError::InvalidIbcVersion {
@@ -83,9 +85,8 @@ pub fn ibc_channel_connect(
             });
         }
     }
-    if channel.order != IbcOrder::Unordered {
-        return Err(ContractError::OnlyUnorderedChannel {});
-    }
+
+    validate_channel_order(&channel.order)?;
 
     // Version negotiation over, we can only store the channel
     let contract = RemotePriceFeedContract::new();
