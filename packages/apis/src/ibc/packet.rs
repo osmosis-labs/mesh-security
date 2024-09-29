@@ -246,7 +246,7 @@ pub struct ArithmeticTwapToNowRequest {
 }
 
 pub fn encode_request(request: &ArithmeticTwapToNowRequest) -> Vec<u8> {
-    return request.encode_to_vec();
+    request.encode_to_vec()
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -265,8 +265,8 @@ pub struct CosmosResponse {
 }
 
 pub fn decode_response(bytes: &[u8]) -> StdResult<CosmosResponse> {
-    return CosmosResponse::decode(bytes)
-        .map_err(|err| StdError::generic_err(format!("fail to decode response query: {}", err)));
+    CosmosResponse::decode(bytes)
+        .map_err(|err| StdError::generic_err(format!("fail to decode response query: {}", err)))
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -312,8 +312,8 @@ pub struct QueryArithmeticTwapToNowResponse {
 }
 
 pub fn decode_twap_response(bytes: &[u8]) -> StdResult<QueryArithmeticTwapToNowResponse> {
-    return QueryArithmeticTwapToNowResponse::decode(bytes)
-        .map_err(|err| StdError::generic_err(format!("fail to decode twap: {}", err)));
+    QueryArithmeticTwapToNowResponse::decode(bytes)
+        .map_err(|err| StdError::generic_err(format!("fail to decode twap: {}", err)))
 }
 
 #[cw_serde]
