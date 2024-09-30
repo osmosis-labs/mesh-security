@@ -3,7 +3,6 @@ members = [
   "packages/*",
   "contracts/provider/*",
   "contracts/consumer/*",
-  "contracts/osmosis-price-provider",
 ]
 resolver = "2"
 
@@ -37,6 +36,7 @@ cw-storage-plus = "1.2.0"
 cw-utils = "1.0.3"
 cw2 = "1.1.2"
 osmosis-std = "0.20.1"
+prost = { version = "0.11.0",  default-features = false, features = ["prost-derive"] }
 schemars = "0.8.17"
 serde = { version = "1.0.199", default-features = false, features = ["derive"] }
 thiserror = "1.0.59"

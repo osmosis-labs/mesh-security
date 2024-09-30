@@ -10,6 +10,8 @@ mt = ["sylvia/mt"]
 [dependencies]
 cosmwasm-std     = { workspace = true }
 cosmwasm-schema  = { workspace = true }
+osmosis-std      = { workspace = true }
+prost            = { workspace = true }
 schemars         = { workspace = true }
 semver           = { workspace = true }
 serde            = { workspace = true }

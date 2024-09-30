@@ -1,28 +1,23 @@
+use std::str::FromStr;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_json, to_json_binary, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse, IbcChannel,
-    IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg, IbcChannelOpenResponse, IbcMsg,
-    IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse, IbcTimeout,
-    Timestamp,
+    from_json, to_json_binary, Decimal, DepsMut, Env, Ibc3ChannelOpenResponse, IbcBasicResponse,
+    IbcChannel, IbcChannelCloseMsg, IbcChannelConnectMsg, IbcChannelOpenMsg,
+    IbcChannelOpenResponse, IbcMsg, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg,
+    IbcReceiveResponse, IbcTimeout, Timestamp,
 };
-use cw_storage_plus::Item;
 use mesh_apis::ibc::{
-    validate_channel_order, PriceFeedProviderAck, ProtocolVersion, RemotePriceFeedPacket,
+    decode_response, decode_twap_response, validate_channel_order, AcknowledgementResult,
+    InterchainQueryPacketAck, InterchainQueryPacketData,
 };
 
 use crate::contract::RemotePriceFeedContract;
 use crate::error::ContractError;
-use crate::msg::AuthorizedEndpoint;
 
-/// This is the maximum version of the Mesh Security protocol that we support
-const SUPPORTED_IBC_PROTOCOL_VERSION: &str = "0.1.0";
-/// This is the minimum version that we are compatible with
-const MIN_IBC_PROTOCOL_VERSION: &str = "0.1.0";
-
-// IBC specific state
-pub const AUTH_ENDPOINT: Item<AuthorizedEndpoint> = Item::new("auth_endpoint");
+pub const IBC_APP_VERSION: &str = "icq-1";
 
 const TIMEOUT: u64 = 10 * 60;
 
@@ -43,34 +38,25 @@ pub fn ibc_channel_open(
     if contract.channel.may_load(deps.storage)?.is_some() {
         return Err(ContractError::IbcChannelAlreadyOpen);
     }
-    // ensure we are called with OpenInit
-    let (channel, counterparty_version) = match msg {
-        IbcChannelOpenMsg::OpenInit { .. } => return Err(ContractError::IbcOpenInitDisallowed),
-        IbcChannelOpenMsg::OpenTry {
-            channel,
-            counterparty_version,
-        } => (channel, counterparty_version),
-    };
+    let channel = msg.channel();
+    let counterparty_version = msg.counterparty_version();
 
     // verify the ordering is correct
     validate_channel_order(&channel.order)?;
-
-    // assert expected endpoint
-    let authorized = AUTH_ENDPOINT.load(deps.storage)?;
-    if authorized.connection_id != channel.connection_id
-        || authorized.port_id != channel.counterparty_endpoint.port_id
-    {
-        // FIXME: do we need a better error here?
-        return Err(ContractError::Unauthorized);
+    if channel.version != IBC_APP_VERSION {
+        return Err(ContractError::InvalidIbcVersion {
+            version: channel.version.clone(),
+        });
     }
-
-    // we handshake with the counterparty version, it must not be empty
-    let v: ProtocolVersion = from_json(counterparty_version.as_bytes())?;
-    // if we can build a response to this, then it is compatible. And we use the highest version there
-    let version = v.build_response(SUPPORTED_IBC_PROTOCOL_VERSION, MIN_IBC_PROTOCOL_VERSION)?;
-
+    if let Some(version) = counterparty_version {
+        if version != IBC_APP_VERSION {
+            return Err(ContractError::InvalidIbcVersion {
+                version: version.to_string(),
+            });
+        }
+    }
     let response = Ibc3ChannelOpenResponse {
-        version: version.to_string()?,
+        version: channel.version.clone(),
     };
     Ok(Some(response))
 }
@@ -88,15 +74,11 @@ pub fn ibc_channel_connect(
     if contract.channel.may_load(deps.storage)?.is_some() {
         return Err(ContractError::IbcChannelAlreadyOpen);
     }
-    // ensure we are called with OpenConfirm
-    let channel = match msg {
-        IbcChannelConnectMsg::OpenConfirm { channel } => channel,
-        IbcChannelConnectMsg::OpenAck { .. } => return Err(ContractError::IbcOpenInitDisallowed),
-    };
+    let channel = msg.channel();
 
     // Version negotiation over, we can only store the channel
     let contract = RemotePriceFeedContract::new();
-    contract.channel.save(deps.storage, &channel)?;
+    contract.channel.save(deps.storage, channel)?;
 
     Ok(IbcBasicResponse::default())
 }
@@ -122,13 +104,32 @@ pub fn ibc_packet_receive(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn ibc_packet_ack(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let ack: PriceFeedProviderAck = from_json(msg.acknowledgement.data)?;
-    let PriceFeedProviderAck::Update { time, twap } = ack;
+    let ack_result: AcknowledgementResult = from_json(msg.acknowledgement.data)?;
+    let packet_ack: InterchainQueryPacketAck = from_json(ack_result.result)?;
+
+    let responses = decode_response(&packet_ack.data)?.responses;
+    if responses.len() != 1 {
+        return Err(ContractError::InvalidResponseQuery);
+    }
+
+    let response = responses[0].clone();
+    if response.code != 0 {
+        return Err(ContractError::InvalidResponseQueryCode);
+    }
+
+    if response.key.is_empty() {
+        return Err(ContractError::EmptyTwap);
+    }
+
+    let twap_response: mesh_apis::ibc::QueryArithmeticTwapToNowResponse =
+        decode_twap_response(&response.key)?;
+    let twap_price: Decimal = Decimal::from_str(&twap_response.arithmetic_twap)?;
+
     let contract = RemotePriceFeedContract::new();
-    contract.update_twap(deps, time, twap)?;
+    contract.update_twap(deps, env.block.time, twap_price)?;
 
     Ok(IbcBasicResponse::new())
 }
@@ -145,7 +146,7 @@ pub fn ibc_packet_timeout(
 pub(crate) fn make_ibc_packet(
     now: &Timestamp,
     channel: IbcChannel,
-    packet: RemotePriceFeedPacket,
+    packet: InterchainQueryPacketData,
 ) -> Result<IbcMsg, ContractError> {
     Ok(IbcMsg::SendPacket {
         channel_id: channel.endpoint.channel_id,
