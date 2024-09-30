@@ -191,7 +191,7 @@ mod tests {
     fn json_binary() {
         let resp = Binary::from_base64("eyJyZXN1bHQiOiJleUprWVhSaElqb2lRMmhqTmtaUmIxUk5WRUYzVFVSQmQwMUVRWGROUkVGM1RVUkJkMDFFUVhkTlFUMDlJbjA9In0=").unwrap();
 
-        let ack_result: AcknowledgementResult = from_json(&resp).unwrap();
+        let ack_result: AcknowledgementResult = from_json(resp).unwrap();
         assert_eq!(
             ack_result.result.to_string(),
             String::from("eyJkYXRhIjoiQ2hjNkZRb1RNVEF3TURBd01EQXdNREF3TURBd01EQXdNQT09In0=")
@@ -203,7 +203,7 @@ mod tests {
             String::from("Chc6FQoTMTAwMDAwMDAwMDAwMDAwMDAwMA==")
         );
 
-        let response: CosmosResponse = decode_response(&packet_ack.data.to_vec()).unwrap();
+        let response: CosmosResponse = decode_response(&packet_ack.data).unwrap();
         assert_eq!(response.responses.len(), 1);
     }
 }
