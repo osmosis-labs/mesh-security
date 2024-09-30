@@ -78,7 +78,7 @@ pub fn ibc_channel_connect(
 
     // Version negotiation over, we can only store the channel
     let contract = RemotePriceFeedContract::new();
-    contract.channel.save(deps.storage, &channel)?;
+    contract.channel.save(deps.storage, channel)?;
 
     Ok(IbcBasicResponse::default())
 }
@@ -107,10 +107,10 @@ pub fn ibc_packet_ack(
     env: Env,
     msg: IbcPacketAckMsg,
 ) -> Result<IbcBasicResponse, ContractError> {
-    let ack_result: AcknowledgementResult = from_json(&msg.acknowledgement.data)?;
-    let packet_ack: InterchainQueryPacketAck = from_json(&ack_result.result)?;
+    let ack_result: AcknowledgementResult = from_json(msg.acknowledgement.data)?;
+    let packet_ack: InterchainQueryPacketAck = from_json(ack_result.result)?;
 
-    let responses = decode_response(&packet_ack.data.to_vec())?.responses;
+    let responses = decode_response(&packet_ack.data)?.responses;
     if responses.len() != 1 {
         return Err(ContractError::InvalidResponseQuery);
     }
@@ -120,7 +120,7 @@ pub fn ibc_packet_ack(
         return Err(ContractError::InvalidResponseQueryCode);
     }
 
-    if response.key.len() == 0 {
+    if response.key.is_empty() {
         return Err(ContractError::EmptyTwap);
     }
 
