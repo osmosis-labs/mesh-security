@@ -35,7 +35,7 @@ jobs:
         with:
           image: cosmwasm/optimizer:0.15.0
           options: -v ${{ github.workspace }}:/code 
-          run: ./scripts/optimize.sh .
+          run: ./scripts/optimizer.sh .
 
       - name: Create release
         uses: softprops/action-gh-release@v1
