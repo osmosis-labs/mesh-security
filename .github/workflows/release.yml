@@ -24,7 +24,7 @@ jobs:
           override: true
 
       - name: Build schemas
-        run: ./scripts/build_schemas.sh
+        run: ./devtools/build_schemas.sh
 
       # This must go after the other cargo commands, as it writes lots of stuff to
       # target/ with root permissions (from docker)
