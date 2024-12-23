@@ -79,7 +79,7 @@ This may be too many points and we need to review this. Currently in draft form.
 - Make custom Virtual Staking module if needed
   - Minimal changes to Osmosis contracts if possible, so can be backported
   - Custom SDK app with this module (based on wasmd) for consumer side
-  - Handles reward withdrawl
+  - Handles reward withdrawal
   - Handles multi bonding/unbonding in quick succession (not blocked by 7 pending unbonds issue)
 - Add reward flow to Converter
 - Send rewards over IBC to RemoteStaking contract
