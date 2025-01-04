@@ -259,4 +259,4 @@ do_stake();
 
 ### Error correction
 
-**TODO**: Ideas about using values in success ACKs to double check the state matches expectations and flag possible errors.
+**TODO**: Ideas about using values in success ACKs to double-check the state matches expectations and flag possible errors.
