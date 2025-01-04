@@ -4,7 +4,7 @@ use sylvia::types::{QueryCtx, SudoCtx};
 use sylvia::{interface, schemars};
 
 /// This is a common interface to any price feed provider.
-/// It may be a minimal example with a single price set by an governance vote,
+/// It may be a minimal example with a single price set by a governance vote,
 /// pull data from TWAP of an on-chain DEX, get remote TWAP data via IBC,
 /// or use some off-chain oracle system.
 ///
