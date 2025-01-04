@@ -30,7 +30,7 @@ After the Consumer side is instantiated(See [Consumer Setup](../consumer/Consume
 we need to instantiate the contracts on the Provider side.
 
 The Vault contract is instantiated with the code id of the Local Staking contract,
-and a initialization message for it which includes the code id of the Native Staking Proxy contract,
+and an initialization message for it which includes the code id of the Native Staking Proxy contract,
 and a max slashing setting for local staking.
 It also requires the local denom, which is the denom of the native staking token on the Provider chain.
 
