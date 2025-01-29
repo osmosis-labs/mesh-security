@@ -172,7 +172,7 @@ possibly hours in the case of timeouts.
 
 We can model this with [Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking#Two-phase_locking_and_its_special_cases)
 , which defines a "growing phase" of acquiring locks, followed by a "shrinking phase" of releasing locks. This is done to be
-resistent to deadlock. We would do the following:
+resistant to deadlock. We would do the following:
 
 1. Start Tx on Sending Chain: Acquire all read/write locks on all data that will be touched. This is the "growing" phase of the lock.
 2. Process Packet on Receiving Chain: Acquire all read/write locks on all data, process data, release all locks. This goes from the "growing" phase to the "shrinking" phase.
