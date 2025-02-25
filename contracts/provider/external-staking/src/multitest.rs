@@ -702,7 +702,7 @@ fn distribution() {
         .call(users[1])
         .unwrap();
 
-    // Rewards withrawal should not affect the stake
+    // Rewards withdrawal should not affect the stake
     let stake = contract
         .stake(users[0].to_owned(), validators[0].to_owned())
         .unwrap();
@@ -1004,7 +1004,7 @@ fn distribution() {
         .call(users[1])
         .unwrap();
 
-    // Rewards withrawal should not affect the stake
+    // Rewards withdrawal should not affect the stake
     let stake = contract
         .stake(users[0].to_owned(), validators[0].to_owned())
         .unwrap();
