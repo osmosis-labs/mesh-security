@@ -203,7 +203,7 @@ pub fn ibc_channel_close(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-/// we look for a the proper reflect contract to relay to and send the message
+/// we look for the proper reflect contract to relay to and send the message
 /// We cannot return any meaningful response value as we do not know the response value
 /// of execution. We just return ok if we dispatched, error if we failed to dispatch
 pub fn ibc_packet_receive(
