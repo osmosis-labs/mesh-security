@@ -39,7 +39,7 @@ osmosis-std = "0.20.1"
 prost = { version = "0.11.0",  default-features = false, features = ["prost-derive"] }
 schemars = "0.8.17"
 serde = { version = "1.0.199", default-features = false, features = ["derive"] }
-thiserror = "1.0.59"
+thiserror = "2.0"
 semver = "1.0.22"
 itertools = "0.12.1"
 
