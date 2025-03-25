@@ -7,7 +7,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
 use cw_utils::{must_pay, nonpayable};
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
@@ -18,14 +18,14 @@ use crate::state::Config;
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub struct NativeStakingProxyMock<'a> {
-    config: Item<'a, Config>,
-    burned: Item<'a, u128>,
+pub struct NativeStakingProxyMock {
+    config: Item<Config>,
+    burned: Item<u128>,
 }
 
 #[contract]
 #[sv::error(ContractError)]
-impl NativeStakingProxyMock<'_> {
+impl NativeStakingProxyMock {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -55,11 +55,13 @@ impl NativeStakingProxyMock<'_> {
         self.burned.save(ctx.deps.storage, &0)?;
 
         // Stake info.funds on validator
-        let exec_ctx = ExecCtx {
-            deps: ctx.deps,
-            env: ctx.env,
-            info: ctx.info,
-        };
+        let exec_ctx = ExecCtx::from(
+            (
+                ctx.deps,
+                ctx.env,
+                ctx.info,
+            )
+        );
         let res = self.stake(exec_ctx, validator)?;
 
         // Set owner as recipient of future withdrawals
@@ -218,7 +220,7 @@ impl NativeStakingProxyMock<'_> {
 
         nonpayable(&ctx.info)?;
 
-        let msg = GovMsg::Vote { proposal_id, vote };
+        let msg = GovMsg::Vote { proposal_id, option: vote };
         Ok(Response::new().add_message(msg))
     }
 
@@ -339,9 +341,9 @@ mod tests {
     use super::*;
     use cosmwasm_std::DistributionMsg::SetWithdrawAddress;
     use cosmwasm_std::GovMsg::{Vote, VoteWeighted};
-    use cosmwasm_std::{CosmosMsg, Decimal, DepsMut};
+    use cosmwasm_std::{Addr, CosmosMsg, Decimal, DepsMut};
 
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, message_info};
     use cosmwasm_std::VoteOption::Yes;
     use cw_utils::PaymentError;
 
@@ -352,11 +354,13 @@ mod tests {
 
     fn do_instantiate(deps: DepsMut) -> (ExecCtx, NativeStakingProxyMock) {
         let contract = NativeStakingProxyMock::new();
-        let mut ctx = InstantiateCtx {
-            deps,
-            env: mock_env(),
-            info: mock_info(CREATOR, &[coin(100, OSMO)]),
-        };
+        let mut ctx = InstantiateCtx::from(
+            (
+                deps,
+                mock_env(),
+                message_info(&Addr::unchecked(CREATOR), &[coin(100, OSMO)]),
+            )
+        );
         contract
             .instantiate(
                 ctx.branch(),
@@ -365,11 +369,13 @@ mod tests {
                 VALIDATOR.to_owned(),
             )
             .unwrap();
-        let exec_ctx = ExecCtx {
-            deps: ctx.deps,
-            info: mock_info(OWNER, &[]),
-            env: ctx.env,
-        };
+        let exec_ctx = ExecCtx::from(
+            (
+                ctx.deps,
+                ctx.env,
+                message_info(&Addr::unchecked(OWNER), &[]),
+            )
+        );
         (exec_ctx, contract)
     }
 
@@ -378,11 +384,13 @@ mod tests {
     fn instantiating() {
         let mut deps = mock_dependencies();
         let contract = NativeStakingProxyMock::new();
-        let mut ctx = InstantiateCtx {
-            deps: deps.as_mut(),
-            env: mock_env(),
-            info: mock_info(CREATOR, &[coin(100, OSMO)]),
-        };
+        let mut ctx = InstantiateCtx::from(
+            (
+                deps.as_mut(),
+                mock_env(),
+                message_info(&Addr::unchecked(CREATOR), &[coin(100, OSMO)]),
+            )
+        );
         let res = contract
             .instantiate(
                 ctx.branch(),
@@ -434,12 +442,12 @@ mod tests {
             res.messages[0].msg,
             cosmwasm_std::CosmosMsg::Gov(Vote {
                 proposal_id,
-                vote: vote.clone()
+                option: vote.clone()
             })
         );
 
         // But not send funds
-        ctx.info = mock_info(OWNER, &[coin(1, OSMO)]);
+        ctx.info = message_info(&Addr::unchecked(OWNER), &[coin(1, OSMO)]);
         let res = contract.vote(ctx.branch(), proposal_id, vote.clone());
         assert!(matches!(
             res.unwrap_err(),
@@ -447,12 +455,12 @@ mod tests {
         ));
 
         // Nobody else can vote
-        ctx.info = mock_info("somebody", &[]);
+        ctx.info = message_info(&Addr::unchecked("somebody"), &[]);
         let res = contract.vote(ctx.branch(), proposal_id, vote.clone());
         assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
 
         // Not even the creator
-        ctx.info = mock_info(CREATOR, &[]);
+        ctx.info = message_info(&Addr::unchecked(CREATOR), &[]);
         let res = contract.vote(ctx, proposal_id, vote);
         assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
     }
@@ -482,7 +490,7 @@ mod tests {
         );
 
         // But not send funds
-        ctx.info = mock_info(OWNER, &[coin(1, OSMO)]);
+        ctx.info = message_info(&Addr::unchecked(OWNER), &[coin(1, OSMO)]);
         let res = contract.vote_weighted(ctx.branch(), proposal_id, vote.clone());
         assert!(matches!(
             res.unwrap_err(),
@@ -490,12 +498,12 @@ mod tests {
         ));
 
         // Nobody else can vote
-        ctx.info = mock_info("somebody", &[]);
+        ctx.info = message_info(&Addr::unchecked("somebody"), &[]);
         let res = contract.vote_weighted(ctx.branch(), proposal_id, vote.clone());
         assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
 
         // Not even the creator
-        ctx.info = mock_info(CREATOR, &[]);
+        ctx.info = message_info(&Addr::unchecked(CREATOR), &[]);
         let res = contract.vote_weighted(ctx, proposal_id, vote);
         assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
     }

@@ -1,5 +1,5 @@
 use cosmwasm_std::{Response, StdError};
-use sylvia::types::ExecCtx;
+use sylvia::ctx::ExecCtx;
 use sylvia::{interface, schemars};
 
 /// This defines the interfaces the native-staking-proxy contract can call on native-staking

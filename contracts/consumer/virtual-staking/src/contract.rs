@@ -3,8 +3,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::u32;
 
 use cosmwasm_std::{
-    coin, ensure_eq, to_json_binary, Coin, CosmosMsg, CustomQuery, DepsMut, DistributionMsg, Env,
-    Event, Reply, Response, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg,
+    coin, ensure_eq, to_json_binary, Binary, Coin, CosmosMsg, CustomQuery, DepsMut, DistributionMsg, Env, Event, Reply, Response, StdResult, Storage, SubMsg, SubMsgResult, Uint128, Validator, WasmMsg
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -13,7 +12,7 @@ use mesh_apis::converter_api::{self, RewardInfo, ValidatorSlashInfo};
 use mesh_bindings::{
     TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
 };
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::virtual_staking_api::{self, ValidatorSlash, VirtualStakingApi};
@@ -25,30 +24,30 @@ use crate::state::Config;
 pub const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub struct VirtualStakingContract<'a> {
-    pub config: Item<'a, Config>,
+pub struct VirtualStakingContract {
+    pub config: Item<Config>,
     /// Amount of tokens that have been requested to bond to a validator
     /// (Sum of bond minus unbond requests). This will only update actual bond on epoch changes.
     /// Note: Validator addresses are stored as strings, as they are different format than Addr
     //
     // Optimization: I keep bond_requests as a Map, as most interactions are bond/unbond requests
     // (from IBC) which touch one. And then we only range over it once per epoch (in handle_epoch).
-    pub bond_requests: Map<'a, &'a str, Uint128>,
+    pub bond_requests: Map<String, Uint128>,
     /// This is how much was bonded last time (validator, amount) pairs
     // `bonded` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
-    pub bonded: Item<'a, Vec<(String, Uint128)>>,
+    pub bonded: Item<Vec<(String, Uint128)>>,
     /// This is what validators have been requested to be slashed.
     // The list will be cleared after processing in `handle_epoch`.
-    pub slash_requests: Item<'a, Vec<ValidatorSlash>>,
+    pub slash_requests: Item<Vec<ValidatorSlash>>,
     /// This is what validators are inactive because of tombstoning, jailing or removal (unbonded).
     // `inactive` could be a Map like `bond_requests`, but the only time we use it is to read / write the entire list in bulk (in handle_epoch),
     // never accessing one element. Reading 100 elements in an Item is much cheaper than ranging over a Map with 100 entries.
-    pub inactive: Item<'a, Vec<(String, bool)>>,
+    pub inactive: Item<Vec<(String, bool)>>,
     /// Amount of tokens that have been burned from a validator.
     /// This is just for accounting / tracking reasons, as token "burning" is being implemented as unbonding,
     /// and there's no real need to discount the burned amount in this contract.
-    burned: Map<'a, &'a str, u128>,
+    burned: Map<String, u128>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -57,8 +56,9 @@ pub struct VirtualStakingContract<'a> {
 #[sv::messages(virtual_staking_api as VirtualStakingApi)]
 // FIXME: how to handle custom messages for sudo?
 #[sv::custom(query=VirtualStakeCustomQuery, msg=VirtualStakeCustomMsg)]
+#[sv::features(replies)]
 // #[sv::override_entry_point(sudo=sudo(SudoMsg))] // Disabled because lack of custom query support
-impl VirtualStakingContract<'_> {
+impl VirtualStakingContract {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -124,10 +124,10 @@ impl VirtualStakingContract<'_> {
                     // Apply to request as well (to avoid unbonding msg)
                     let mut request = self
                         .bond_requests
-                        .may_load(deps.storage, validator)?
+                        .may_load(deps.storage, validator.to_string())?
                         .unwrap_or_default();
                     request = request.saturating_sub(s.slash_amount);
-                    self.bond_requests.save(deps.storage, validator, &request)?;
+                    self.bond_requests.save(deps.storage, validator.to_string(), &request)?;
                 }
             }
         }
@@ -138,11 +138,12 @@ impl VirtualStakingContract<'_> {
     fn reply(
         &self,
         ctx: ReplyCtx<VirtualStakeCustomQuery>,
-        reply: Reply,
+        result: SubMsgResult,
+        _payload: Binary
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
-        match (reply.id, reply.result.into_result()) {
-            (REPLY_REWARDS_ID, Ok(_)) => self.reply_rewards(ctx.deps, ctx.env),
-            (REPLY_REWARDS_ID, Err(e)) => {
+        match result {
+            SubMsgResult::Ok(_) => self.reply_rewards(ctx.deps, ctx.env),
+            SubMsgResult::Err(e) => {
                 // We need to pop the REWARD_TARGETS so it doesn't get out of sync
                 let (target, _) = pop_target(ctx.deps)?;
                 // Ignore errors, so the rest doesn't fail, but report them.
@@ -151,7 +152,6 @@ impl VirtualStakingContract<'_> {
                     .add_attribute("target", target);
                 Ok(Response::new().add_event(evt))
             }
-            (id, _) => Err(ContractError::InvalidReplyId(id)),
         }
     }
 
@@ -341,12 +341,12 @@ const REWARD_TARGETS: Item<Vec<String>> = Item::new("reward_targets");
 const VALIDATOR_REWARDS_BATCH: ValidatorRewardsBatch = ValidatorRewardsBatch::new();
 const REPLY_REWARDS_ID: u64 = 1;
 
-struct ValidatorRewardsBatch<'a> {
-    rewards: Item<'a, Vec<RewardInfo>>,
-    total: Item<'a, Uint128>,
+struct ValidatorRewardsBatch {
+    rewards: Item<Vec<RewardInfo>>,
+    total: Item<Uint128>,
 }
 
-impl<'a> ValidatorRewardsBatch<'a> {
+impl ValidatorRewardsBatch {
     const fn new() -> Self {
         Self {
             rewards: Item::new("validator_rewards_batch"),
@@ -419,7 +419,7 @@ fn withdraw_reward_msgs<T: CustomQuery>(
         .collect()
 }
 
-impl VirtualStakingApi for VirtualStakingContract<'_> {
+impl VirtualStakingApi for VirtualStakingContract {
     type Error = ContractError;
     type QueryC = VirtualStakeCustomQuery;
     type ExecC = VirtualStakeCustomMsg;
@@ -446,11 +446,11 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         // Update the amount requested
         let mut bonded = self
             .bond_requests
-            .may_load(ctx.deps.storage, &validator)?
+            .may_load(ctx.deps.storage, validator.clone())?
             .unwrap_or_default();
         bonded += amount.amount;
         self.bond_requests
-            .save(ctx.deps.storage, &validator, &bonded)?;
+            .save(ctx.deps.storage, validator.clone(), &bonded)?;
 
         let msg = VirtualStakeMsg::UpdateDelegation {
             amount,
@@ -489,12 +489,12 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         );
 
         // Update the amount requested
-        let bonded = self.bond_requests.load(ctx.deps.storage, &validator)?;
+        let bonded = self.bond_requests.load(ctx.deps.storage, validator.clone())?;
         let bonded = bonded
             .checked_sub(amount.amount)
             .map_err(|_| ContractError::InsufficientBond(validator.clone(), amount.amount))?;
         self.bond_requests
-            .save(ctx.deps.storage, &validator, &bonded)?;
+            .save(ctx.deps.storage, validator.clone(), &bonded)?;
 
         let msg = VirtualStakeMsg::UpdateDelegation {
             amount,
@@ -534,7 +534,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         for validator in validators {
             let stake = self
                 .bond_requests
-                .may_load(ctx.deps.storage, &validator)?
+                .may_load(ctx.deps.storage, validator.clone())?
                 .unwrap_or_default()
                 .u128();
             if stake != 0 {
@@ -555,11 +555,11 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         for (validator, burn_amount) in burns {
             // Update bond requests
             self.bond_requests
-                .update::<_, ContractError>(ctx.deps.storage, validator, |old| {
+                .update::<_, ContractError>(ctx.deps.storage, validator.to_string(), |old| {
                     Ok(old.unwrap_or_default() - Uint128::new(burn_amount))
                 })?;
             // Accounting trick to avoid burning stake
-            self.burned.update(ctx.deps.storage, validator, |old| {
+            self.burned.update(ctx.deps.storage, validator.to_string(), |old| {
                 Ok::<_, ContractError>(old.unwrap_or_default() + burn_amount)
             })?;
         }
@@ -593,12 +593,12 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         );
 
         // Immediately unbond
-        let bonded = self.bond_requests.load(ctx.deps.storage, &validator)?;
+        let bonded = self.bond_requests.load(ctx.deps.storage, validator.to_string())?;
         let bonded = bonded
             .checked_sub(amount.amount)
             .map_err(|_| ContractError::InsufficientBond(validator.clone(), amount.amount))?;
         self.bond_requests
-            .save(ctx.deps.storage, &validator, &bonded)?;
+            .save(ctx.deps.storage, validator.to_string(), &bonded)?;
 
         let requests: Vec<(String, Uint128)> = self
             .bond_requests
@@ -628,7 +628,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
         ctx: ExecCtx<Self::QueryC>,
     ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
         nonpayable(&ctx.info)?;
-        let ExecCtx { deps, env, info } = ctx;
+        let ExecCtx { deps, env, info, .. } = ctx;
         let config = self.config.load(deps.storage)?;
         ensure_eq!(info.sender, config.converter, ContractError::Unauthorized); // only the converter can call this
 
@@ -652,7 +652,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
                 validator: delegation.validator.clone(),
             });
             self.bond_requests
-                .save(deps.storage, &delegation.validator, &Uint128::zero())?;
+                .save(deps.storage, delegation.validator.clone(), &Uint128::zero())?;
         }
 
         let requests: Vec<(String, Uint128)> = self
@@ -792,7 +792,7 @@ impl VirtualStakingApi for VirtualStakingContract<'_> {
             if tombstoned_list.contains_key(val) {
                 *amount = Uint128::zero();
                 // Update new value for the bond requests
-                self.bond_requests.save(deps.storage, val, amount)?;
+                self.bond_requests.save(deps.storage, val.clone(), amount)?;
             }
         }
 

@@ -7,7 +7,8 @@ use cosmwasm_std::{
     IbcPacket, IbcPacketAckMsg, IbcPacketReceiveMsg, IbcPacketTimeoutMsg, IbcReceiveResponse,
     StdError, Uint128,
 };
-use cw_band::{OracleResponsePacketData, Output, ResolveStatus};
+use cw_band::oracle::oracle_script::std_crypto::Output;
+use cw_band::oracle::packet::{OracleResponsePacketData, ResolveStatus};
 use mesh_apis::ibc::{ack_fail, ack_success, validate_channel_order, PriceFeedAck};
 use obi::OBIDecode;
 
@@ -115,8 +116,7 @@ pub fn ibc_packet_receive(
     do_ibc_packet_receive(deps, env, &packet).or_else(|err| {
         let error = err.to_string();
         let ack_fail = ack_fail(err)?;
-        Ok(IbcReceiveResponse::new()
-            .set_ack(ack_fail)
+        Ok(IbcReceiveResponse::new(ack_fail)
             .add_attributes(vec![
                 ("action", "receive"),
                 ("success", "false"),
@@ -164,8 +164,7 @@ fn do_ibc_packet_receive(
     let rate = Decimal::from_ratio(base_price, quote_price);
     contract.price_keeper.update(deps, env.block.time, rate)?;
     let ack = ack_success(&PriceFeedAck {})?;
-    Ok(IbcReceiveResponse::new()
-        .set_ack(ack)
+    Ok(IbcReceiveResponse::new(ack)
         .add_attribute("action", "ibc_packet_received"))
 }
 

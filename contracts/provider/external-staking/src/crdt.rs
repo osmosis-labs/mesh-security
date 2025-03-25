@@ -92,11 +92,11 @@ impl ValState {
 }
 
 /// This holds all CRDT related state and logic (related to validators)
-pub struct CrdtState<'a> {
-    validators: Map<'a, &'a str, ValidatorState>,
+pub struct CrdtState {
+    validators: Map<String, ValidatorState>,
 }
 
-impl<'a> CrdtState<'a> {
+impl CrdtState {
     pub const fn new() -> Self {
         CrdtState {
             validators: Map::new("crdt.validators"),
@@ -118,7 +118,7 @@ impl<'a> CrdtState<'a> {
     ) -> Result<(), StdError> {
         let mut validator_state = self
             .validators
-            .may_load(storage, valoper)?
+            .may_load(storage, valoper.to_string())?
             .unwrap_or_else(|| ValidatorState(vec![]));
 
         if !validator_state.is_tombstoned() {
@@ -129,7 +129,7 @@ impl<'a> CrdtState<'a> {
                 state: State::Active {},
             };
             validator_state.insert_unique(val_state);
-            self.validators.save(storage, valoper, &validator_state)?;
+            self.validators.save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -147,7 +147,7 @@ impl<'a> CrdtState<'a> {
     ) -> Result<(), StdError> {
         let mut validator_state = self
             .validators
-            .may_load(storage, valoper)?
+            .may_load(storage, valoper.to_string())?
             .unwrap_or_else(|| ValidatorState(vec![]));
 
         // We just silently ignore it if does not exist, or tombstoned
@@ -166,7 +166,7 @@ impl<'a> CrdtState<'a> {
                 state: old.state,
             };
             validator_state.insert_unique(val_state);
-            self.validators.save(storage, valoper, &validator_state)?;
+            self.validators.save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -183,7 +183,7 @@ impl<'a> CrdtState<'a> {
     ) -> Result<(), StdError> {
         let mut validator_state = self
             .validators
-            .may_load(storage, valoper)?
+            .may_load(storage, valoper.to_string())?
             .unwrap_or_else(|| ValidatorState(vec![]));
 
         // We just silently ignore it if does not exist, or tombstoned
@@ -202,7 +202,7 @@ impl<'a> CrdtState<'a> {
                 state: State::Unbonded {},
             };
             validator_state.insert_unique(val_state);
-            self.validators.save(storage, valoper, &validator_state)?;
+            self.validators.save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -219,7 +219,7 @@ impl<'a> CrdtState<'a> {
     ) -> Result<(), StdError> {
         let mut validator_state = self
             .validators
-            .may_load(storage, valoper)?
+            .may_load(storage, valoper.to_string())?
             .unwrap_or_else(|| ValidatorState(vec![]));
 
         // We just silently ignore it if does not exist, or tombstoned
@@ -238,7 +238,7 @@ impl<'a> CrdtState<'a> {
                 state: State::Jailed {},
             };
             validator_state.insert_unique(val_state);
-            self.validators.save(storage, valoper, &validator_state)?;
+            self.validators.save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -254,7 +254,7 @@ impl<'a> CrdtState<'a> {
     ) -> Result<(), StdError> {
         let mut validator_state = self
             .validators
-            .may_load(storage, valoper)?
+            .may_load(storage, valoper.to_string())?
             .unwrap_or_else(|| ValidatorState(vec![]));
 
         // We just silently ignore it if already tombstoned
@@ -271,7 +271,7 @@ impl<'a> CrdtState<'a> {
             };
             validator_state.insert_unique(val_state);
 
-            self.validators.save(storage, valoper, &validator_state)?;
+            self.validators.save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -279,7 +279,7 @@ impl<'a> CrdtState<'a> {
     pub fn is_active_validator(&self, storage: &dyn Storage, valoper: &str) -> StdResult<bool> {
         let active = self
             .validators
-            .may_load(storage, valoper)?
+            .may_load(storage, valoper.to_string())?
             .map(|s| s.is_active())
             .unwrap_or(false);
         Ok(active)
@@ -339,7 +339,7 @@ impl<'a> CrdtState<'a> {
         storage: &dyn Storage,
         valoper: &str,
     ) -> StdResult<Option<ValState>> {
-        let state = self.validators.may_load(storage, valoper)?;
+        let state = self.validators.may_load(storage, valoper.to_string())?;
         match state {
             Some(state) if state.is_active() => Ok(state.0.first().cloned()),
             Some(_) => Ok(None),
@@ -367,7 +367,7 @@ impl<'a> CrdtState<'a> {
         valoper: &str,
         height: u64,
     ) -> StdResult<Option<ValState>> {
-        let state = self.validators.may_load(storage, valoper)?;
+        let state = self.validators.may_load(storage, valoper.to_string())?;
         match state {
             Some(state) => match state.query_at_height(height) {
                 Some(val_state) => Ok(Some(val_state.clone())),
@@ -385,20 +385,20 @@ impl<'a> CrdtState<'a> {
     ) -> StdResult<()> {
         let mut validator_state = self
             .validators
-            .may_load(storage, valoper)?
+            .may_load(storage, valoper.to_string())?
             .unwrap_or_else(|| ValidatorState(vec![]));
         if validator_state.0.len() <= 1 {
             return Ok(());
         }
         validator_state.drain_older(time);
-        self.validators.save(storage, valoper, &validator_state)?;
+        self.validators.save(storage, valoper.to_string(), &validator_state)?;
         Ok(())
     }
 
     pub fn validator_state(&self, storage: &dyn Storage, valoper: &str) -> StdResult<State> {
         Ok(self
             .validators
-            .may_load(storage, valoper)?
+            .may_load(storage, valoper.to_string())?
             .map(|state| state.get_state())
             .unwrap_or(State::Unknown {}))
     }
@@ -812,7 +812,7 @@ mod tests {
 
         let alice_history = crdt
             .validators
-            .may_load(&storage, "alice")
+            .may_load(&storage, "alice".to_string())
             .unwrap()
             .unwrap();
         assert_eq!(alice_history.0.len(), 3);
@@ -825,7 +825,7 @@ mod tests {
         // Nothing happens
         let alice_history = crdt
             .validators
-            .may_load(&storage, "alice")
+            .may_load(&storage, "alice".to_string())
             .unwrap()
             .unwrap();
         assert_eq!(alice_history.0.len(), 3);
@@ -838,7 +838,7 @@ mod tests {
         // Older events are drained
         let alice_history = crdt
             .validators
-            .may_load(&storage, "alice")
+            .may_load(&storage, "alice".to_string())
             .unwrap()
             .unwrap();
         assert_eq!(alice_history.0.len(), 1);
@@ -853,7 +853,7 @@ mod tests {
         // Nothing happens (one event is always kept)
         let alice_history = crdt
             .validators
-            .may_load(&storage, "alice")
+            .may_load(&storage, "alice".to_string())
             .unwrap()
             .unwrap();
         assert_eq!(alice_history.0.len(), 1);

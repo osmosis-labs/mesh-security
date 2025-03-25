@@ -2,7 +2,7 @@ use cosmwasm_std::{ensure_eq, Decimal, Response};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
@@ -27,8 +27,8 @@ pub mod custom {
     pub type Response = cosmwasm_std::Response<PriceFeedMsg>;
 }
 
-pub struct SimplePriceFeedContract<'a> {
-    pub config: Item<'a, Config>,
+pub struct SimplePriceFeedContract<> {
+    pub config: Item<Config>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -39,7 +39,7 @@ pub struct SimplePriceFeedContract<'a> {
 // #[cfg_attr(not(any(test, feature = "mt")), sv::messages(price_feed_api as PriceFeedApi))]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
 #[sv::custom(query=custom::PriceFeedQuery, msg=custom::PriceFeedMsg)]
-impl SimplePriceFeedContract<'_> {
+impl SimplePriceFeedContract {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -105,7 +105,7 @@ impl SimplePriceFeedContract<'_> {
     }
 }
 
-impl PriceFeedApi for SimplePriceFeedContract<'_> {
+impl PriceFeedApi for SimplePriceFeedContract {
     type Error = ContractError;
     type ExecC = custom::PriceFeedMsg;
     type QueryC = custom::PriceFeedQuery;

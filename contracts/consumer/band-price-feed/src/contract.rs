@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    to_json_binary, Binary, Coin, DepsMut, Env, IbcChannel, IbcMsg, IbcTimeout, Response, Uint64,
+    to_json_binary, Binary, Coin, CosmosMsg, DepsMut, Env, IbcChannel, IbcMsg, IbcTimeout, Response, Uint64
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -9,10 +9,11 @@ use mesh_apis::price_feed_api::{PriceFeedApi, PriceResponse};
 use crate::error::ContractError;
 use crate::state::{Config, TradingPair};
 
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
-use cw_band::{Input, OracleRequestPacketData};
+use cw_band::oracle::oracle_script::std_crypto::Input;
+use cw_band::oracle::packet::OracleRequestPacketData;
 use mesh_price_feed::{Action, PriceKeeper, Scheduler};
 use obi::enc::OBIEncode;
 
@@ -21,9 +22,9 @@ const CONTRACT_NAME: &str = env!("CARGO_PKG_NAME");
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct RemotePriceFeedContract {
-    pub channel: Item<'static, IbcChannel>,
-    pub config: Item<'static, Config>,
-    pub trading_pair: Item<'static, TradingPair>,
+    pub channel: Item<IbcChannel>,
+    pub config: Item<Config>,
+    pub trading_pair: Item<TradingPair>,
     pub price_keeper: PriceKeeper,
     pub scheduler: Scheduler<Box<dyn Action<ContractError>>, ContractError>,
 }
@@ -95,7 +96,7 @@ impl RemotePriceFeedContract {
 
     #[sv::msg(exec)]
     pub fn request(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
-        let ExecCtx { deps, env, info: _ } = ctx;
+        let ExecCtx { deps, env, .. } = ctx;
         try_request(deps, &env)
     }
 }
@@ -142,7 +143,7 @@ pub fn try_request(deps: DepsMut, env: &Env) -> Result<Response, ContractError> 
         minimum_sources: config.minimum_sources,
     }
     .try_to_vec()
-    .map(Binary)
+    .map(| bytes | Binary::from(bytes))
     .map_err(|err| ContractError::CustomError {
         val: err.to_string(),
     })?;
@@ -168,8 +169,7 @@ pub fn try_request(deps: DepsMut, env: &Env) -> Result<Response, ContractError> 
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::{
-        testing::{mock_dependencies, mock_env, mock_info},
-        Uint128, Uint64,
+        testing::{message_info, mock_dependencies, mock_env}, Addr, Uint128, Uint64
     };
 
     use super::*;
@@ -178,7 +178,8 @@ mod tests {
     fn instantiation() {
         let mut deps = mock_dependencies();
         let env = mock_env();
-        let info = mock_info("sender", &[]);
+        let sender = Addr::unchecked("sender");
+        let info = message_info(&sender, &[]);
         let contract = RemotePriceFeedContract::new();
 
         let trading_pair = TradingPair {
@@ -188,11 +189,13 @@ mod tests {
 
         contract
             .instantiate(
-                InstantiateCtx {
-                    deps: deps.as_mut(),
-                    env,
-                    info,
-                },
+                InstantiateCtx::from(
+                    (
+                        deps.as_mut(),
+                        env,
+                        info,
+                    )
+                ),
                 trading_pair,
                 "07-tendermint-0".to_string(),
                 Uint64::new(1),

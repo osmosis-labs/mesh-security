@@ -9,8 +9,8 @@ impl<F, Error> Action<Error> for F where F: Fn(DepsMut, &Env) -> Result<Response
 /// A component that schedules a single action to be executed regularly,
 /// as in "every epoch". It relies on a trigger being called rather rapidly (every block?).
 pub struct Scheduler<A, Error> {
-    last_epoch: Item<'static, Timestamp>,
-    epoch_in_secs: Item<'static, u64>,
+    last_epoch: Item<Timestamp>,
+    epoch_in_secs: Item<u64>,
     action: A,
     _phantom_data: PhantomData<Error>, // Add a PhantomData to mark the error type
 }

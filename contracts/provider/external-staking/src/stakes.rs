@@ -14,16 +14,16 @@ impl<'a> IndexList<Stake> for StakeIndexes<'a> {
     }
 }
 
-pub struct Stakes<'a> {
-    pub stake: IndexedMap<'a, (&'a Addr, &'a str), Stake, StakeIndexes<'a>>,
+pub struct Stakes {
+    pub stake: IndexedMap<(&'static Addr, &'static str), Stake, StakeIndexes<'static>>,
 }
 
-impl<'a> Stakes<'a> {
+impl Stakes {
     fn deserialize_pk(pk: &[u8]) -> (Addr, String) {
         <(Addr, String)>::from_slice(pk).unwrap() // mustn't fail
     }
 
-    pub fn new(storage_key: &'a str, validator_subkey: &'a str) -> Self {
+    pub fn new(storage_key: &'static str, validator_subkey: &'static str) -> Self {
         let indexes = StakeIndexes {
             rev: MultiIndex::new(
                 |pk, _| {

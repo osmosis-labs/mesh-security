@@ -1,11 +1,11 @@
 use cosmwasm_std::Order::Ascending;
 use cosmwasm_std::{
-    from_json, Addr, Decimal, DepsMut, Event, Reply, Response, StdResult, SubMsgResponse, WasmMsg,
+    from_json, Addr, Binary, Decimal, DepsMut, Event, Reply, Response, StdResult, SubMsgResponse, SubMsgResult, WasmMsg
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
@@ -22,15 +22,15 @@ pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const REPLY_ID_INSTANTIATE: u64 = 2;
 
-pub struct NativeStakingContract<'a> {
-    pub config: Item<'a, Config>,
+pub struct NativeStakingContract {
+    pub config: Item<Config>,
     /// Map of proxy contract address by owner address
-    pub proxy_by_owner: Map<'a, &'a Addr, Addr>,
+    pub proxy_by_owner: Map<Addr, Addr>,
     /// Reverse map of owner address by proxy contract address
-    pub owner_by_proxy: Map<'a, &'a Addr, Addr>,
+    pub owner_by_proxy: Map<Addr, Addr>,
     /// Map of delegators per validator
     // This is used for prefixing and ranging during slashing
-    pub delegators: Map<'a, (&'a str, &'a Addr), bool>,
+    pub delegators: Map<(String, Addr), bool>,
 }
 
 pub(crate) enum SlashingReason {
@@ -43,7 +43,8 @@ pub(crate) enum SlashingReason {
 #[sv::error(ContractError)]
 #[sv::messages(local_staking_api as LocalStakingApi)]
 #[sv::messages(native_staking_callback as NativeStakingCallback)]
-impl NativeStakingContract<'_> {
+#[sv::features(replies)]
+impl NativeStakingContract {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -133,7 +134,7 @@ impl NativeStakingContract<'_> {
         // Get all mesh delegators to this validator
         let owners = self
             .delegators
-            .prefix(validator)
+            .prefix(validator.to_string())
             .range(deps.storage, None, None, Ascending)
             .collect::<StdResult<Vec<_>>>()?;
         if owners.is_empty() {
@@ -143,7 +144,7 @@ impl NativeStakingContract<'_> {
         let mut slash_infos = vec![];
         for (owner, _) in &owners {
             // Get owner proxy address
-            let proxy = self.proxy_by_owner.load(deps.storage, owner)?;
+            let proxy = self.proxy_by_owner.load(deps.storage, owner.clone())?;
             // Get proxy's delegation (pre-slashing?) amount over validator
             // TODO: Confirm queried delegation amounts are pre- or post-slashing
             let delegation = deps
@@ -154,11 +155,11 @@ impl NativeStakingContract<'_> {
 
             if delegation.is_zero() {
                 // Maintenance: Remove delegator from map in passing
-                self.delegators.remove(deps.storage, (validator, owner));
+                self.delegators.remove(deps.storage, (validator.to_string(), owner.clone()));
                 continue;
             }
 
-            let slash_amount = delegation * slash_ratio;
+            let slash_amount = delegation.mul_floor(slash_ratio);
 
             slash_infos.push(SlashInfo {
                 user: owner.to_string(),
@@ -181,19 +182,17 @@ impl NativeStakingContract<'_> {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
-        match reply.id {
-            REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
-            _ => Err(ContractError::InvalidReplyId(reply.id)),
-        }
+    fn reply(&self, ctx: ReplyCtx, result: SubMsgResult, payload: Binary) -> Result<Response, ContractError> {
+        self.reply_init_callback(ctx.deps, result.unwrap(), payload)
     }
 
     fn reply_init_callback(
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
+        payload: Binary
     ) -> Result<Response, ContractError> {
-        let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
+        let init_data = parse_instantiate_response_data(&payload)?;
 
         // Associate staking proxy with owner address
         let proxy_addr = Addr::unchecked(init_data.contract_address);
@@ -201,9 +200,9 @@ impl NativeStakingContract<'_> {
             from_json(init_data.data.ok_or(ContractError::NoInstantiateData {})?)?;
         let owner_addr = deps.api.addr_validate(&owner_data.owner)?;
         self.proxy_by_owner
-            .save(deps.storage, &owner_addr, &proxy_addr)?;
+            .save(deps.storage, owner_addr.clone(), &proxy_addr)?;
         self.owner_by_proxy
-            .save(deps.storage, &proxy_addr, &owner_addr)?;
+            .save(deps.storage, proxy_addr, &owner_addr)?;
 
         Ok(Response::new())
     }
@@ -215,7 +214,7 @@ impl NativeStakingContract<'_> {
         owner: String,
     ) -> Result<ProxyByOwnerResponse, ContractError> {
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
-        let proxy_addr = self.proxy_by_owner.load(ctx.deps.storage, &owner_addr)?;
+        let proxy_addr = self.proxy_by_owner.load(ctx.deps.storage, owner_addr)?;
         Ok(ProxyByOwnerResponse {
             proxy: proxy_addr.to_string(),
         })
@@ -228,7 +227,7 @@ impl NativeStakingContract<'_> {
         proxy: String,
     ) -> Result<OwnerByProxyResponse, ContractError> {
         let proxy_addr = ctx.deps.api.addr_validate(&proxy)?;
-        let owner_addr = self.owner_by_proxy.load(ctx.deps.storage, &proxy_addr)?;
+        let owner_addr = self.owner_by_proxy.load(ctx.deps.storage, proxy_addr)?;
         Ok(OwnerByProxyResponse {
             owner: owner_addr.to_string(),
         })

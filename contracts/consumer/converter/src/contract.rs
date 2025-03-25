@@ -1,13 +1,11 @@
 use cosmwasm_std::{
-    ensure_eq, to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event,
-    Fraction, IbcMsg, MessageInfo, Reply, Response, StdError, SubMsg, SubMsgResponse, Uint128,
-    Validator, WasmMsg,
+    ensure_eq, to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Fraction, IbcMsg, MessageInfo, Querier, Reply, Response, StdError, SubMsg, SubMsgResponse, SubMsgResult, Uint128, Validator, WasmMsg
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
 use mesh_apis::ibc::ConsumerPacket;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
 use sylvia::{contract, schemars};
 
 use mesh_apis::converter_api::{self, ConverterApi, RewardInfo, ValidatorSlashInfo};
@@ -39,9 +37,9 @@ pub mod custom {
     pub type Response = cosmwasm_std::Response<ConverterMsg>;
 }
 
-pub struct ConverterContract<'a> {
-    pub config: Item<'a, Config>,
-    pub virtual_stake: Item<'a, Addr>,
+pub struct ConverterContract {
+    pub config: Item<Config>,
+    pub virtual_stake: Item<Addr>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -50,7 +48,8 @@ pub struct ConverterContract<'a> {
 #[sv::messages(converter_api as ConverterApi)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
 #[sv::custom(query=custom::ConverterQuery, msg=custom::ConverterMsg)]
-impl ConverterContract<'_> {
+#[sv::features(replies)]
+impl ConverterContract {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -120,21 +119,20 @@ impl ConverterContract<'_> {
     fn reply(
         &self,
         ctx: ReplyCtx<custom::ConverterQuery>,
-        reply: Reply,
+        result: SubMsgResult,
+        payload: Binary
     ) -> Result<custom::Response, ContractError> {
-        match reply.id {
-            REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
-            _ => Err(ContractError::InvalidReplyId(reply.id)),
-        }
+       self.reply_init_callback(ctx.deps, result.unwrap(), payload)
     }
 
     /// Store virtual staking address
     fn reply_init_callback(
         &self,
         deps: DepsMut<custom::ConverterQuery>,
-        reply: SubMsgResponse,
+        _reply: SubMsgResponse,
+        payload: Binary
     ) -> Result<custom::Response, ContractError> {
-        let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
+        let init_data = parse_instantiate_response_data(&payload)?;
         let virtual_staking = Addr::unchecked(init_data.contract_address);
         self.virtual_stake.save(deps.storage, &virtual_staking)?;
         Ok(Response::new())
@@ -322,17 +320,16 @@ impl ConverterContract<'_> {
         // FIXME not sure how to get this to compile with latest sylvia
         // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
-        use price_feed_api::sv::Querier;
-        use sylvia::types::Remote;
-        let remote = Remote::<
-            &dyn price_feed_api::PriceFeedApi<
+        use price_feed_api::sv::{Querier, InterfaceMessagesApi};
+        let querier = 
+            <dyn price_feed_api::PriceFeedApi<
                 Error = StdError,
                 ExecC = custom::ConverterMsg,
                 QueryC = custom::ConverterQuery,
-            >,
-        >::new(config.price_feed);
-        let price = remote.querier(&deps.querier).price()?.native_per_foreign;
-        let converted = (amount.amount * price) * config.price_adjustment;
+            > as InterfaceMessagesApi>::Querier
+        ::borrowed(&config.price_feed, &deps.querier);
+        let price = Querier::price(&querier)?.native_per_foreign;
+        let converted = (amount.amount * price).mul_floor(config.price_adjustment);
 
         Ok(Coin {
             denom: config.local_denom,
@@ -420,7 +417,7 @@ impl ConverterContract<'_> {
     }
 }
 
-impl ConverterApi for ConverterContract<'_> {
+impl ConverterApi for ConverterContract {
     type Error = ContractError;
     type ExecC = custom::ConverterMsg;
     type QueryC = custom::ConverterQuery;

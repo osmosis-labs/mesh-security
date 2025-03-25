@@ -1,6 +1,6 @@
 use cosmwasm_std::{ensure_eq, from_json, to_json_binary, Binary, Coin, Response, SubMsg, WasmMsg};
 use cw_utils::{must_pay, nonpayable};
-use sylvia::types::{ExecCtx, QueryCtx};
+use sylvia::ctx::{ExecCtx, QueryCtx};
 
 #[allow(unused_imports)]
 use mesh_apis::local_staking_api::{self, LocalStakingApi, SlashRatioResponse};
@@ -11,7 +11,7 @@ use crate::msg::StakeMsg;
 
 use crate::state::Config;
 
-impl LocalStakingApi for NativeStakingContract<'_> {
+impl LocalStakingApi for NativeStakingContract {
     type Error = ContractError;
 
     /// Receives stake (info.funds) from vault contract on behalf of owner and performs the action
@@ -37,12 +37,12 @@ impl LocalStakingApi for NativeStakingContract<'_> {
 
         // Add it to the delegators map
         self.delegators
-            .save(ctx.deps.storage, (&validator, &owner_addr), &true)?;
+            .save(ctx.deps.storage, (validator.clone(), owner_addr.clone()), &true)?;
 
         // Look up if there is a proxy to match. Instantiate or call stake on existing
         match self
             .proxy_by_owner
-            .may_load(ctx.deps.storage, &owner_addr)?
+            .may_load(ctx.deps.storage, owner_addr)?
         {
             None => {
                 // Instantiate proxy contract and send funds to stake, with reply handling on success
@@ -100,7 +100,7 @@ impl LocalStakingApi for NativeStakingContract<'_> {
         // Look up if there is a proxy to match. Fail or call burn on existing
         match self
             .proxy_by_owner
-            .may_load(ctx.deps.storage, &owner_addr)?
+            .may_load(ctx.deps.storage, owner_addr)?
         {
             None => Err(ContractError::NoProxy(owner)),
             Some(proxy_addr) => {

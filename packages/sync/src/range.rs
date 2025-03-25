@@ -3,6 +3,7 @@ use std::{
     iter::Sum,
     ops::{Add, Mul, Sub},
 };
+use cosmwasm_std::Decimal;
 use thiserror::Error;
 
 use cosmwasm_schema::cw_serde;
@@ -309,6 +310,13 @@ where
         Ok(())
     }
 
+    pub fn mul_floor(&self, value: Decimal, f: impl Fn(T, Decimal)-> T)-> Self {
+        Self{
+            low: f(self.low, value),
+            high: f(self.high, value)
+        }
+    }
+
     #[inline]
     fn assert_valid_range(&self) {
         assert!(self.low <= self.high);
@@ -520,7 +528,10 @@ mod tests {
         assert!(!max_lien.is_under_max(Uint128::new(11900)));
 
         // max slashable is a sum of all liens * slash_rate
-        let max_slashable: ValueRange<Uint128> = liens.iter().map(|l| l * slash_rate).sum();
+        let max_slashable: ValueRange<Uint128> = liens.iter().map(|l|
+            l.mul_floor(slash_rate, Uint128::mul_floor)
+        ).sum();
+        
         assert_eq!(
             max_slashable,
             ValueRange::new(Uint128::new(1000), Uint128::new(2700))
@@ -604,7 +615,7 @@ mod examples {
                 (Some(x), Ok((k, _))) => x != k,
                 _ => true,
             })
-            .map(|r| r.map(|(_, lien)| (lien.amount, lien.amount * lien.slashable)));
+            .map(|r| r.map(|(_, lien)| (lien.amount, lien.amount.mul_floor(lien.slashable, Uint128::mul_floor))));
 
         // collect into two vectors, which we can reduce / sum independently
         let (liens, slashable): (Vec<_>, Vec<_>) =
@@ -722,7 +733,7 @@ mod examples {
         // now, let's modify the slashable part
         let err = carl_user
             .total_slashable
-            .prepare_add(Uint128::new(3000) * lien.slashable, carl_collateral)
+            .prepare_add(Uint128::new(3000).mul_floor(lien.slashable), carl_collateral)
             .unwrap_err();
         assert_eq!(err, RangeError::Overflow);
 
@@ -735,7 +746,7 @@ mod examples {
         alice_user.max_lien = max_range(alice_user.max_lien, lien.amount);
         alice_user
             .total_slashable
-            .prepare_add(Uint128::new(1000) * lien.slashable, alice_collateral)
+            .prepare_add(Uint128::new(1000).mul_floor(lien.slashable), alice_collateral)
             .unwrap();
         assert!(alice_user.is_valid());
         LIENS.save(&mut store, (alice, stake1), &lien).unwrap();
@@ -762,7 +773,7 @@ mod examples {
             collect_liens_for_user(&store, bob, bob_user.collateral, Some(stake1)).unwrap();
         // and add this lien fully
         bob_user.total_slashable =
-            add_ranges(bob_user.total_slashable, lien.amount * lien.slashable);
+            add_ranges(bob_user.total_slashable, lien.amount.mul_floor(lien.slashable, Uint128::mul_floor));
         bob_user.max_lien = max_range(bob_user.max_lien, lien.amount);
         // and finally, check validity
         assert!(bob_user.is_valid());

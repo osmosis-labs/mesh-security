@@ -3,7 +3,7 @@
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Coin, CustomMsg, CustomQuery, Response, StdError, Uint128, Validator};
-use sylvia::types::ExecCtx;
+use sylvia::ctx::ExecCtx;
 use sylvia::{interface, schemars};
 
 /// The converter API is all calls that can be made from the virtual staking contract on this contract.

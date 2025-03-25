@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{to_json_binary, Addr, Coin, CustomMsg, Response, StdError, Uint128, WasmMsg};
-use sylvia::types::ExecCtx;
+use sylvia::ctx::ExecCtx;
 use sylvia::{interface, schemars};
 
 /// This is the interface to the vault contract needed by staking contracts to release funds.
