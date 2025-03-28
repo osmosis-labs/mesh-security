@@ -30,9 +30,9 @@ struct SetupArgs<'a> {
 }
 
 struct SetupResponse<'a> {
-    price_feed: Proxy<'a, MtApp, mesh_simple_price_feed::contract::SimplePriceFeedContract<'a>>,
-    converter: Proxy<'a, MtApp, mesh_converter::contract::ConverterContract<'a>>,
-    virtual_staking: Proxy<'a, MtApp, contract::VirtualStakingContract<'a>>,
+    price_feed: Proxy<'a, MtApp, mesh_simple_price_feed::contract::SimplePriceFeedContract>,
+    converter: Proxy<'a, MtApp, mesh_converter::contract::ConverterContract>,
+    virtual_staking: Proxy<'a, MtApp, contract::VirtualStakingContract>,
 }
 
 fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
@@ -50,7 +50,7 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
     let price_feed = price_feed_code
         .instantiate(native_per_foreign, None)
         .with_label("Price Feed")
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     let converter = converter_code
@@ -65,7 +65,7 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
         )
         .with_label("Juno Converter")
         .with_admin(admin)
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     let config = converter.config().unwrap();
@@ -114,7 +114,7 @@ fn instantiation() {
         .wrap()
         .query_wasm_contract_info(&config.virtual_staking)
         .unwrap();
-    assert_eq!(vs_info.admin, Some(admin.to_string()));
+    assert_eq!(vs_info.admin, Some(Addr::unchecked(admin)));
 
     // let's query virtual staking to find the owner
     let vs_config = virtual_staking.config().unwrap();
@@ -148,18 +148,18 @@ fn valset_update_sudo() {
 
     // Send a valset update sudo message
     let adds = vec![
-        Validator {
-            address: "cosmosval3".to_string(),
-            commission: Decimal::percent(3),
-            max_commission: Decimal::percent(30),
-            max_change_rate: Default::default(),
-        },
-        Validator {
-            address: "cosmosval1".to_string(),
-            commission: Decimal::percent(1),
-            max_commission: Decimal::percent(10),
-            max_change_rate: Default::default(),
-        },
+        Validator::create(
+            "cosmosval3".to_string(),
+            Decimal::percent(3),
+            Decimal::percent(30),
+            Decimal::zero(),
+        ),
+        Validator::create(
+            "cosmosval1".to_string(),
+            Decimal::percent(1),
+            Decimal::percent(10),
+            Decimal::zero(),
+        ),
     ];
     let rems = vec!["cosmosval2".to_string()];
     let tombs = vec!["cosmosval3".to_string()];

@@ -1,5 +1,5 @@
 use cosmwasm_std::{coin, coins, Addr, Decimal, StdError, Uint128, Validator};
-use cw_multi_test::{no_init, AppBuilder};
+use cw_multi_test::{no_init, AppBuilder, WasmKeeper};
 use mesh_apis::converter_api::sv::mt::ConverterApiProxy;
 use mesh_apis::converter_api::RewardInfo;
 use mesh_simple_price_feed::contract::sv::mt::CodeId as PriceFeedCodeId;
@@ -28,9 +28,9 @@ struct SetupArgs<'a> {
 }
 
 struct SetupResponse<'a> {
-    price_feed: Proxy<'a, MtApp, SimplePriceFeedContract<'a>>,
-    converter: Proxy<'a, MtApp, ConverterContract<'a>>,
-    virtual_staking: Proxy<'a, MtApp, VirtualStakingContract<'a>>,
+    price_feed: Proxy<'a, MtApp, SimplePriceFeedContract>,
+    converter: Proxy<'a, MtApp, ConverterContract>,
+    virtual_staking: Proxy<'a, MtApp, VirtualStakingContract>,
 }
 
 fn new_app() -> App<MtApp> {
@@ -52,7 +52,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
     let price_feed = price_feed_code
         .instantiate(native_per_foreign, None)
         .with_label("Price Feed")
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     let converter = converter_code
@@ -67,7 +67,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
         )
         .with_label("Juno Converter")
         .with_admin(admin)
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     let config = converter.config().unwrap();
@@ -120,7 +120,7 @@ fn instantiation() {
         .wrap()
         .query_wasm_contract_info(&config.virtual_staking)
         .unwrap();
-    assert_eq!(vs_info.admin, Some(admin.to_string()));
+    assert_eq!(vs_info.admin, Some(Addr::unchecked(admin)));
 
     // let's query virtual staking to find the owner
     let vs_config = virtual_staking.config().unwrap();
@@ -174,21 +174,21 @@ fn ibc_stake_and_unstake() {
     // let's stake some
     converter
         .test_stake(owner.to_string(), val1.to_string(), coin(1000, JUNO))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
     converter
         .test_stake(owner.to_string(), val2.to_string(), coin(4000, JUNO))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // and unstake some
     converter
         .test_unstake(owner.to_string(), val2.to_string(), coin(2000, JUNO))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // new epoch to update all stake values
-    virtual_staking.test_handle_epoch().call(owner).unwrap();
+    virtual_staking.test_handle_epoch().call(&Addr::unchecked(owner)).unwrap();
 
     // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
     assert_eq!(
@@ -263,21 +263,21 @@ fn ibc_stake_and_burn() {
     // let's stake some
     converter
         .test_stake(owner.to_string(), val1.to_string(), coin(1000, JUNO))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
     converter
         .test_stake(owner.to_string(), val2.to_string(), coin(4000, JUNO))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // and burn some
     converter
         .test_burn(vec![val2.to_string()], coin(2000, JUNO))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // new epoch to update all stake values
-    virtual_staking.test_handle_epoch().call(owner).unwrap();
+    virtual_staking.test_handle_epoch().call(&Addr::unchecked(owner)).unwrap();
     // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
     assert_eq!(
         virtual_staking
@@ -329,25 +329,25 @@ fn valset_update_works() {
 
     // Send a valset update
     let add_validators = vec![
-        Validator {
-            address: "validator1".to_string(),
-            commission: Default::default(),
-            max_commission: Default::default(),
-            max_change_rate: Default::default(),
-        },
-        Validator {
-            address: "validator3".to_string(),
-            commission: Default::default(),
-            max_commission: Default::default(),
-            max_change_rate: Default::default(),
-        },
+        Validator::create(
+            "validator1".to_string(),
+            Decimal::zero(),
+            Decimal::zero(),
+            Decimal::zero(),
+        ),
+        Validator::create(
+            "validator3".to_string(),
+            Decimal::zero(),
+            Decimal::zero(),
+            Decimal::zero(),
+        )
     ];
     let rem_validators = vec!["validator3".to_string()];
 
     // Check that only the virtual staking contract can call this handler
     let res = converter
         .valset_update(vec![], vec![], vec![], vec![], vec![], vec![], vec![])
-        .call(owner);
+        .call(&Addr::unchecked(owner));
     assert_eq!(res.unwrap_err(), Unauthorized {});
 
     let res = converter
@@ -360,18 +360,15 @@ fn valset_update_works() {
             vec![],
             vec![],
         )
-        .call(virtual_staking.contract_addr.as_ref());
+        .call(&virtual_staking.contract_addr);
 
     // This fails because of lack of IBC support in mt now.
     // Cannot be tested further in this setup.
     // TODO: Change this when IBC support is there in mt.
     assert_eq!(
         res.unwrap_err(),
-        ContractError::Std(StdError::NotFound {
-            kind:
-                "type: cosmwasm_std::ibc::IbcChannel; key: [69, 62, 63, 5F, 63, 68, 61, 6E, 6E, 65, 6C]"
-                    .to_string()
-        })
+        ContractError::Std(StdError::not_found("type: cosmwasm_std::ibc::IbcChannel; key: [69, 62, 63, 5F, 63, 68, 61, 6E, 6E, 65, 6C]"
+                    .to_string()))
     );
 }
 
@@ -400,21 +397,21 @@ fn unauthorized() {
                 reward: 53u128.into(),
             },
         ])
-        .call("mallory")
+        .call(&Addr::unchecked("mallory"))
         .unwrap_err();
 
     assert_eq!(err, ContractError::Unauthorized);
 
     let err = converter
         .distribute_reward("validator".to_string())
-        .call("mallory")
+        .call(&Addr::unchecked("mallory"))
         .unwrap_err();
 
     assert_eq!(err, ContractError::Unauthorized);
 
     let err = converter
         .valset_update(vec![], vec![], vec![], vec![], vec![], vec![], vec![])
-        .call("mallory")
+        .call(&Addr::unchecked("mallory"))
         .unwrap_err();
 
     assert_eq!(err, ContractError::Unauthorized);
@@ -466,7 +463,7 @@ fn distribute_rewards_invalid_amount_is_rejected() {
             },
         ])
         .with_funds(&[coin(80, "TOKEN")])
-        .call(virtual_staking.contract_addr.as_str())
+        .call(&virtual_staking.contract_addr)
         .unwrap_err();
 
     assert_eq!(
@@ -489,7 +486,7 @@ fn distribute_rewards_invalid_amount_is_rejected() {
             },
         ])
         .with_funds(&[coin(90, "TOKEN")])
-        .call(virtual_staking.contract_addr.as_str())
+        .call(&virtual_staking.contract_addr)
         .unwrap_err();
 
     assert_eq!(
@@ -548,6 +545,6 @@ fn distribute_rewards_valid_amount() {
             },
         ])
         .with_funds(&[coin(86, "TOKEN")])
-        .call(virtual_staking.contract_addr.as_str())
+        .call(&virtual_staking.contract_addr)
         .unwrap();
 }

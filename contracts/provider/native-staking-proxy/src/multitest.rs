@@ -38,12 +38,12 @@ fn init_app(owner: &str, validators: &[&str]) -> App<MtApp> {
             .unwrap();
 
         for &validator in validators {
-            let valoper1 = Validator {
-                address: validator.to_owned(),
-                commission: Decimal::percent(10),
-                max_commission: Decimal::percent(20),
-                max_change_rate: Decimal::percent(1),
-            };
+            let valoper1 = Validator::create(
+                validator.to_owned(),
+                Decimal::percent(10),
+                Decimal::percent(20),
+                Decimal::percent(1),
+            );
             router
                 .staking
                 .add_validator(api, storage, &block, valoper1)
@@ -58,7 +58,7 @@ fn setup<'app>(
     owner: &'app str,
     user: &str,
     validators: &[&str],
-) -> AnyResult<Proxy<'app, MtApp, VaultMock<'app>>> {
+) -> AnyResult<Proxy<'app, MtApp, VaultMock>> {
     let vault_code = mesh_vault::mock::sv::mt::CodeId::store_code(app);
     let staking_code = mesh_native_staking::contract::sv::mt::CodeId::store_code(app);
     let staking_proxy_code = crate::mock::sv::mt::CodeId::store_code(app);
@@ -84,14 +84,14 @@ fn setup<'app>(
             Some(LocalStakingInfo::New(staking_init_info)),
         )
         .with_label("Vault")
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Bond some funds to the vault
     vault
         .bond()
         .with_funds(&coins(200, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     // Stakes some of it locally. This instantiates the staking proxy contract for user
@@ -104,7 +104,7 @@ fn setup<'app>(
                 })
                 .unwrap(),
             )
-            .call(user)
+            .call(&Addr::unchecked(user))
             .unwrap();
     }
 
@@ -125,7 +125,7 @@ fn instantiation() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Check config
@@ -169,7 +169,7 @@ fn staking() {
     let vault = setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Stake some more
@@ -181,7 +181,7 @@ fn staking() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     // Check that new funds have been staked as well
@@ -215,13 +215,13 @@ fn restaking() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Restake 30% to a different validator
     staking_proxy
         .restake(validator.to_owned(), validator2.to_owned(), coin(30, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     // Check that funds have been re-staked
@@ -254,13 +254,13 @@ fn unstaking() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Unstake 50%
     staking_proxy
         .unstake(validator.to_owned(), coin(50, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     // Check that funds have been unstaked
@@ -309,13 +309,13 @@ fn burning() {
     setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Burn 10%, from validator
     staking_proxy
         .burn(Some(validator.to_owned()), coin(10, OSMO))
-        .call(staking_addr)
+        .call(&Addr::unchecked(staking_addr))
         .unwrap();
 
     // Check that funds have been unstaked
@@ -350,7 +350,7 @@ fn burning() {
     );
 
     // But they cannot be released
-    staking_proxy.release_unbonded().call(user).unwrap();
+    staking_proxy.release_unbonded().call(&Addr::unchecked(user)).unwrap();
 
     // Check that the contract still has the funds (they are being effectively "burned")
     assert_eq!(
@@ -376,14 +376,14 @@ fn burning_multiple_delegations() {
     setup(&app, owner, user, &validators).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Burn 15%, no validator specified
     let burn_amount = 15;
     staking_proxy
         .burn(None, coin(burn_amount, OSMO))
-        .call(staking_addr)
+        .call(&Addr::unchecked(staking_addr))
         .unwrap();
 
     // Check that funds have been unstaked (15 / 2 = 7.5, rounded down to 7, rounded up to 8)
@@ -432,7 +432,7 @@ fn burning_multiple_delegations() {
     );
 
     // But they cannot be released
-    staking_proxy.release_unbonded().call(user).unwrap();
+    staking_proxy.release_unbonded().call(&Addr::unchecked(user)).unwrap();
 
     // Check that the contract still has the funds (they are being effectively "burned")
     assert_eq!(
@@ -457,13 +457,13 @@ fn releasing_unbonded() {
     let vault = setup(&app, owner, user, &[validator]).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Unstake 100%
     staking_proxy
         .unstake(validator.to_owned(), coin(100, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     // Check that funds have been fully unstaked
@@ -478,7 +478,7 @@ fn releasing_unbonded() {
     process_staking_unbondings(&app);
 
     // Release the unbonded funds
-    staking_proxy.release_unbonded().call(user).unwrap();
+    staking_proxy.release_unbonded().call(&Addr::unchecked(user)).unwrap();
 
     // Check that the vault has the funds again
     assert_eq!(
@@ -513,7 +513,7 @@ fn withdrawing_rewards() {
     let original_user_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Advance time enough for rewards to accrue
@@ -523,7 +523,7 @@ fn withdrawing_rewards() {
     });
 
     // Withdraw rewards
-    staking_proxy.withdraw_rewards().call(user).unwrap();
+    staking_proxy.withdraw_rewards().call(&Addr::unchecked(user)).unwrap();
 
     // User now has some rewards
     let current_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
@@ -548,11 +548,11 @@ fn process_staking_unbondings(app: &App<MtApp>) {
         block.time = block.time.plus_seconds(UNBONDING_PERIOD);
         block.height += UNBONDING_PERIOD / 5;
     });
-    // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
-    app.app_mut()
-        .sudo(cw_multi_test::SudoMsg::Staking(
-            #[allow(deprecated)]
-            cw_multi_test::StakingSudo::ProcessQueue {},
-        ))
-        .unwrap();
+    // // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
+    // app.app_mut()
+    //     .sudo(cw_multi_test::SudoMsg::Staking(
+    //         #[allow(deprecated)]
+    //         cw_multi_test::StakingSudo::ProcessQueue {},
+    //     ))
+    //     .unwrap();
 }

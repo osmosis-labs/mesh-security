@@ -64,12 +64,12 @@ fn app(balances: &[(&str, (u128, &str))], validators: &[&str]) -> App<MtApp> {
                     api,
                     storage,
                     &block_info,
-                    Validator {
-                        address: validator.to_string(),
-                        commission: Decimal::zero(),
-                        max_commission: Decimal::zero(),
-                        max_change_rate: Decimal::zero(),
-                    },
+                    Validator::create(
+                        validator.to_string(),
+                        Decimal::zero(),
+                        Decimal::zero(),
+                        Decimal::zero(),
+                    ),
                 )
                 .unwrap();
         }
@@ -120,7 +120,7 @@ fn instantiation() {
             slashing_rate_offline(),
         )
         .with_label("Staking")
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     let config = staking.config().unwrap();
@@ -154,7 +154,7 @@ fn receiving_stake() {
             slashing_rate_offline(),
         )
         .with_label("Staking")
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Check that no proxy exists for user1 yet
@@ -172,7 +172,7 @@ fn receiving_stake() {
     staking
         .receive_stake(user1.to_owned(), stake_msg)
         .with_funds(&coins(100, OSMO))
-        .call(owner) // called from vault
+        .call(&Addr::unchecked(owner)) // called from vault
         .unwrap();
 
     let proxy1 = staking.proxy_by_owner(user1.to_owned()).unwrap().proxy;
@@ -195,7 +195,7 @@ fn receiving_stake() {
     staking
         .receive_stake(user1.to_owned(), stake_msg)
         .with_funds(&coins(50, OSMO))
-        .call(owner) // called from vault
+        .call(&Addr::unchecked(owner)) // called from vault
         .unwrap();
 
     // Check that same proxy is used
@@ -225,7 +225,7 @@ fn receiving_stake() {
     staking
         .receive_stake(user2.to_owned(), stake_msg)
         .with_funds(&coins(10, OSMO))
-        .call(owner) // called from vault
+        .call(&Addr::unchecked(owner)) // called from vault
         .unwrap();
 
     let proxy2 = staking.proxy_by_owner(user2.to_owned()).unwrap().proxy;
@@ -281,7 +281,7 @@ fn releasing_proxy_stake() {
             Some(LocalStakingInfo::New(staking_init_info)),
         )
         .with_label("Vault")
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Vault is empty
@@ -291,14 +291,14 @@ fn releasing_proxy_stake() {
     );
 
     // Access staking instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // User bonds some funds to the vault
     vault
         .bond()
         .with_funds(&coins(200, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     // Vault has the funds
@@ -317,7 +317,7 @@ fn releasing_proxy_stake() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     // Vault has half the funds
@@ -342,11 +342,11 @@ fn releasing_proxy_stake() {
     // Now release the funds
     staking_proxy
         .unstake(validator.to_string(), coin(100, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
     // Important: we need to wait the unbonding period until this is released
     app.update_block(advance_unbonding_period);
-    staking_proxy.release_unbonded().call(user).unwrap();
+    staking_proxy.release_unbonded().call(&Addr::unchecked(user)).unwrap();
 
     // Check that the vault has the funds again
     assert_eq!(

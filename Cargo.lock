@@ -1251,9 +1251,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.21.1"
+version = "1.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d75b0bedcc4fe52caa0e03d9f1151a323e4aa5e2d78ba3580400cd3c9e2bc4bc"
+checksum = "c2806eaa3524762875e21c3dcd057bc4b7bfa01ce4da8d46be1cd43649e1cc6b"
 
 [[package]]
 name = "opaque-debug"
@@ -1722,15 +1722,16 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "sylvia"
-version = "1.3.4"
+version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0dc7b573ab05fe8f2cfff1c113d1b39f2cd0b9b7b84212c0e089fdaba191fd8"
+checksum = "8791876dcc4b99ba55a212c0f4d485bf8b695ea21335b8d2d8e7fe35a55e4e9a"
 dependencies = [
  "anyhow",
  "cosmwasm-schema",
  "cosmwasm-std 2.2.2",
  "cw-multi-test",
  "cw-utils",
+ "derivative",
  "konst",
  "schemars",
  "serde",

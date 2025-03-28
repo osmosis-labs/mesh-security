@@ -56,12 +56,12 @@ fn add_local_validator(app: &mut App<MtApp>, validator: &str) {
                 api,
                 storage,
                 &block_info,
-                Validator {
-                    address: validator.to_string(),
-                    commission: Decimal::zero(),
-                    max_commission: Decimal::zero(),
-                    max_change_rate: Decimal::zero(),
-                },
+                Validator::create(
+                    validator.to_string(),
+                    Decimal::zero(),
+                    Decimal::zero(),
+                    Decimal::zero(),
+                ),
             )
         })
         .unwrap();
@@ -87,9 +87,9 @@ fn setup<'app>(
     slash_percent: u64,
     unbond_period: u64,
 ) -> (
-    Proxy<'app, MtApp, VaultMock<'app>>,
-    Proxy<'app, MtApp, NativeStakingContract<'app>>,
-    Proxy<'app, MtApp, ExternalStakingContract<'app>>,
+    Proxy<'app, MtApp, VaultMock>,
+    Proxy<'app, MtApp, NativeStakingContract>,
+    Proxy<'app, MtApp, ExternalStakingContract>,
 ) {
     let (vault, native, external) = setup_inner(app, owner, slash_percent, unbond_period, true);
     (vault, native.unwrap(), external)
@@ -102,8 +102,8 @@ fn setup_without_local_staking<'app>(
     slash_percent: u64,
     unbond_period: u64,
 ) -> (
-    Proxy<'app, MtApp, VaultMock<'app>>,
-    Proxy<'app, MtApp, ExternalStakingContract<'app>>,
+    Proxy<'app, MtApp, VaultMock>,
+    Proxy<'app, MtApp, ExternalStakingContract>,
 ) {
     let (vault, _, external) = setup_inner(app, owner, slash_percent, unbond_period, false);
     (vault, external)
@@ -117,9 +117,9 @@ fn setup_inner<'app>(
     unbond_period: u64,
     local_staking: bool,
 ) -> (
-    Proxy<'app, MtApp, VaultMock<'app>>,
-    Option<Proxy<'app, MtApp, NativeStakingContract<'app>>>,
-    Proxy<'app, MtApp, ExternalStakingContract<'app>>,
+    Proxy<'app, MtApp, VaultMock>,
+    Option<Proxy<'app, MtApp, NativeStakingContract>>,
+    Proxy<'app, MtApp, ExternalStakingContract>,
 ) {
     let vault_code = VaultCodeId::store_code(app);
 
@@ -148,7 +148,7 @@ fn setup_inner<'app>(
     let vault = vault_code
         .instantiate(OSMO.to_owned(), staking_init_info)
         .with_label("Vault")
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
     let native_staking_addr = vault.config().unwrap().local_staking.map(Addr::unchecked);
     let native_staking = native_staking_addr.map(|addr| Proxy::new(addr, app));
@@ -160,10 +160,10 @@ fn setup_inner<'app>(
 fn setup_cross_stake<'app>(
     app: &'app App<MtApp>,
     owner: &'app str,
-    vault: &Proxy<'app, MtApp, VaultMock<'app>>,
+    vault: &Proxy<'app, MtApp, VaultMock>,
     slash_percent: u64,
     unbond_period: u64,
-) -> Proxy<'app, MtApp, ExternalStakingContract<'app>> {
+) -> Proxy<'app, MtApp, ExternalStakingContract> {
     // FIXME: Code shouldn't be duplicated
     let cross_staking_code = mesh_external_staking::contract::sv::mt::CodeId::store_code(app);
     // FIXME: Connection endpoint should be unique
@@ -181,13 +181,13 @@ fn setup_cross_stake<'app>(
                 offline: Decimal::percent(slash_percent),
             },
         )
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap()
 }
 
 /// Set some active validators
 fn set_active_validators(
-    cross_staking: &Proxy<'_, MtApp, ExternalStakingContract<'_>>,
+    cross_staking: &Proxy<'_, MtApp, ExternalStakingContract>,
     validators: &[&str],
 ) -> (u64, u64) {
     let update_valset_height = 100;
@@ -197,23 +197,23 @@ fn set_active_validators(
         let activate = AddValidator::mock(validator);
         cross_staking
             .test_set_active_validator(activate.clone(), update_valset_height, update_valset_time)
-            .call("test")
+            .call(&Addr::unchecked("test"))
             .unwrap();
     }
     (update_valset_height, update_valset_time)
 }
 
 /// Bond some tokens
-fn bond(vault: &Proxy<'_, MtApp, VaultMock<'_>>, user: &str, amount: u128) {
+fn bond(vault: &Proxy<'_, MtApp, VaultMock>, user: &str, amount: u128) {
     vault
         .bond()
         .with_funds(&coins(amount, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 }
 
 fn stake_locally(
-    vault: &Proxy<'_, MtApp, VaultMock<'_>>,
+    vault: &Proxy<'_, MtApp, VaultMock>,
     user: &str,
     stake: u128,
     validator: &str,
@@ -224,12 +224,12 @@ fn stake_locally(
 
     vault
         .stake_local(coin(stake, OSMO), to_json_binary(&msg).unwrap())
-        .call(user)
+        .call(&Addr::unchecked(user))
 }
 
 fn stake_remotely(
-    vault: &Proxy<'_, MtApp, VaultMock<'_>>,
-    cross_staking: &Proxy<'_, MtApp, ExternalStakingContract<'_>>,
+    vault: &Proxy<'_, MtApp, VaultMock>,
+    cross_staking: &Proxy<'_, MtApp, ExternalStakingContract>,
     user: &str,
     validators: &[&str],
     amounts: &[u128],
@@ -244,7 +244,7 @@ fn stake_remotely(
                 })
                 .unwrap(),
             )
-            .call(user)
+            .call(&Addr::unchecked(user))
             .unwrap();
 
         // TODO: Hardcoded `external-staking`'s commit_stake call (lack of IBC support yet).
@@ -253,16 +253,16 @@ fn stake_remotely(
             get_last_external_staking_pending_tx_id(cross_staking).unwrap();
         cross_staking
             .test_commit_stake(last_external_staking_tx)
-            .call("test")
+            .call(&Addr::unchecked("test"))
             .unwrap();
     }
 }
 
 fn proxy_for_user<'a>(
-    local_staking: &Proxy<'_, MtApp, NativeStakingContract<'_>>,
+    local_staking: &Proxy<'_, MtApp, NativeStakingContract>,
     user: &str,
     app: &'a App<MtApp>,
-) -> Proxy<'a, MtApp, NativeStakingProxyMock<'a>> {
+) -> Proxy<'a, MtApp, NativeStakingProxyMock> {
     let proxy_addr = local_staking
         .proxy_by_owner(user.to_string())
         .unwrap()
@@ -275,24 +275,24 @@ fn process_staking_unbondings(app: &App<MtApp>) {
         block.time = block.time.plus_seconds(61);
         block.height += 13;
     });
-    // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
-    app.app_mut()
-        .sudo(cw_multi_test::SudoMsg::Staking(
-            #[allow(deprecated)]
-            cw_multi_test::StakingSudo::ProcessQueue {},
-        ))
-        .unwrap();
+    // // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
+    // app.app_mut()
+    //     .sudo(cw_multi_test::SudoMsg::Staking(
+    //         #[allow(deprecated)]
+    //         cw_multi_test::StakingSudo::ProcessQueue {},
+    //     ))
+    //     .unwrap();
 }
 
 #[track_caller]
-fn get_last_vault_pending_tx_id(contract: &Proxy<'_, MtApp, VaultMock<'_>>) -> Option<u64> {
+fn get_last_vault_pending_tx_id(contract: &Proxy<'_, MtApp, VaultMock>) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(Tx::id)
 }
 
 #[track_caller]
 fn get_last_external_staking_pending_tx_id(
-    contract: &Proxy<'_, MtApp, ExternalStakingContract<'_>>,
+    contract: &Proxy<'_, MtApp, ExternalStakingContract>,
 ) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(Tx::id)
@@ -390,7 +390,7 @@ fn bonding() {
 
     // Unbond some tokens
 
-    vault.unbond(coin(200, OSMO)).call(user).unwrap();
+    vault.unbond(coin(200, OSMO)).call(&Addr::unchecked(user)).unwrap();
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
         AccountResponse {
@@ -413,7 +413,7 @@ fn bonding() {
         coin(50, OSMO)
     );
 
-    vault.unbond(coin(20, OSMO)).call(user).unwrap();
+    vault.unbond(coin(20, OSMO)).call(&Addr::unchecked(user)).unwrap();
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
         AccountResponse {
@@ -438,7 +438,7 @@ fn bonding() {
 
     // Unbonding over bounded fails
 
-    let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
+    let err = vault.unbond(coin(100, OSMO)).call(&Addr::unchecked(user)).unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(30)))
@@ -477,7 +477,7 @@ fn local_staking_disabled() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
@@ -590,7 +590,7 @@ fn stake_local() {
 
     // Cannot unbond used collateral
 
-    let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
+    let err = vault.unbond(coin(100, OSMO)).call(&Addr::unchecked(user)).unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
@@ -601,10 +601,10 @@ fn stake_local() {
     let proxy = proxy_for_user(&local_staking, user, &app);
     proxy
         .unstake(val.to_string(), coin(50, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
     process_staking_unbondings(&app);
-    proxy.release_unbonded().call(user).unwrap();
+    proxy.release_unbonded().call(&Addr::unchecked(user)).unwrap();
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -632,10 +632,10 @@ fn stake_local() {
 
     proxy
         .unstake(val.to_string(), coin(100, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
     process_staking_unbondings(&app);
-    proxy.release_unbonded().call(user).unwrap();
+    proxy.release_unbonded().call(&Addr::unchecked(user)).unwrap();
 
     assert_eq!(
         vault.account(user.to_owned()).unwrap(),
@@ -666,7 +666,7 @@ fn stake_local() {
     // TODO: catch subcall error here
     // let err = proxy
     //     .unstake(val.to_string(), coin(200, OSMO))
-    //     .call(user)
+    //     .call(&Addr::unchecked(user))
     //     .unwrap_err();
     // assert_eq!(
     //     err,
@@ -730,7 +730,7 @@ fn stake_cross() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     let res = vault.active_external_staking().unwrap();
@@ -757,7 +757,7 @@ fn stake_cross() {
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking
         .test_commit_stake(last_external_staking_tx)
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
@@ -802,7 +802,7 @@ fn stake_cross() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
@@ -821,7 +821,7 @@ fn stake_cross() {
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking
         .test_commit_stake(last_external_staking_tx)
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
@@ -867,7 +867,7 @@ fn stake_cross() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap_err();
 
     let acc = vault.account(user.to_owned()).unwrap();
@@ -884,7 +884,7 @@ fn stake_cross() {
 
     // Cannot unbond used collateral
 
-    let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
+    let err = vault.unbond(coin(100, OSMO)).call(&Addr::unchecked(user)).unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
@@ -893,7 +893,7 @@ fn stake_cross() {
     // Unstake does not free collateral on vault right away
     cross_staking
         .unstake(validator.to_owned(), coin(50, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
@@ -934,14 +934,14 @@ fn stake_cross() {
     let tx_id = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
     cross_staking
         .test_commit_unstake(tx_id)
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // No tokens is withdrawn before unbonding period is over
     let insufficient_time = 99;
     skip_time(&app, insufficient_time);
 
-    cross_staking.withdraw_unbonded().call(user).unwrap();
+    cross_staking.withdraw_unbonded().call(&Addr::unchecked(user)).unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
@@ -957,7 +957,7 @@ fn stake_cross() {
     let remaining_time = 1;
     skip_time(&app, remaining_time);
 
-    cross_staking.withdraw_unbonded().call(user).unwrap();
+    cross_staking.withdraw_unbonded().call(&Addr::unchecked(user)).unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
@@ -995,18 +995,18 @@ fn stake_cross() {
     // Wait for the unbonding period and withdraw unbonded tokens.
     cross_staking
         .unstake(validator.to_owned(), coin(100, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     let tx_id = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
     cross_staking
         .test_commit_unstake(tx_id)
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     skip_time(&app, unbond_period);
 
-    cross_staking.withdraw_unbonded().call(user).unwrap();
+    cross_staking.withdraw_unbonded().call(&Addr::unchecked(user)).unwrap();
 
     let acc = vault.account(user.to_owned()).unwrap();
     assert_eq!(
@@ -1046,7 +1046,7 @@ fn stake_cross() {
     // in this scenario
     cross_staking
         .unstake(user.to_owned(), coin(300, OSMO))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap_err();
 }
 
@@ -1121,7 +1121,7 @@ fn stake_cross_txs() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     // One pending tx
@@ -1139,7 +1139,7 @@ fn stake_cross_txs() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
     // Store for later
     let second_tx = get_last_vault_pending_tx_id(&vault).unwrap();
@@ -1154,7 +1154,7 @@ fn stake_cross_txs() {
             })
             .unwrap(),
         )
-        .call(user2)
+        .call(&Addr::unchecked(user2))
         .unwrap();
 
     // Three pending txs
@@ -1164,7 +1164,7 @@ fn stake_cross_txs() {
     let last_tx = get_last_vault_pending_tx_id(&vault).unwrap();
     vault
         .commit_tx(last_tx)
-        .call(cross_staking.contract_addr.as_str())
+        .call(&cross_staking.contract_addr)
         .unwrap();
 
     // Two pending txs now
@@ -1258,7 +1258,7 @@ fn stake_cross_txs() {
     // Commit first tx
     vault
         .commit_tx(first_tx)
-        .call(cross_staking.contract_addr.as_str())
+        .call(&cross_staking.contract_addr)
         .unwrap();
 
     // Can query account
@@ -1328,7 +1328,7 @@ fn stake_cross_rollback_tx() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
 
     // One pending tx
@@ -1338,7 +1338,7 @@ fn stake_cross_rollback_tx() {
     let last_tx = get_last_vault_pending_tx_id(&vault).unwrap();
     vault
         .rollback_tx(last_tx)
-        .call(cross_staking.contract_addr.as_str())
+        .call(&cross_staking.contract_addr)
         .unwrap();
 
     // No pending txs
@@ -1484,7 +1484,7 @@ fn multiple_stakes() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap_err();
 
     assert_eq!(err, ContractError::InsufficentBalance);
@@ -1588,7 +1588,7 @@ fn all_users_fetching() {
 
     // After unbonding some, but not all collateral, user shall still be visible
 
-    vault.unbond(coin(50, OSMO)).call(users[0]).unwrap();
+    vault.unbond(coin(50, OSMO)).call(&Addr::unchecked(users[0])).unwrap();
 
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
@@ -1637,7 +1637,7 @@ fn all_users_fetching() {
     );
 
     // Unbonding all the collateral hides the user when the collateral flag is set
-    vault.unbond(coin(200, OSMO)).call(users[1]).unwrap();
+    vault.unbond(coin(200, OSMO)).call(&Addr::unchecked(users[1])).unwrap();
 
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
@@ -1758,7 +1758,7 @@ fn cross_slash_scenario_1() {
     // Validator 1 is slashed
     cross_staking
         .test_handle_slashing(validator1.to_string(), Uint128::new(10))
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Liens
@@ -1869,7 +1869,7 @@ fn cross_slash_scenario_2() {
     // Validator 1 is slashed
     cross_staking
         .test_handle_slashing(validator1.to_string(), Uint128::new(20))
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Liens
@@ -1976,7 +1976,7 @@ fn cross_slash_scenario_3() {
     // Validator 1 is slashed
     cross_staking
         .test_handle_slashing(validator1.to_string(), Uint128::new(15))
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Liens
@@ -2108,7 +2108,7 @@ fn cross_slash_scenario_4() {
     // Validator 1 is slashed
     cross_staking_1
         .test_handle_slashing(validator1.to_string(), Uint128::new(14))
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Liens
@@ -2285,9 +2285,9 @@ fn cross_slash_scenario_5() {
     cross_staking_1
         .test_handle_slashing(
             validator1.to_string(),
-            Uint128::new(180) * Decimal::percent(slashing_percentage),
+            Uint128::new(180).mul_floor(Decimal::percent(slashing_percentage)),
         )
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Liens
@@ -2426,7 +2426,7 @@ fn cross_slash_no_native_staking() {
     // Validator 1 is slashed
     cross_staking_1
         .test_handle_slashing(validator1.to_string(), Uint128::new(14))
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Liens
@@ -2540,11 +2540,11 @@ fn cross_slash_pending_unbonding() {
     // Unbond half the stake of validator1
     cross_staking
         .unstake(validator1.to_owned(), coin(50, OSMO))
-        .call(user)
+        .call(&Addr::unchecked(user))
         .unwrap();
     cross_staking
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&cross_staking).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
     // Cross stakes amount
     let cross_stake1 = cross_staking
@@ -2556,7 +2556,7 @@ fn cross_slash_pending_unbonding() {
     // Validator 1 is slashed, over the current bond
     cross_staking
         .test_handle_slashing(validator1.to_string(), Uint128::new(5))
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Liens
@@ -2684,7 +2684,7 @@ fn native_slashing_tombstoning() {
     // Local validator is tombstoned (which implies slashing)
     local_staking
         .test_handle_jailing(vec![], vec![local_validator.to_string()])
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Liens
@@ -2808,7 +2808,7 @@ fn native_slashing_jailing() {
     // Local validator is jailed (which implies slashing)
     local_staking
         .test_handle_jailing(vec![local_validator.to_string()], vec![])
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Liens

@@ -320,16 +320,15 @@ impl ConverterContract {
         // FIXME not sure how to get this to compile with latest sylvia
         // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
-        use price_feed_api::sv::{Querier, InterfaceMessagesApi};
+        use crate::price_feed::sv::{Querier, InterfaceMessagesApi};
+        use crate::price_feed::CustomPriceFeedApi;
         let querier = 
-            <dyn price_feed_api::PriceFeedApi<
+            <dyn CustomPriceFeedApi<
                 Error = StdError,
-                ExecC = custom::ConverterMsg,
-                QueryC = custom::ConverterQuery,
             > as InterfaceMessagesApi>::Querier
         ::borrowed(&config.price_feed, &deps.querier);
         let price = Querier::price(&querier)?.native_per_foreign;
-        let converted = (amount.amount * price).mul_floor(config.price_adjustment);
+        let converted = (amount.amount.mul_floor(price)).mul_floor(config.price_adjustment);
 
         Ok(Coin {
             denom: config.local_denom,
@@ -354,22 +353,20 @@ impl ConverterContract {
 
         // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
-        use price_feed_api::sv::Querier;
-        use sylvia::types::Remote;
-        // Note: it doesn't seem to matter which error type goes here...
-        let remote = Remote::<
-            &dyn price_feed_api::PriceFeedApi<
+        use crate::price_feed::sv::{Querier, InterfaceMessagesApi};
+        use crate::price_feed::CustomPriceFeedApi;
+        let querier = 
+            <dyn CustomPriceFeedApi<
                 Error = StdError,
-                ExecC = custom::ConverterMsg,
-                QueryC = custom::ConverterQuery,
-            >,
-        >::new(config.price_feed);
-        let price = remote.querier(&deps.querier).price()?.native_per_foreign;
-        let converted = (amount.amount * price.inv().ok_or(ContractError::InvalidPrice {})?)
-            * config
+            > as InterfaceMessagesApi>::Querier
+        ::borrowed(&config.price_feed, &deps.querier);
+        let price = querier.price()?.native_per_foreign;
+        let invert_price =price.inv().ok_or(ContractError::InvalidPrice {})?;
+        let converted = amount.amount.mul_floor(invert_price)
+            .mul_floor(config
                 .price_adjustment
                 .inv()
-                .ok_or(ContractError::InvalidDiscount {})?;
+                .ok_or(ContractError::InvalidDiscount {})?);
 
         Ok(Coin {
             denom: config.remote_denom,

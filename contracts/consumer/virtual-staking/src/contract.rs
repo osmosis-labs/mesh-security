@@ -905,9 +905,7 @@ mod tests {
     };
 
     use cosmwasm_std::{
-        coins, from_json,
-        testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage},
-        AllDelegationsResponse, Decimal,
+        coins, from_json, testing::{message_info, mock_env, mock_info, MockApi, MockQuerier, MockStorage}, Addr, AllDelegationsResponse, Decimal
     };
     use mesh_bindings::{BondStatusResponse, SlashRatioResponse, TotalDelegationResponse};
 
@@ -1486,9 +1484,17 @@ mod tests {
         let total_delegation = MockTotalDelegation::new(TotalDelegationResponse {
             delegation: coin(0, "DOES NOT MATTER"),
         });
-        let all_delegations = MockAllDelegations::new(AllDelegationsResponse {
+
+        #[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, schemars::JsonSchema)]
+        struct MockAllDelegationsResponse {
+            pub delegations: Vec<cosmwasm_std::Delegation>,
+        }
+
+        let bytes = to_json_binary(&MockAllDelegationsResponse{
             delegations: vec![],
-        });
+        }).unwrap();
+        let all_delegations_resp: AllDelegationsResponse = from_json(bytes).unwrap();
+        let all_delegations = MockAllDelegations::new(all_delegations_resp);
 
         let handler = {
             let bs_copy = bond_status.clone();
@@ -1643,14 +1649,16 @@ mod tests {
         fn remove_val(&self, deps: DepsMut, val: &str);
     }
 
-    impl VirtualStakingExt for VirtualStakingContract<'_> {
+    impl VirtualStakingExt for VirtualStakingContract {
         fn quick_inst(&self, deps: DepsMut) {
             self.instantiate(
-                InstantiateCtx {
-                    deps,
-                    env: mock_env(),
-                    info: mock_info("me", &[]),
-                },
+                InstantiateCtx::from(
+                    (
+                        deps,
+                        mock_env(),
+                        message_info(&Addr::unchecked("me"), &[]),
+                    )
+                ),
                 50,
                 true,
             )
@@ -1687,10 +1695,12 @@ mod tests {
 
         #[track_caller]
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult {
-            let deps = SudoCtx {
-                deps,
-                env: mock_env(),
-            };
+            let deps = SudoCtx::from(
+                (
+                    deps,
+                    mock_env(),
+                )
+            );
             HitEpochResult::new(self.handle_epoch(deps).unwrap())
         }
 
@@ -1698,11 +1708,13 @@ mod tests {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.bond(
-                ExecCtx {
-                    deps,
-                    env: mock_env(),
-                    info: mock_info("me", &[]),
-                },
+                ExecCtx::from(
+                    (
+                        deps,
+                        mock_env(),
+                        message_info(&Addr::unchecked("me"), &[]),
+                    )
+                ),
                 delegator.to_string(),
                 validator.to_string(),
                 coin(amount, denom),
@@ -1714,11 +1726,13 @@ mod tests {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.unbond(
-                ExecCtx {
-                    deps,
-                    env: mock_env(),
-                    info: mock_info("me", &[]),
-                },
+                ExecCtx::from(
+                    (
+                        deps,
+                        mock_env(),
+                        message_info(&Addr::unchecked("me"), &[]),
+                    )
+                ),
                 delegator.to_string(),
                 validator.to_string(),
                 coin(amount, denom),
@@ -1735,11 +1749,13 @@ mod tests {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.burn(
-                ExecCtx {
-                    deps,
-                    env: mock_env(),
-                    info: mock_info("me", &[]),
-                },
+                ExecCtx::from(
+                    (
+                        deps,
+                        mock_env(),
+                        message_info(&Addr::unchecked("me"), &[]),
+                    )
+                ),
                 validators.iter().map(<&str>::to_string).collect(),
                 coin(amount, denom),
             )
@@ -1752,10 +1768,12 @@ mod tests {
             nominal_slash_ratio: Decimal,
             slash_amount: Uint128,
         ) {
-            let deps = SudoCtx {
-                deps,
-                env: mock_env(),
-            };
+            let deps = SudoCtx::from(
+                (
+                    deps,
+                    mock_env(),
+                )
+            );
             // We sent a removal and a slash along with the jail, as this is what the blockchain does
             self.handle_valset_update(
                 deps,
@@ -1781,10 +1799,12 @@ mod tests {
         }
 
         fn unjail(&self, deps: DepsMut, val: &str) {
-            let deps = SudoCtx {
-                deps,
-                env: mock_env(),
-            };
+            let deps = SudoCtx::from(
+                (
+                    deps,
+                    mock_env(),
+                )
+            );
             self.handle_valset_update(
                 deps,
                 None,
@@ -1805,10 +1825,12 @@ mod tests {
             nominal_slash_ratio: Decimal,
             slash_amount: Uint128,
         ) {
-            let deps = SudoCtx {
-                deps,
-                env: mock_env(),
-            };
+            let deps = SudoCtx::from(
+                (
+                    deps,
+                    mock_env(),
+                )
+            );
             // We sent a slash along with the tombstone, as this is what the blockchain does
             self.handle_valset_update(
                 deps,
@@ -1834,25 +1856,31 @@ mod tests {
         }
 
         fn add_val(&self, deps: DepsMut, val: &str) {
-            let val = cosmwasm_std::Validator {
-                address: val.to_string(),
-                commission: Default::default(),
-                max_commission: Default::default(),
-                max_change_rate: Default::default(),
-            };
-            let deps = SudoCtx {
-                deps,
-                env: mock_env(),
-            };
+            let val = cosmwasm_std::Validator::create(
+                val.to_string(),
+                Decimal::zero(),
+                Decimal::zero(),
+                Decimal::zero(),
+            
+            
+            );
+            let deps = SudoCtx::from(
+                (
+                    deps,
+                    mock_env(),
+                )
+            );
             self.handle_valset_update(deps, Some(vec![val]), None, None, None, None, None, None)
                 .unwrap();
         }
 
         fn remove_val(&self, deps: DepsMut, val: &str) {
-            let deps = SudoCtx {
-                deps,
-                env: mock_env(),
-            };
+            let deps = SudoCtx::from(
+                (
+                    deps,
+                    mock_env(),
+                )
+            );
             self.handle_valset_update(
                 deps,
                 None,
