@@ -41,7 +41,7 @@ derivative                = { workspace = true }
 anyhow                    = { workspace = true }
 mesh-external-staking     = { workspace = true, features = ["mt"] }
 mesh-native-staking-proxy = { workspace = true, features = ["mt"] }
-
+mesh-native-staking       = { workspace = true, features = ["mt"] }
 [[bin]]
 name = "schema"
 doc  = false

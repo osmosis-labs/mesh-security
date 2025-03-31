@@ -5,11 +5,12 @@ use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
 use mesh_apis::ibc::ConsumerPacket;
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
+#[allow(deprecated)]
+use sylvia::types::ReplyCtx;
 use sylvia::{contract, schemars};
 
 use mesh_apis::converter_api::{self, ConverterApi, RewardInfo, ValidatorSlashInfo};
-use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
@@ -48,7 +49,6 @@ pub struct ConverterContract {
 #[sv::messages(converter_api as ConverterApi)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
 #[sv::custom(query=custom::ConverterQuery, msg=custom::ConverterMsg)]
-#[sv::features(replies)]
 impl ConverterContract {
     pub const fn new() -> Self {
         Self {
@@ -116,23 +116,25 @@ impl ConverterContract {
     }
 
     #[sv::msg(reply)]
+    #[allow(deprecated)]
     fn reply(
         &self,
         ctx: ReplyCtx<custom::ConverterQuery>,
-        result: SubMsgResult,
-        payload: Binary
+        reply: Reply,
     ) -> Result<custom::Response, ContractError> {
-       self.reply_init_callback(ctx.deps, result.unwrap(), payload)
+        match reply.id {
+            REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
+            _ => Err(ContractError::InvalidReplyId(reply.id)),
+        }
     }
 
     /// Store virtual staking address
     fn reply_init_callback(
         &self,
         deps: DepsMut<custom::ConverterQuery>,
-        _reply: SubMsgResponse,
-        payload: Binary
+        reply: SubMsgResponse,
     ) -> Result<custom::Response, ContractError> {
-        let init_data = parse_instantiate_response_data(&payload)?;
+        let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let virtual_staking = Addr::unchecked(init_data.contract_address);
         self.virtual_stake.save(deps.storage, &virtual_staking)?;
         Ok(Response::new())

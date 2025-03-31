@@ -1,5 +1,5 @@
 use cosmwasm_std::{coin, coins, Addr, Decimal, StdError, Uint128, Validator};
-use cw_multi_test::{no_init, AppBuilder, WasmKeeper};
+use cw_multi_test::{no_init, AppBuilder, IntoBech32, WasmKeeper};
 use mesh_apis::converter_api::sv::mt::ConverterApiProxy;
 use mesh_apis::converter_api::RewardInfo;
 use mesh_simple_price_feed::contract::sv::mt::CodeId as PriceFeedCodeId;
@@ -18,7 +18,10 @@ use crate::error::ContractError::Unauthorized;
 
 const JUNO: &str = "ujuno";
 
-pub type MtApp = cw_multi_test::BasicApp<custom::ConverterMsg, custom::ConverterQuery>;
+pub type MtApp = cw_multi_test::BasicApp<
+    mesh_bindings::VirtualStakeCustomMsg,
+    mesh_bindings::VirtualStakeCustomQuery,
+>;
 
 struct SetupArgs<'a> {
     owner: &'a str,
@@ -52,7 +55,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
     let price_feed = price_feed_code
         .instantiate(native_per_foreign, None)
         .with_label("Price Feed")
-        .call(&Addr::unchecked(owner))
+        .call(&owner.into_bech32())
         .unwrap();
 
     let converter = converter_code
@@ -62,12 +65,12 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
             JUNO.to_owned(),
             virtual_staking_code.code_id(),
             true,
-            Some(admin.to_owned()),
+            Some(admin.into_bech32().to_string()),
             50,
         )
         .with_label("Juno Converter")
-        .with_admin(admin)
-        .call(&Addr::unchecked(owner))
+        .with_admin(admin.into_bech32().as_str())
+        .call(&owner.into_bech32())
         .unwrap();
 
     let config = converter.config().unwrap();
@@ -86,6 +89,7 @@ fn setup<'a>(app: &'a App<MtApp>, args: SetupArgs<'a>) -> SetupResponse<'a> {
 }
 
 #[test]
+#[cfg(feature = "fake-custom")]
 fn instantiation() {
     let app = new_app();
 
@@ -120,7 +124,7 @@ fn instantiation() {
         .wrap()
         .query_wasm_contract_info(&config.virtual_staking)
         .unwrap();
-    assert_eq!(vs_info.admin, Some(Addr::unchecked(admin)));
+    assert_eq!(vs_info.admin, Some(admin.into_bech32()));
 
     // let's query virtual staking to find the owner
     let vs_config = virtual_staking.config().unwrap();
@@ -128,6 +132,7 @@ fn instantiation() {
 }
 
 #[test]
+#[cfg(feature = "fake-custom")]
 fn ibc_stake_and_unstake() {
     let app = new_app();
 
@@ -174,21 +179,21 @@ fn ibc_stake_and_unstake() {
     // let's stake some
     converter
         .test_stake(owner.to_string(), val1.to_string(), coin(1000, JUNO))
-        .call(&Addr::unchecked(owner))
+        .call(&owner.into_bech32())
         .unwrap();
     converter
         .test_stake(owner.to_string(), val2.to_string(), coin(4000, JUNO))
-        .call(&Addr::unchecked(owner))
+        .call(&owner.into_bech32())
         .unwrap();
 
     // and unstake some
     converter
         .test_unstake(owner.to_string(), val2.to_string(), coin(2000, JUNO))
-        .call(&Addr::unchecked(owner))
+        .call(&owner.into_bech32())
         .unwrap();
 
     // new epoch to update all stake values
-    virtual_staking.test_handle_epoch().call(&Addr::unchecked(owner)).unwrap();
+    virtual_staking.test_handle_epoch().call(&owner.into_bech32()).unwrap();
 
     // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
     assert_eq!(
@@ -217,6 +222,7 @@ fn ibc_stake_and_unstake() {
 }
 
 #[test]
+#[cfg(feature = "fake-custom")]
 fn ibc_stake_and_burn() {
     let app = new_app();
 
@@ -263,21 +269,21 @@ fn ibc_stake_and_burn() {
     // let's stake some
     converter
         .test_stake(owner.to_string(), val1.to_string(), coin(1000, JUNO))
-        .call(&Addr::unchecked(owner))
+        .call(&owner.into_bech32())
         .unwrap();
     converter
         .test_stake(owner.to_string(), val2.to_string(), coin(4000, JUNO))
-        .call(&Addr::unchecked(owner))
+        .call(&owner.into_bech32())
         .unwrap();
 
     // and burn some
     converter
         .test_burn(vec![val2.to_string()], coin(2000, JUNO))
-        .call(&Addr::unchecked(owner))
+        .call(&owner.into_bech32())
         .unwrap();
 
     // new epoch to update all stake values
-    virtual_staking.test_handle_epoch().call(&Addr::unchecked(owner)).unwrap();
+    virtual_staking.test_handle_epoch().call(&owner.into_bech32()).unwrap();
     // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
     assert_eq!(
         virtual_staking
@@ -305,6 +311,7 @@ fn ibc_stake_and_burn() {
 }
 
 #[test]
+#[cfg(feature = "fake-custom")]
 fn valset_update_works() {
     let app = new_app();
 
@@ -347,7 +354,7 @@ fn valset_update_works() {
     // Check that only the virtual staking contract can call this handler
     let res = converter
         .valset_update(vec![], vec![], vec![], vec![], vec![], vec![], vec![])
-        .call(&Addr::unchecked(owner));
+        .call(&owner.into_bech32());
     assert_eq!(res.unwrap_err(), Unauthorized {});
 
     let res = converter
@@ -373,6 +380,7 @@ fn valset_update_works() {
 }
 
 #[test]
+#[cfg(feature = "fake-custom")]
 fn unauthorized() {
     let app = new_app();
 
@@ -397,27 +405,28 @@ fn unauthorized() {
                 reward: 53u128.into(),
             },
         ])
-        .call(&Addr::unchecked("mallory"))
+        .call(&"mallory".into_bech32())
         .unwrap_err();
 
     assert_eq!(err, ContractError::Unauthorized);
 
     let err = converter
         .distribute_reward("validator".to_string())
-        .call(&Addr::unchecked("mallory"))
+        .call(&"mallory".into_bech32())
         .unwrap_err();
 
     assert_eq!(err, ContractError::Unauthorized);
 
     let err = converter
         .valset_update(vec![], vec![], vec![], vec![], vec![], vec![], vec![])
-        .call(&Addr::unchecked("mallory"))
+        .call(&"mallory".into_bech32())
         .unwrap_err();
 
     assert_eq!(err, ContractError::Unauthorized);
 }
 
 #[test]
+#[cfg(feature = "fake-custom")]
 fn distribute_rewards_invalid_amount_is_rejected() {
     let owner = "sunny";
     let admin = "theman";

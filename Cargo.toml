@@ -35,8 +35,8 @@ cosmwasm-std = { version = "2.2.2", features = ["stargate", "cosmwasm_1_2"] }
 cw-storage-plus = "2.0.0"
 cw-utils = "2.0.0"
 cw2 = "2.0.0"
-osmosis-std = "0.20.1"
-prost = { version = "0.11.0",  default-features = false, features = ["prost-derive"] }
+osmosis-std = "0.27.0"
+prost = { version = "0.13.5",  default-features = false, features = ["prost-derive"] }
 schemars = "0.8.17"
 serde = { version = "1.0.199", default-features = false, features = ["derive"] }
 thiserror = "1.0.59"

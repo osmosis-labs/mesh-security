@@ -1,8 +1,10 @@
+use std::ops::Add;
+
 use cosmwasm_std::{
     coin, coins, to_json_binary, Addr, Decimal, Delegation, StdError, Uint128, Validator,
 };
 
-use cw_multi_test::{App as MtApp, StakingInfo};
+use cw_multi_test::{App as MtApp, IntoBech32, StakingInfo};
 use sylvia::multitest::{App, Proxy};
 
 use mesh_apis::local_staking_api::sv::mt::LocalStakingApiProxy;
@@ -14,7 +16,7 @@ use mesh_sync::ValueRange;
 use mesh_vault::mock::sv::mt::VaultMockProxy;
 use mesh_vault::msg::LocalStakingInfo;
 
-use crate::contract;
+use crate::contract::{self, NativeStakingContract};
 use crate::contract::sv::mt::NativeStakingContractProxy;
 use crate::error::ContractError;
 use crate::msg;
@@ -41,7 +43,7 @@ fn app(balances: &[(&str, (u128, &str))], validators: &[&str]) -> App<MtApp> {
         for (account, (amount, denom)) in balances {
             router
                 .bank
-                .init_balance(storage, &Addr::unchecked(*account), coins(*amount, *denom))
+                .init_balance(storage, &account.into_bech32(), coins(*amount, *denom))
                 .unwrap();
         }
 
@@ -120,7 +122,7 @@ fn instantiation() {
             slashing_rate_offline(),
         )
         .with_label("Staking")
-        .call(&Addr::unchecked(owner))
+        .call(&owner.into_bech32())
         .unwrap();
 
     let config = staking.config().unwrap();
@@ -132,15 +134,15 @@ fn instantiation() {
 
 #[test]
 fn receiving_stake() {
-    let owner = "vault"; // Owner of the staking contract (i. e. the vault contract)
+    let owner = "vault".into_bech32(); // Owner of the staking contract (i. e. the vault contract)
 
-    let user1 = "user1"; // One who wants to local stake
-    let user2 = "user2"; // Another one who wants to local stake
+    let user1 = "user1".into_bech32(); // One who wants to local stake
+    let user2 = "user2".into_bech32(); // Another one who wants to local stake
 
     let validator = "validator1"; // Validator to stake on
 
     // Fund the vault
-    let app = app(&[(owner, (300, OSMO))], &[validator]);
+    let app = app(&[("vault", (300, OSMO))], &[validator]);
 
     // Contracts setup
     let staking_proxy_code = NativeStakingProxyCodeId::store_code(&app);
@@ -154,11 +156,11 @@ fn receiving_stake() {
             slashing_rate_offline(),
         )
         .with_label("Staking")
-        .call(&Addr::unchecked(owner))
+        .call(&owner)
         .unwrap();
 
     // Check that no proxy exists for user1 yet
-    let err = staking.proxy_by_owner(user1.to_owned()).unwrap_err();
+    let err = staking.proxy_by_owner(user1.to_string()).unwrap_err();
     assert!(matches!(
         err,
         ContractError::Std(StdError::GenericErr { .. }) // Addr not found
@@ -170,17 +172,17 @@ fn receiving_stake() {
     })
     .unwrap();
     staking
-        .receive_stake(user1.to_owned(), stake_msg)
+        .receive_stake(user1.to_string(), stake_msg)
         .with_funds(&coins(100, OSMO))
-        .call(&Addr::unchecked(owner)) // called from vault
+        .call(&owner) // called from vault
         .unwrap();
 
-    let proxy1 = staking.proxy_by_owner(user1.to_owned()).unwrap().proxy;
+    let proxy1 = staking.proxy_by_owner(user1.to_string()).unwrap().proxy;
     // Reverse query
     assert_eq!(
         staking.owner_by_proxy(proxy1.clone()).unwrap(),
         OwnerByProxyResponse {
-            owner: user1.to_owned(),
+            owner: user1.to_string(),
         }
     );
 
@@ -193,14 +195,14 @@ fn receiving_stake() {
     })
     .unwrap();
     staking
-        .receive_stake(user1.to_owned(), stake_msg)
+        .receive_stake(user1.to_string(), stake_msg)
         .with_funds(&coins(50, OSMO))
-        .call(&Addr::unchecked(owner)) // called from vault
+        .call(&owner) // called from vault
         .unwrap();
 
     // Check that same proxy is used
     assert_eq!(
-        staking.proxy_by_owner(user1.to_owned()).unwrap(),
+        staking.proxy_by_owner(user1.to_string()).unwrap(),
         ProxyByOwnerResponse {
             proxy: proxy1.clone(),
         }
@@ -210,7 +212,7 @@ fn receiving_stake() {
     assert_eq!(
         staking.owner_by_proxy(proxy1.clone()).unwrap(),
         OwnerByProxyResponse {
-            owner: user1.to_owned(),
+            owner: user1.to_string(),
         }
     );
 
@@ -223,17 +225,17 @@ fn receiving_stake() {
     })
     .unwrap();
     staking
-        .receive_stake(user2.to_owned(), stake_msg)
+        .receive_stake(user2.to_string(), stake_msg)
         .with_funds(&coins(10, OSMO))
         .call(&Addr::unchecked(owner)) // called from vault
         .unwrap();
 
-    let proxy2 = staking.proxy_by_owner(user2.to_owned()).unwrap().proxy;
+    let proxy2 = staking.proxy_by_owner(user2.to_string()).unwrap().proxy;
     // Reverse query
     assert_eq!(
         staking.owner_by_proxy(proxy2.to_string()).unwrap(),
         OwnerByProxyResponse {
-            owner: user2.to_owned(),
+            owner: user2.to_string(),
         }
     );
 
@@ -243,17 +245,13 @@ fn receiving_stake() {
 
 #[test]
 fn releasing_proxy_stake() {
-    let owner = "vault_admin"; // Owner of the vault contract
+    let owner = "vault_admin".into_bech32(); // Owner of the vault contract
 
-    let vault_addr = "contract0"; // First created contract
-    let staking_addr = "contract1"; // Second contract (instantiated by vault)
-    let proxy_addr = "contract2"; // Staking proxy contract for user1 (instantiated by staking contract on stake)
-
-    let user = "user1"; // One who wants to release stake
+    let user = "user1".into_bech32(); // One who wants to release stake
     let validator = "validator1";
 
     // Fund the user
-    let app = app(&[(user, (300, OSMO))], &[validator]);
+    let app = app(&[("user1", (300, OSMO))], &[validator]);
 
     // Contracts setup
     let vault_code = mesh_vault::mock::sv::mt::CodeId::store_code(&app);
@@ -281,29 +279,30 @@ fn releasing_proxy_stake() {
             Some(LocalStakingInfo::New(staking_init_info)),
         )
         .with_label("Vault")
-        .call(&Addr::unchecked(owner))
+        .call(&owner)
         .unwrap();
-
+    let vault_addr = vault.contract_addr.clone();
+    let staking_addr = vault.config().unwrap().local_staking.unwrap();
     // Vault is empty
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        app.app().wrap().query_balance(vault_addr.to_string(), OSMO).unwrap(),
         coin(0, OSMO)
     );
 
     // Access staking instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
-        Proxy::new(Addr::unchecked(proxy_addr), &app);
+    let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
+        Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
     // User bonds some funds to the vault
     vault
         .bond()
         .with_funds(&coins(200, OSMO))
-        .call(&Addr::unchecked(user))
+        .call(&user)
         .unwrap();
 
     // Vault has the funds
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        app.app().wrap().query_balance(vault_addr.to_string(), OSMO).unwrap(),
         coin(200, OSMO)
     );
 
@@ -317,44 +316,47 @@ fn releasing_proxy_stake() {
             })
             .unwrap(),
         )
-        .call(&Addr::unchecked(user))
+        .call(&user)
         .unwrap();
 
     // Vault has half the funds
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        app.app().wrap().query_balance(vault_addr.to_string(), OSMO).unwrap(),
         coin(100, OSMO)
     );
 
     // And a lien on the other half
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault.account_claims(user.to_string(), None, None).unwrap();
     assert_eq!(
         claims.claims,
         [mesh_vault::msg::LienResponse {
-            lienholder: staking_addr.to_owned(),
+            lienholder: staking_addr.to_string(),
             amount: ValueRange::new_val(Uint128::new(100))
         }]
     );
 
+    let proxy_addr = local_staking.proxy_by_owner(user.to_string()).unwrap().proxy;
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
+        Proxy::new(Addr::unchecked(proxy_addr.clone()), &app);
     // The other half is delegated
-    assert_delegations(&app, proxy_addr, &[(validator, 100)]);
+    assert_delegations(&app, proxy_addr.to_string(), &[(validator, 100)]);
 
     // Now release the funds
     staking_proxy
         .unstake(validator.to_string(), coin(100, OSMO))
-        .call(&Addr::unchecked(user))
+        .call(&user)
         .unwrap();
     // Important: we need to wait the unbonding period until this is released
     app.update_block(advance_unbonding_period);
-    staking_proxy.release_unbonded().call(&Addr::unchecked(user)).unwrap();
+    staking_proxy.release_unbonded().call(&user).unwrap();
 
     // Check that the vault has the funds again
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr, OSMO).unwrap(),
+        app.app().wrap().query_balance(vault_addr.to_string(), OSMO).unwrap(),
         coin(200, OSMO)
     );
     // And there are no more liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault.account_claims(user.to_string(), None, None).unwrap();
     assert_eq!(claims.claims, []);
 }
 

@@ -1,5 +1,5 @@
 use cosmwasm_std::{Addr, Decimal, Validator};
-use cw_multi_test::no_init;
+use cw_multi_test::{no_init, IntoBech32};
 use mesh_apis::virtual_staking_api::sv::mt::VirtualStakingApiProxy;
 use sylvia::multitest::Proxy;
 
@@ -50,7 +50,7 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
     let price_feed = price_feed_code
         .instantiate(native_per_foreign, None)
         .with_label("Price Feed")
-        .call(&Addr::unchecked(owner))
+        .call(&owner.into_bech32())
         .unwrap();
 
     let converter = converter_code
@@ -60,12 +60,12 @@ fn setup<'a>(app: &'a App, args: SetupArgs<'a>) -> SetupResponse<'a> {
             JUNO.to_owned(),
             virtual_staking_code.code_id(),
             true,
-            Some(admin.to_owned()),
+            Some(admin.into_bech32().to_string()),
             50,
         )
         .with_label("Juno Converter")
-        .with_admin(admin)
-        .call(&Addr::unchecked(owner))
+        .with_admin(admin.into_bech32().as_str())
+        .call(&owner.into_bech32())
         .unwrap();
 
     let config = converter.config().unwrap();
@@ -114,7 +114,7 @@ fn instantiation() {
         .wrap()
         .query_wasm_contract_info(&config.virtual_staking)
         .unwrap();
-    assert_eq!(vs_info.admin, Some(Addr::unchecked(admin)));
+    assert_eq!(vs_info.admin, Some(admin.into_bech32()));
 
     // let's query virtual staking to find the owner
     let vs_config = virtual_staking.config().unwrap();

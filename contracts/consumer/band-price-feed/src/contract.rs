@@ -171,6 +171,7 @@ mod tests {
     use cosmwasm_std::{
         testing::{message_info, mock_dependencies, mock_env}, Addr, Uint128, Uint64
     };
+    use cw_multi_test::IntoBech32;
 
     use super::*;
 
@@ -178,7 +179,7 @@ mod tests {
     fn instantiation() {
         let mut deps = mock_dependencies();
         let env = mock_env();
-        let sender = Addr::unchecked("sender");
+        let sender = "sender".into_bech32();
         let info = message_info(&sender, &[]);
         let contract = RemotePriceFeedContract::new();
 

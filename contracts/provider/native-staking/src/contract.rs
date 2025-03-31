@@ -5,7 +5,9 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
+#[allow(deprecated)]
+use sylvia::types::ReplyCtx;
 use sylvia::{contract, schemars};
 
 use mesh_apis::local_staking_api;
@@ -43,7 +45,6 @@ pub(crate) enum SlashingReason {
 #[sv::error(ContractError)]
 #[sv::messages(local_staking_api as LocalStakingApi)]
 #[sv::messages(native_staking_callback as NativeStakingCallback)]
-#[sv::features(replies)]
 impl NativeStakingContract {
     pub const fn new() -> Self {
         Self {
@@ -182,17 +183,21 @@ impl NativeStakingContract {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, result: SubMsgResult, payload: Binary) -> Result<Response, ContractError> {
-        self.reply_init_callback(ctx.deps, result.unwrap(), payload)
+    #[allow(deprecated)]
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+        match reply.id {
+            REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
+            _ => Err(ContractError::InvalidReplyId(reply.id)),
+        }
     }
 
+    #[allow(deprecated)]
     fn reply_init_callback(
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-        payload: Binary
     ) -> Result<Response, ContractError> {
-        let init_data = parse_instantiate_response_data(&payload)?;
+        let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
 
         // Associate staking proxy with owner address
         let proxy_addr = Addr::unchecked(init_data.contract_address);

@@ -907,6 +907,7 @@ mod tests {
     use cosmwasm_std::{
         coins, from_json, testing::{message_info, mock_env, mock_info, MockApi, MockQuerier, MockStorage}, Addr, AllDelegationsResponse, Decimal
     };
+    use cw_multi_test::IntoBech32;
     use mesh_bindings::{BondStatusResponse, SlashRatioResponse, TotalDelegationResponse};
 
     use super::*;
@@ -1656,7 +1657,7 @@ mod tests {
                     (
                         deps,
                         mock_env(),
-                        message_info(&Addr::unchecked("me"), &[]),
+                        message_info(&"me".into_bech32(), &[]),
                     )
                 ),
                 50,
@@ -1712,7 +1713,7 @@ mod tests {
                     (
                         deps,
                         mock_env(),
-                        message_info(&Addr::unchecked("me"), &[]),
+                        message_info(&"me".into_bech32(), &[]),
                     )
                 ),
                 delegator.to_string(),
@@ -1730,7 +1731,7 @@ mod tests {
                     (
                         deps,
                         mock_env(),
-                        message_info(&Addr::unchecked("me"), &[]),
+                        message_info(&"me".into_bech32(), &[]),
                     )
                 ),
                 delegator.to_string(),
@@ -1753,7 +1754,7 @@ mod tests {
                     (
                         deps,
                         mock_env(),
-                        message_info(&Addr::unchecked("me"), &[]),
+                        message_info(&"me".into_bech32(), &[]),
                     )
                 ),
                 validators.iter().map(<&str>::to_string).collect(),

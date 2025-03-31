@@ -13,7 +13,9 @@ use mesh_apis::local_staking_api::{
 use mesh_apis::vault_api::{self, SlashInfo, VaultApi};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
+#[allow(deprecated)]
+use sylvia::types::ReplyCtx;
 use sylvia::{contract, schemars};
 
 use crate::contract::{
@@ -50,7 +52,6 @@ pub struct VaultMock {
 #[contract]
 #[sv::error(ContractError)]
 #[sv::messages(vault_api as VaultApi)]
-#[sv::features(replies)]
 impl VaultMock {
     pub fn new() -> Self {
         Self {
@@ -472,17 +473,21 @@ impl VaultMock {
     }
 
     #[sv::msg(reply)]
-    fn reply(&self, ctx: ReplyCtx, result: SubMsgResult, payload: Binary) -> Result<Response, ContractError> {
-        self.reply_init_callback(ctx.deps, result.unwrap(), payload)
+    #[allow(deprecated)]
+    fn reply(&self, ctx: ReplyCtx, reply: Reply) -> Result<Response, ContractError> {
+        match reply.id {
+            REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
+            _ => Err(ContractError::InvalidReplyId(reply.id)),
+        }
     }
 
+    #[allow(deprecated)]
     fn reply_init_callback(
         &self,
         deps: DepsMut,
         reply: SubMsgResponse,
-        payload: Binary
     ) -> Result<Response, ContractError> {
-        let init_data = parse_instantiate_response_data(&payload)?;
+        let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let local_staking = Addr::unchecked(init_data.contract_address);
 
         // As we control the local staking contract it might be better to just raw-query it

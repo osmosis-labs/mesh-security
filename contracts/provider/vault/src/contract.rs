@@ -15,7 +15,9 @@ use mesh_bindings::{ProviderCustomMsg, ProviderMsg};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
 
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
+#[allow(deprecated)]
+use sylvia::types::ReplyCtx;
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
@@ -69,7 +71,6 @@ pub struct VaultContract {
 #[sv::messages(vault_api as VaultApi)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
 #[sv::custom(msg=ProviderCustomMsg)]
-#[sv::features(replies)]
 impl VaultContract {
     pub fn new() -> Self {
         Self {
@@ -133,7 +134,7 @@ impl VaultContract {
                             .label
                             .unwrap_or_else(|| "Mesh Security Local Staking".to_string()),
                     };
-                    let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
+                    let sub_msg = SubMsg::new(msg);
                     Ok(Response::new().add_submessage(sub_msg))
                 }
             }
@@ -562,22 +563,25 @@ impl VaultContract {
     }
 
     #[sv::msg(reply)]
+    #[allow(deprecated)]
     fn reply(
         &self,
         ctx: ReplyCtx,
-        result: SubMsgResult,
-        payload: Binary
+        reply: Reply,
     ) -> Result<Response<ProviderCustomMsg>, ContractError> {
-       self.reply_init_callback(ctx.deps, result.unwrap(), payload)
+        match reply.id {
+            REPLY_ID_INSTANTIATE => self.reply_init_callback(ctx.deps, reply.result.unwrap()),
+            _ => Err(ContractError::InvalidReplyId(reply.id)),
+        }
     }
 
+    #[allow(deprecated)]
     fn reply_init_callback(
         &self,
         deps: DepsMut,
-        reply: SubMsgResponse,
-        payload: Binary
+        reply: SubMsgResponse
     ) -> Result<Response<ProviderCustomMsg>, ContractError> {
-        let init_data = parse_instantiate_response_data(&payload)?;
+        let init_data = parse_instantiate_response_data(&reply.data.unwrap())?;
         let local_staking = Addr::unchecked(init_data.contract_address);
 
         // As we control the local staking contract it might be better to just raw-query it
