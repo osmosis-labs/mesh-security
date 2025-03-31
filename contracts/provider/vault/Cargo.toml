@@ -20,7 +20,6 @@ mt = ["library", "sylvia/mt"]
 mesh-apis           = { workspace = true }
 mesh-sync           = { workspace = true }
 mesh-bindings       = { workspace = true }
-mesh-native-staking = { workspace = true }
 
 sylvia = { workspace = true }
 cosmwasm-schema  = { workspace = true }
