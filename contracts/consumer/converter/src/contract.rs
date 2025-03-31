@@ -100,7 +100,12 @@ impl ConverterContract {
             ctx.deps.api.addr_validate(admin)?;
         }
 
-        let msg = to_json_binary(&mesh_virtual_staking::contract::sv::InstantiateMsg {
+        #[cosmwasm_schema::cw_serde]
+        struct VirtualStakingInitMsg {
+            max_retrieve: u32,
+            tombstoned_unbond_enable: bool,
+        }
+        let msg = to_json_binary(&VirtualStakingInitMsg {
             max_retrieve,
             tombstoned_unbond_enable,
         })?;

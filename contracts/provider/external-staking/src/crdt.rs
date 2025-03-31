@@ -96,6 +96,12 @@ pub struct CrdtState {
     validators: Map<String, ValidatorState>,
 }
 
+impl Default for CrdtState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CrdtState {
     pub const fn new() -> Self {
         CrdtState {

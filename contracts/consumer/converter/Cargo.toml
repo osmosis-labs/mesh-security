@@ -22,7 +22,6 @@ fake-custom = [ "mesh-simple-price-feed/fake-custom" ]
 mesh-apis = { workspace = true }
 mesh-bindings = { workspace = true }
 mesh-sync = { workspace = true }
-mesh-virtual-staking = { workspace = true }
 
 sylvia = { workspace = true }
 cosmwasm-schema = { workspace = true }

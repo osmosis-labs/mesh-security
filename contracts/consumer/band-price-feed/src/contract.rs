@@ -143,7 +143,7 @@ pub fn try_request(deps: DepsMut, env: &Env) -> Result<Response, ContractError> 
         minimum_sources: config.minimum_sources,
     }
     .try_to_vec()
-    .map(|bytes| Binary::from(bytes))
+    .map(Binary::from)
     .map_err(|err| ContractError::CustomError {
         val: err.to_string(),
     })?;

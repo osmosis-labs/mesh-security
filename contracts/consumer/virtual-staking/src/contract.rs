@@ -1,6 +1,5 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::u32;
 
 use cosmwasm_std::{
     coin, ensure_eq, to_json_binary, Binary, Coin, CosmosMsg, CustomQuery, DepsMut,
@@ -694,8 +693,8 @@ impl VirtualStakingApi for VirtualStakingContract {
      * 2. Sum the total amount
      * 3. If the sum <= max_cap then use collected requests as is
      * 4. If the sum > max_cap,
-     *   a. calculate multiplier Decimal(max_cap / sum)
-     *   b. multiply every element of the collected requests in place.
+     *    a. calculate multiplier Decimal(max_cap / sum)
+     *    b. multiply every element of the collected requests in place.
      * 5. Find diff between collected (normalized) requests and last bonding amounts (which go up, which down).
      * 6. Transform diff into unbond and bond requests, sorting so all unbond happen first
      */

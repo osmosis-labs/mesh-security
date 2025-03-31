@@ -70,6 +70,12 @@ impl PriceKeeper {
     }
 }
 
+impl Default for PriceKeeper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub enum PriceKeeperError {
     #[error("StdError: {0}")]

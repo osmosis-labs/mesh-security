@@ -7,7 +7,7 @@ pub struct StakeIndexes<'a> {
     pub rev: MultiIndex<'a, (String, Addr), Stake, (Addr, String)>,
 }
 
-impl<'a> IndexList<Stake> for StakeIndexes<'a> {
+impl IndexList<Stake> for StakeIndexes<'_> {
     fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<Stake>> + '_> {
         let v: Vec<&dyn Index<Stake>> = vec![&self.rev];
         Box::new(v.into_iter())

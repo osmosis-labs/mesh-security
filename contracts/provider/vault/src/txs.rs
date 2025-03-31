@@ -8,7 +8,7 @@ pub struct TxIndexes<'a> {
     pub users: MultiIndex<'a, Addr, Tx, Addr>,
 }
 
-impl<'a> IndexList<Tx> for TxIndexes<'a> {
+impl IndexList<Tx> for TxIndexes<'_> {
     fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<Tx>> + '_> {
         let v: Vec<&dyn Index<Tx>> = vec![&self.users];
         Box::new(v.into_iter())
