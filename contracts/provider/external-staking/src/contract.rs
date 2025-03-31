@@ -252,7 +252,9 @@ impl ExternalStakingContract {
         validator: String,
         amount: Coin,
     ) -> Result<Response, ContractError> {
-        let ExecCtx { info, deps, env, .. } = ctx;
+        let ExecCtx {
+            info, deps, env, ..
+        } = ctx;
         nonpayable(&info)?;
 
         let config = self.config.load(deps.storage)?;
@@ -1028,7 +1030,8 @@ impl ExternalStakingContract {
                 .points_alignment
                 .stake_decreased(stake_slash, distribution.points_per_stake);
             distribution.total_stake = distribution.total_stake.saturating_sub(stake_slash); // Don't fail if pending bond tx
-            self.distribution.save(storage, validator.to_string(), &distribution)?;
+            self.distribution
+                .save(storage, validator.to_string(), &distribution)?;
 
             // Slash the unbondings. We use the nominal slash ratio here, like in the blockchain
             let pending_slashed = stake.slash_pending(
@@ -1554,7 +1557,7 @@ mod tests {
 
     use crate::crdt::State;
     use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, ValidatorState};
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, message_info};
+    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use mesh_apis::cross_staking_api::CrossStakingApi;
     use mesh_apis::vault_api::sv::VaultApiExecMsg::CrossSlash;
 
@@ -1564,13 +1567,11 @@ mod tests {
 
     fn do_instantiate(deps: DepsMut) -> (ExecCtx, ExternalStakingContract) {
         let contract = ExternalStakingContract::new();
-        let mut ctx = InstantiateCtx::from(
-            (
-                deps,
-                mock_env(),
-                message_info(&Addr::unchecked(CREATOR), &[]),
-            )
-        );
+        let mut ctx = InstantiateCtx::from((
+            deps,
+            mock_env(),
+            message_info(&Addr::unchecked(CREATOR), &[]),
+        ));
         contract
             .instantiate(
                 ctx.branch(),
@@ -1588,13 +1589,11 @@ mod tests {
                 },
             )
             .unwrap();
-        let exec_ctx = ExecCtx::from(
-            (
-                ctx.deps,
-                ctx.env,
-                message_info(&Addr::unchecked(OWNER), &[]),
-            )
-        );
+        let exec_ctx = ExecCtx::from((
+            ctx.deps,
+            ctx.env,
+            message_info(&Addr::unchecked(OWNER), &[]),
+        ));
         (exec_ctx, contract)
     }
 
@@ -1655,12 +1654,7 @@ mod tests {
         assert!(msgs.is_empty());
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -1718,13 +1712,7 @@ mod tests {
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
         let vault_info = message_info(&Addr::unchecked("vault_addr"), &[]);
-        let stake_ctx = ExecCtx::from(
-            (
-                stake_deps.branch(),
-                mock_env(),
-                vault_info,
-            )
-        );
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
@@ -1794,12 +1782,7 @@ mod tests {
         );
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -1853,13 +1836,7 @@ mod tests {
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
         let vault_info = message_info(&Addr::unchecked("vault_addr"), &[]);
-        let stake_ctx = ExecCtx::from(
-            (
-                stake_deps.branch(),
-                mock_env(),
-                vault_info,
-            )
-        );
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
@@ -1928,12 +1905,7 @@ mod tests {
         );
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -1987,13 +1959,7 @@ mod tests {
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
         let vault_info = message_info(&Addr::unchecked("vault_addr"), &[]);
-        let stake_ctx = ExecCtx::from(
-            (
-                stake_deps.branch(),
-                mock_env(),
-                vault_info,
-            )
-        );
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
@@ -2012,13 +1978,7 @@ mod tests {
         // OWNER then cross-unstakes half of the stake
         let mut stake_deps = ctx.deps.branch();
         let owner_info = message_info(&Addr::unchecked(OWNER), &[]);
-        let stake_ctx = ExecCtx::from(
-            (
-                stake_deps.branch(),
-                mock_env(),
-                owner_info,
-            )
-        );
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), owner_info));
         contract
             .unstake(stake_ctx, "bob".to_string(), coin(50, "uosmo"))
             .unwrap();
@@ -2078,12 +2038,7 @@ mod tests {
         );
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2161,12 +2116,7 @@ mod tests {
         assert_eq!(msgs.len(), 0);
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2245,12 +2195,7 @@ mod tests {
         assert_eq!(msgs.len(), 0);
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2354,12 +2299,7 @@ mod tests {
 
         // Check that unjail is a no-op
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2413,13 +2353,7 @@ mod tests {
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
         let vault_info = message_info(&Addr::unchecked("vault_addr"), &[]);
-        let stake_ctx = ExecCtx::from(
-            (
-                stake_deps.branch(),
-                mock_env(),
-                vault_info,
-            )
-        );
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
@@ -2489,12 +2423,7 @@ mod tests {
         );
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2571,12 +2500,7 @@ mod tests {
         assert_eq!(msgs.len(), 0);
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2675,12 +2599,7 @@ mod tests {
         assert_eq!(evt.attributes, vec![Attribute::new("updated", "bob"),]);
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx::from(
-            (
-                query_deps.as_ref(),
-                mock_env(),
-            )
-        );
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         // Check that bob is still unbonded
         let vals = contract.list_validators(query_ctx, None, None).unwrap();

@@ -1,5 +1,6 @@
 use cosmwasm_std::{
-    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Empty, Fraction, Order, Reply, Response, StdResult, Storage, SubMsg, SubMsgResponse, SubMsgResult, Uint128, WasmMsg
+    coin, ensure, Addr, BankMsg, Binary, Coin, Decimal, DepsMut, Empty, Fraction, Order, Reply,
+    Response, StdResult, Storage, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Bounder, Item, Map};
@@ -134,7 +135,8 @@ impl VaultMock {
             .may_load(ctx.deps.storage, ctx.info.sender.clone())?
             .unwrap_or_default();
         user.collateral += amount;
-        self.users.save(ctx.deps.storage, ctx.info.sender.clone(), &user)?;
+        self.users
+            .save(ctx.deps.storage, ctx.info.sender.clone(), &user)?;
 
         let resp = Response::new()
             .add_attribute("action", "bond")
@@ -149,7 +151,7 @@ impl VaultMock {
         nonpayable(&ctx.info)?;
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
-        let sender = ctx.info.sender; 
+        let sender = ctx.info.sender;
 
         ensure!(denom == amount.denom, ContractError::UnexpectedDenom(denom));
 
@@ -525,7 +527,10 @@ impl VaultMock {
         let amount = amount.amount;
         let mut lien = self
             .liens
-            .may_load(ctx.deps.storage, (ctx.info.sender.clone(), lienholder.clone()))?
+            .may_load(
+                ctx.deps.storage,
+                (ctx.info.sender.clone(), lienholder.clone()),
+            )?
             .unwrap_or_else(|| Lien {
                 amount: ValueRange::new_val(Uint128::zero()),
                 slashable,
@@ -557,9 +562,13 @@ impl VaultMock {
 
         ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
-        self.liens
-            .save(ctx.deps.storage, (ctx.info.sender.clone(), lienholder.clone()), &lien)?;
-        self.users.save(ctx.deps.storage, ctx.info.sender.clone(), &user)?;
+        self.liens.save(
+            ctx.deps.storage,
+            (ctx.info.sender.clone(), lienholder.clone()),
+            &lien,
+        )?;
+        self.users
+            .save(ctx.deps.storage, ctx.info.sender.clone(), &user)?;
         let tx_id = if remote {
             // Create new tx
             let tx_id = self.next_tx_id(ctx.deps.storage)?;
@@ -616,14 +625,18 @@ impl VaultMock {
         // Commit it
         lien.amount.commit_add(tx_amount);
         // Save it
-        self.liens
-            .save(ctx.deps.storage, (tx_user.clone(), tx_lienholder.clone()), &lien)?;
+        self.liens.save(
+            ctx.deps.storage,
+            (tx_user.clone(), tx_lienholder.clone()),
+            &lien,
+        )?;
         // Load user
         let mut user = self.users.load(ctx.deps.storage, tx_user.clone())?;
         // Update max lien definitive value (it depends on the lien's value range)
         user.max_lien = max_range(user.max_lien, lien.amount);
         // Commit total slashable
-        user.total_slashable.commit_add(tx_amount.mul_floor(lien.slashable));
+        user.total_slashable
+            .commit_add(tx_amount.mul_floor(lien.slashable));
         // Save it
         self.users.save(ctx.deps.storage, tx_user.clone(), &user)?;
 
@@ -676,8 +689,11 @@ impl VaultMock {
                 .remove(ctx.deps.storage, (tx_user.clone(), tx_lienholder.clone()));
         } else {
             // Save lien
-            self.liens
-                .save(ctx.deps.storage, (tx_user.clone(), tx_lienholder.clone()), &lien)?;
+            self.liens.save(
+                ctx.deps.storage,
+                (tx_user.clone(), tx_lienholder.clone()),
+                &lien,
+            )?;
         }
 
         // Load user
@@ -688,7 +704,8 @@ impl VaultMock {
         // is already written to storage
         self.recalculate_max_lien(ctx.deps.storage, &tx_user, &mut user)?;
 
-        user.total_slashable.rollback_add(tx_amount.mul_floor(tx_slashable));
+        user.total_slashable
+            .rollback_add(tx_amount.mul_floor(tx_slashable));
         self.users.save(ctx.deps.storage, tx_user, &user)?;
 
         // Remove tx
@@ -740,8 +757,11 @@ impl VaultMock {
                 .remove(ctx.deps.storage, (owner.clone(), ctx.info.sender.clone()));
         } else {
             // Save lien
-            self.liens
-                .save(ctx.deps.storage, (owner.clone(), ctx.info.sender.clone()), &lien)?;
+            self.liens.save(
+                ctx.deps.storage,
+                (owner.clone(), ctx.info.sender.clone()),
+                &lien,
+            )?;
         }
 
         let mut user = self.users.load(ctx.deps.storage, owner.clone())?;
@@ -785,8 +805,11 @@ impl VaultMock {
             // Slash user
             lien.amount.sub(slash_amount, Uint128::zero())?;
             // Save lien
-            self.liens
-                .save(ctx.deps.storage, (slash_user.clone(), lien_holder.clone()), &lien)?;
+            self.liens.save(
+                ctx.deps.storage,
+                (slash_user.clone(), lien_holder.clone()),
+                &lien,
+            )?;
             // Adjust total slashable and max lien
             user_info
                 .total_slashable
@@ -855,7 +878,8 @@ impl VaultMock {
                 );
                 // Keep the invariant over the lien
                 lien.amount = ValueRange::new(new_low_amount, new_high_amount);
-                self.liens.save(storage, (user.clone(), lien_holder.clone()), &lien)?;
+                self.liens
+                    .save(storage, (user.clone(), lien_holder.clone()), &lien)?;
                 // Remove the required amount from the user's stake
                 let validator = if lien_holder == slashed_lien_holder {
                     Some(slashed_validator.to_string())
@@ -895,7 +919,8 @@ impl VaultMock {
                     .sub(sub_amount.mul_floor(lien.slashable), Uint128::zero())?;
                 // Keep the invariant over the lien
                 lien.amount.sub(sub_amount, Uint128::zero())?;
-                self.liens.save(storage, (user.clone(), lien_holder.clone()), &lien)?;
+                self.liens
+                    .save(storage, (user.clone(), lien_holder.clone()), &lien)?;
                 // Remove the required amount from the user's stake
                 let validator = if lien_holder == slashed_lien_holder {
                     Some(slashed_validator.to_string())

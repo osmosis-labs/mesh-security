@@ -1,5 +1,5 @@
 use cosmwasm_std::{coin, coins, Addr, Decimal, StdError, Uint128, Validator};
-use cw_multi_test::{no_init, AppBuilder, IntoBech32, WasmKeeper};
+use cw_multi_test::{no_init, AppBuilder, IntoBech32};
 use mesh_apis::converter_api::sv::mt::ConverterApiProxy;
 use mesh_apis::converter_api::RewardInfo;
 use mesh_simple_price_feed::contract::sv::mt::CodeId as PriceFeedCodeId;
@@ -12,7 +12,7 @@ use sylvia::multitest::{App, Proxy};
 
 use crate::contract::sv::mt::CodeId as ConverterCodeId;
 use crate::contract::sv::mt::ConverterContractProxy;
-use crate::contract::{custom, ConverterContract};
+use crate::contract::ConverterContract;
 use crate::error::ContractError;
 use crate::error::ContractError::Unauthorized;
 
@@ -193,7 +193,10 @@ fn ibc_stake_and_unstake() {
         .unwrap();
 
     // new epoch to update all stake values
-    virtual_staking.test_handle_epoch().call(&owner.into_bech32()).unwrap();
+    virtual_staking
+        .test_handle_epoch()
+        .call(&owner.into_bech32())
+        .unwrap();
 
     // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
     assert_eq!(
@@ -283,7 +286,10 @@ fn ibc_stake_and_burn() {
         .unwrap();
 
     // new epoch to update all stake values
-    virtual_staking.test_handle_epoch().call(&owner.into_bech32()).unwrap();
+    virtual_staking
+        .test_handle_epoch()
+        .call(&owner.into_bech32())
+        .unwrap();
     // and check the stakes (1000 * 0.6 * 0.5 = 300) (2000 * 0.6 * 0.5 = 600)
     assert_eq!(
         virtual_staking
@@ -347,7 +353,7 @@ fn valset_update_works() {
             Decimal::zero(),
             Decimal::zero(),
             Decimal::zero(),
-        )
+        ),
     ];
     let rem_validators = vec!["validator3".to_string()];
 

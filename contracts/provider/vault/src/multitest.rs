@@ -338,7 +338,9 @@ fn bonding() {
             free: ValueRange::new_val(Uint128::zero()),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
 
     bond(&vault, user, 100);
@@ -351,10 +353,15 @@ fn bonding() {
             free: ValueRange::new_val(Uint128::new(100)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
-        app.app().wrap().query_balance(user_addr.to_string(), OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(user_addr.to_string(), OSMO)
+            .unwrap(),
         coin(200, OSMO)
     );
     assert_eq!(
@@ -375,10 +382,15 @@ fn bonding() {
             free: ValueRange::new_val(Uint128::new(250)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
-        app.app().wrap().query_balance(user_addr.to_string(), OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(user_addr.to_string(), OSMO)
+            .unwrap(),
         coin(50, OSMO)
     );
     assert_eq!(
@@ -391,7 +403,10 @@ fn bonding() {
 
     // Unbond some tokens
 
-    vault.unbond(coin(200, OSMO)).call(&user.into_bech32()).unwrap();
+    vault
+        .unbond(coin(200, OSMO))
+        .call(&user.into_bech32())
+        .unwrap();
     assert_eq!(
         vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
@@ -400,10 +415,15 @@ fn bonding() {
             free: ValueRange::new_val(Uint128::new(50)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
-        app.app().wrap().query_balance(user_addr.to_string(), OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(user_addr.to_string(), OSMO)
+            .unwrap(),
         coin(250, OSMO)
     );
     assert_eq!(
@@ -423,10 +443,15 @@ fn bonding() {
             free: ValueRange::new_val(Uint128::new(30)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
-        app.app().wrap().query_balance(user_addr.to_string(), OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(user_addr.to_string(), OSMO)
+            .unwrap(),
         coin(270, OSMO)
     );
     assert_eq!(
@@ -439,7 +464,10 @@ fn bonding() {
 
     // Unbonding over bounded fails
 
-    let err = vault.unbond(coin(100, OSMO)).call(&user.into_bech32()).unwrap_err();
+    let err = vault
+        .unbond(coin(100, OSMO))
+        .call(&user.into_bech32())
+        .unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(30)))
@@ -514,7 +542,9 @@ fn stake_local() {
             free: ValueRange::new_val(Uint128::new(300)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
         app.app()
@@ -542,7 +572,9 @@ fn stake_local() {
             free: ValueRange::new_val(Uint128::new(200)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -568,7 +600,9 @@ fn stake_local() {
             free: ValueRange::new_val(Uint128::new(50)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -616,7 +650,9 @@ fn stake_local() {
             free: ValueRange::new_val(Uint128::new(100)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -647,7 +683,9 @@ fn stake_local() {
             free: ValueRange::new_val(Uint128::new(200)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -703,7 +741,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(300)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
         app.app()
@@ -772,7 +812,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(200)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -836,7 +878,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(50)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -908,7 +952,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(50)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -971,7 +1017,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(100)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -1020,7 +1068,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(200)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -1082,7 +1132,9 @@ fn stake_cross_txs() {
             free: ValueRange::new_val(Uint128::new(300)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
 
     bond(&vault, user2, 500);
@@ -1251,7 +1303,9 @@ fn stake_cross_txs() {
         }
     );
     // Can query the other account claims
-    let claims = vault.account_claims(user_addr2.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr2.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -1278,7 +1332,9 @@ fn stake_cross_txs() {
     );
     // Can query claims
     // The other tx is still pending, and that is reflected in the reported value range
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -1365,7 +1421,9 @@ fn stake_cross_rollback_tx() {
         }
     );
     // No non-empty claims
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     // Vault has the funds
     assert_eq!(
@@ -1420,7 +1478,9 @@ fn multiple_stakes() {
             free: ValueRange::new_val(Uint128::new(700)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -1457,7 +1517,9 @@ fn multiple_stakes() {
             ValueRange::new_val(Uint128::new(430))
         ),
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -1726,7 +1788,9 @@ fn cross_slash_scenario_1() {
             free: ValueRange::new_val(Uint128::new(10)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -1771,7 +1835,9 @@ fn cross_slash_scenario_1() {
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -1842,7 +1908,9 @@ fn cross_slash_scenario_2() {
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &[validator1], &[200]);
 
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -1883,7 +1951,9 @@ fn cross_slash_scenario_2() {
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -1950,7 +2020,9 @@ fn cross_slash_scenario_3() {
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &[validator1], &[150]);
 
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -1991,7 +2063,9 @@ fn cross_slash_scenario_3() {
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2062,7 +2136,9 @@ fn cross_slash_scenario_4() {
     stake_remotely(&vault, &cross_staking_1, user, &validators_1, &[140, 40]);
     stake_remotely(&vault, &cross_staking_2, user, &validators_2, &[100, 88]);
 
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2101,8 +2177,16 @@ fn cross_slash_scenario_4() {
     assert_eq!(
         cross_stake1.stakes,
         [
-            StakeInfo::new(user_addr.as_str(), validators_1[0], &Stake::from_amount(140u128.into())),
-            StakeInfo::new(user_addr.as_str(), validators_1[1], &Stake::from_amount(40u128.into()))
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_1[0],
+                &Stake::from_amount(140u128.into())
+            ),
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_1[1],
+                &Stake::from_amount(40u128.into())
+            )
         ]
     );
 
@@ -2112,8 +2196,16 @@ fn cross_slash_scenario_4() {
     assert_eq!(
         cross_stake2.stakes,
         [
-            StakeInfo::new(user_addr.as_str(), validators_2[0], &Stake::from_amount(100u128.into())),
-            StakeInfo::new(user_addr.as_str(), validators_2[1], &Stake::from_amount(88u128.into()))
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_2[0],
+                &Stake::from_amount(100u128.into())
+            ),
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_2[1],
+                &Stake::from_amount(88u128.into())
+            )
         ]
     );
 
@@ -2124,7 +2216,9 @@ fn cross_slash_scenario_4() {
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2163,8 +2257,16 @@ fn cross_slash_scenario_4() {
     assert_eq!(
         cross_stake1.stakes,
         [
-            StakeInfo::new(user_addr.as_str(), validators_1[0], &Stake::from_amount(126u128.into())),
-            StakeInfo::new(user_addr.as_str(), validators_1[1], &Stake::from_amount(40u128.into()))
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_1[0],
+                &Stake::from_amount(126u128.into())
+            ),
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_1[1],
+                &Stake::from_amount(40u128.into())
+            )
         ]
     );
 
@@ -2175,8 +2277,16 @@ fn cross_slash_scenario_4() {
     assert_eq!(
         cross_stake2.stakes,
         [
-            StakeInfo::new(user_addr.as_str(), validators_2[0], &Stake::from_amount(99u128.into())),
-            StakeInfo::new(user_addr.as_str(), validators_2[1], &Stake::from_amount(87u128.into()))
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_2[0],
+                &Stake::from_amount(99u128.into())
+            ),
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_2[1],
+                &Stake::from_amount(87u128.into())
+            )
         ]
     );
 }
@@ -2221,7 +2331,9 @@ fn cross_slash_scenario_5() {
     stake_remotely(&vault, &cross_staking_2, user, &[validator2], &[80]);
     stake_remotely(&vault, &cross_staking_3, user, &[validator3], &[100]);
 
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2304,7 +2416,9 @@ fn cross_slash_scenario_5() {
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2409,7 +2523,9 @@ fn cross_slash_no_native_staking() {
     stake_remotely(&vault, &cross_staking_1, user, &validators_1, &[140, 40]);
     stake_remotely(&vault, &cross_staking_2, user, &validators_2, &[100, 88]);
 
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2444,7 +2560,9 @@ fn cross_slash_no_native_staking() {
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2514,7 +2632,9 @@ fn cross_slash_pending_unbonding() {
             free: ValueRange::new_val(Uint128::new(10)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2575,7 +2695,9 @@ fn cross_slash_pending_unbonding() {
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2660,7 +2782,9 @@ fn native_slashing_tombstoning() {
             free: ValueRange::new_val(Uint128::new(10)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2705,7 +2829,9 @@ fn native_slashing_tombstoning() {
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2785,7 +2911,9 @@ fn native_slashing_jailing() {
             free: ValueRange::new_val(Uint128::new(10)),
         }
     );
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
@@ -2830,7 +2958,9 @@ fn native_slashing_jailing() {
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user_addr.to_string(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [

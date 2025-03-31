@@ -8,7 +8,7 @@ use cw_storage_plus::Item;
 
 use cw_utils::{must_pay, nonpayable};
 use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
-use sylvia::{contract, schemars};
+use sylvia::contract;
 
 use crate::error::ContractError;
 use crate::msg::{ConfigResponse, OwnerMsg};
@@ -55,13 +55,7 @@ impl NativeStakingProxyMock {
         self.burned.save(ctx.deps.storage, &0)?;
 
         // Stake info.funds on validator
-        let exec_ctx = ExecCtx::from(
-            (
-                ctx.deps,
-                ctx.env,
-                ctx.info,
-            )
-        );
+        let exec_ctx = ExecCtx::from((ctx.deps, ctx.env, ctx.info));
         let res = self.stake(exec_ctx, validator)?;
 
         // Set owner as recipient of future withdrawals
@@ -220,7 +214,10 @@ impl NativeStakingProxyMock {
 
         nonpayable(&ctx.info)?;
 
-        let msg = GovMsg::Vote { proposal_id, option: vote };
+        let msg = GovMsg::Vote {
+            proposal_id,
+            option: vote,
+        };
         Ok(Response::new().add_message(msg))
     }
 
@@ -343,7 +340,7 @@ mod tests {
     use cosmwasm_std::GovMsg::{Vote, VoteWeighted};
     use cosmwasm_std::{Addr, CosmosMsg, Decimal, DepsMut};
 
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, message_info};
+    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::VoteOption::Yes;
     use cw_utils::PaymentError;
 
@@ -354,13 +351,11 @@ mod tests {
 
     fn do_instantiate(deps: DepsMut) -> (ExecCtx, NativeStakingProxyMock) {
         let contract = NativeStakingProxyMock::new();
-        let mut ctx = InstantiateCtx::from(
-            (
-                deps,
-                mock_env(),
-                message_info(&Addr::unchecked(CREATOR), &[coin(100, OSMO)]),
-            )
-        );
+        let mut ctx = InstantiateCtx::from((
+            deps,
+            mock_env(),
+            message_info(&Addr::unchecked(CREATOR), &[coin(100, OSMO)]),
+        ));
         contract
             .instantiate(
                 ctx.branch(),
@@ -369,13 +364,11 @@ mod tests {
                 VALIDATOR.to_owned(),
             )
             .unwrap();
-        let exec_ctx = ExecCtx::from(
-            (
-                ctx.deps,
-                ctx.env,
-                message_info(&Addr::unchecked(OWNER), &[]),
-            )
-        );
+        let exec_ctx = ExecCtx::from((
+            ctx.deps,
+            ctx.env,
+            message_info(&Addr::unchecked(OWNER), &[]),
+        ));
         (exec_ctx, contract)
     }
 
@@ -384,13 +377,11 @@ mod tests {
     fn instantiating() {
         let mut deps = mock_dependencies();
         let contract = NativeStakingProxyMock::new();
-        let mut ctx = InstantiateCtx::from(
-            (
-                deps.as_mut(),
-                mock_env(),
-                message_info(&Addr::unchecked(CREATOR), &[coin(100, OSMO)]),
-            )
-        );
+        let mut ctx = InstantiateCtx::from((
+            deps.as_mut(),
+            mock_env(),
+            message_info(&Addr::unchecked(CREATOR), &[coin(100, OSMO)]),
+        ));
         let res = contract
             .instantiate(
                 ctx.branch(),

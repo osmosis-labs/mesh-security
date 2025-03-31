@@ -1,5 +1,6 @@
 use cosmwasm_std::{
-    to_json_binary, Binary, Coin, CosmosMsg, DepsMut, Env, IbcChannel, IbcMsg, IbcTimeout, Response, Uint64
+    to_json_binary, Binary, Coin, DepsMut, Env, IbcChannel, IbcMsg, IbcTimeout,
+    Response, Uint64,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -10,7 +11,7 @@ use crate::error::ContractError;
 use crate::state::{Config, TradingPair};
 
 use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
-use sylvia::{contract, schemars};
+use sylvia::contract;
 
 use cw_band::oracle::oracle_script::std_crypto::Input;
 use cw_band::oracle::packet::OracleRequestPacketData;
@@ -143,7 +144,7 @@ pub fn try_request(deps: DepsMut, env: &Env) -> Result<Response, ContractError> 
         minimum_sources: config.minimum_sources,
     }
     .try_to_vec()
-    .map(| bytes | Binary::from(bytes))
+    .map(|bytes| Binary::from(bytes))
     .map_err(|err| ContractError::CustomError {
         val: err.to_string(),
     })?;
@@ -169,7 +170,7 @@ pub fn try_request(deps: DepsMut, env: &Env) -> Result<Response, ContractError> 
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::{
-        testing::{message_info, mock_dependencies, mock_env}, Addr, Uint128, Uint64
+        testing::{message_info, mock_dependencies, mock_env}, Uint128, Uint64,
     };
     use cw_multi_test::IntoBech32;
 
@@ -190,13 +191,7 @@ mod tests {
 
         contract
             .instantiate(
-                InstantiateCtx::from(
-                    (
-                        deps.as_mut(),
-                        env,
-                        info,
-                    )
-                ),
+                InstantiateCtx::from((deps.as_mut(), env, info)),
                 trading_pair,
                 "07-tendermint-0".to_string(),
                 Uint64::new(1),

@@ -3,7 +3,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
 use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
-use sylvia::{contract, schemars};
+use sylvia::contract;
 
 use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
 
@@ -27,7 +27,7 @@ pub mod custom {
     pub type Response = cosmwasm_std::Response<PriceFeedMsg>;
 }
 
-pub struct SimplePriceFeedContract<> {
+pub struct SimplePriceFeedContract {
     pub config: Item<Config>,
 }
 

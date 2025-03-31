@@ -4,7 +4,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Coin, CustomMsg, CustomQuery, Response, StdError, Uint128, Validator};
 use sylvia::ctx::ExecCtx;
-use sylvia::{interface, schemars};
+use sylvia::interface;
 
 /// The converter API is all calls that can be made from the virtual staking contract on this contract.
 /// Updating the discount rate may be a custom API (such as SudoMsg), and all interactions with the

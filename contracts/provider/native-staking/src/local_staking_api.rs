@@ -36,14 +36,14 @@ impl LocalStakingApi for NativeStakingContract {
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 
         // Add it to the delegators map
-        self.delegators
-            .save(ctx.deps.storage, (validator.clone(), owner_addr.clone()), &true)?;
+        self.delegators.save(
+            ctx.deps.storage,
+            (validator.clone(), owner_addr.clone()),
+            &true,
+        )?;
 
         // Look up if there is a proxy to match. Instantiate or call stake on existing
-        match self
-            .proxy_by_owner
-            .may_load(ctx.deps.storage, owner_addr)?
-        {
+        match self.proxy_by_owner.may_load(ctx.deps.storage, owner_addr)? {
             None => {
                 // Instantiate proxy contract and send funds to stake, with reply handling on success
                 let msg =
@@ -98,10 +98,7 @@ impl LocalStakingApi for NativeStakingContract {
         let owner_addr = ctx.deps.api.addr_validate(&owner)?;
 
         // Look up if there is a proxy to match. Fail or call burn on existing
-        match self
-            .proxy_by_owner
-            .may_load(ctx.deps.storage, owner_addr)?
-        {
+        match self.proxy_by_owner.may_load(ctx.deps.storage, owner_addr)? {
             None => Err(ContractError::NoProxy(owner)),
             Some(proxy_addr) => {
                 // Send burn message to the proxy contract

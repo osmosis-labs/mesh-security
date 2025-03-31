@@ -116,12 +116,11 @@ pub fn ibc_packet_receive(
     do_ibc_packet_receive(deps, env, &packet).or_else(|err| {
         let error = err.to_string();
         let ack_fail = ack_fail(err)?;
-        Ok(IbcReceiveResponse::new(ack_fail)
-            .add_attributes(vec![
-                ("action", "receive"),
-                ("success", "false"),
-                ("error", &error),
-            ]))
+        Ok(IbcReceiveResponse::new(ack_fail).add_attributes(vec![
+            ("action", "receive"),
+            ("success", "false"),
+            ("error", &error),
+        ]))
     })
 }
 
@@ -164,8 +163,7 @@ fn do_ibc_packet_receive(
     let rate = Decimal::from_ratio(base_price, quote_price);
     contract.price_keeper.update(deps, env.block.time, rate)?;
     let ack = ack_success(&PriceFeedAck {})?;
-    Ok(IbcReceiveResponse::new(ack)
-        .add_attribute("action", "ibc_packet_received"))
+    Ok(IbcReceiveResponse::new(ack).add_attribute("action", "ibc_packet_received"))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

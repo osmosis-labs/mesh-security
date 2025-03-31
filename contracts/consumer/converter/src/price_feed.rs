@@ -1,6 +1,6 @@
-use mesh_apis::price_feed_api::PriceResponse;
 use crate::contract::custom;
 use cosmwasm_std::{Response, StdError};
+use mesh_apis::price_feed_api::PriceResponse;
 use sylvia::ctx::{QueryCtx, SudoCtx};
 use sylvia::interface;
 

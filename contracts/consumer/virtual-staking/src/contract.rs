@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::u32;
 
 use cosmwasm_std::{
-    coin, ensure_eq, to_json_binary, Binary, Coin, CosmosMsg, CustomQuery, DepsMut, DistributionMsg, Env, Event, Reply, Response, StdResult, Storage, SubMsg, SubMsgResult, Uint128, Validator, WasmMsg
+    coin, ensure_eq, to_json_binary, Binary, Coin, CosmosMsg, CustomQuery, DepsMut,
+    DistributionMsg, Env, Event, Response, StdResult, Storage, SubMsg, SubMsgResult,
+    Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -13,7 +15,7 @@ use mesh_bindings::{
     TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
 };
 use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
-use sylvia::{contract, schemars};
+use sylvia::contract;
 
 use mesh_apis::virtual_staking_api::{self, ValidatorSlash, VirtualStakingApi};
 
@@ -127,7 +129,8 @@ impl VirtualStakingContract {
                         .may_load(deps.storage, validator.to_string())?
                         .unwrap_or_default();
                     request = request.saturating_sub(s.slash_amount);
-                    self.bond_requests.save(deps.storage, validator.to_string(), &request)?;
+                    self.bond_requests
+                        .save(deps.storage, validator.to_string(), &request)?;
                 }
             }
         }
@@ -139,7 +142,7 @@ impl VirtualStakingContract {
         &self,
         ctx: ReplyCtx<VirtualStakeCustomQuery>,
         result: SubMsgResult,
-        _payload: Binary
+        _payload: Binary,
     ) -> Result<Response<VirtualStakeCustomMsg>, ContractError> {
         match result {
             SubMsgResult::Ok(_) => self.reply_rewards(ctx.deps, ctx.env),
@@ -489,7 +492,9 @@ impl VirtualStakingApi for VirtualStakingContract {
         );
 
         // Update the amount requested
-        let bonded = self.bond_requests.load(ctx.deps.storage, validator.clone())?;
+        let bonded = self
+            .bond_requests
+            .load(ctx.deps.storage, validator.clone())?;
         let bonded = bonded
             .checked_sub(amount.amount)
             .map_err(|_| ContractError::InsufficientBond(validator.clone(), amount.amount))?;
@@ -554,14 +559,16 @@ impl VirtualStakingApi for VirtualStakingContract {
 
         for (validator, burn_amount) in burns {
             // Update bond requests
-            self.bond_requests
-                .update::<_, ContractError>(ctx.deps.storage, validator.to_string(), |old| {
-                    Ok(old.unwrap_or_default() - Uint128::new(burn_amount))
-                })?;
+            self.bond_requests.update::<_, ContractError>(
+                ctx.deps.storage,
+                validator.to_string(),
+                |old| Ok(old.unwrap_or_default() - Uint128::new(burn_amount)),
+            )?;
             // Accounting trick to avoid burning stake
-            self.burned.update(ctx.deps.storage, validator.to_string(), |old| {
-                Ok::<_, ContractError>(old.unwrap_or_default() + burn_amount)
-            })?;
+            self.burned
+                .update(ctx.deps.storage, validator.to_string(), |old| {
+                    Ok::<_, ContractError>(old.unwrap_or_default() + burn_amount)
+                })?;
         }
 
         // Bail if we still don't have enough stake
@@ -593,7 +600,9 @@ impl VirtualStakingApi for VirtualStakingContract {
         );
 
         // Immediately unbond
-        let bonded = self.bond_requests.load(ctx.deps.storage, validator.to_string())?;
+        let bonded = self
+            .bond_requests
+            .load(ctx.deps.storage, validator.to_string())?;
         let bonded = bonded
             .checked_sub(amount.amount)
             .map_err(|_| ContractError::InsufficientBond(validator.clone(), amount.amount))?;
@@ -628,7 +637,9 @@ impl VirtualStakingApi for VirtualStakingContract {
         ctx: ExecCtx<Self::QueryC>,
     ) -> Result<Response<VirtualStakeCustomMsg>, Self::Error> {
         nonpayable(&ctx.info)?;
-        let ExecCtx { deps, env, info, .. } = ctx;
+        let ExecCtx {
+            deps, env, info, ..
+        } = ctx;
         let config = self.config.load(deps.storage)?;
         ensure_eq!(info.sender, config.converter, ContractError::Unauthorized); // only the converter can call this
 
@@ -651,8 +662,11 @@ impl VirtualStakingApi for VirtualStakingContract {
                 amount,
                 validator: delegation.validator.clone(),
             });
-            self.bond_requests
-                .save(deps.storage, delegation.validator.clone(), &Uint128::zero())?;
+            self.bond_requests.save(
+                deps.storage,
+                delegation.validator.clone(),
+                &Uint128::zero(),
+            )?;
         }
 
         let requests: Vec<(String, Uint128)> = self
@@ -905,7 +919,8 @@ mod tests {
     };
 
     use cosmwasm_std::{
-        coins, from_json, testing::{message_info, mock_env, mock_info, MockApi, MockQuerier, MockStorage}, Addr, AllDelegationsResponse, Decimal
+        coins, from_json,
+        testing::{message_info, mock_env, MockApi, MockQuerier, MockStorage}, AllDelegationsResponse, Decimal,
     };
     use cw_multi_test::IntoBech32;
     use mesh_bindings::{BondStatusResponse, SlashRatioResponse, TotalDelegationResponse};
@@ -1491,9 +1506,10 @@ mod tests {
             pub delegations: Vec<cosmwasm_std::Delegation>,
         }
 
-        let bytes = to_json_binary(&MockAllDelegationsResponse{
+        let bytes = to_json_binary(&MockAllDelegationsResponse {
             delegations: vec![],
-        }).unwrap();
+        })
+        .unwrap();
         let all_delegations_resp: AllDelegationsResponse = from_json(bytes).unwrap();
         let all_delegations = MockAllDelegations::new(all_delegations_resp);
 
@@ -1653,13 +1669,7 @@ mod tests {
     impl VirtualStakingExt for VirtualStakingContract {
         fn quick_inst(&self, deps: DepsMut) {
             self.instantiate(
-                InstantiateCtx::from(
-                    (
-                        deps,
-                        mock_env(),
-                        message_info(&"me".into_bech32(), &[]),
-                    )
-                ),
+                InstantiateCtx::from((deps, mock_env(), message_info(&"me".into_bech32(), &[]))),
                 50,
                 true,
             )
@@ -1696,12 +1706,7 @@ mod tests {
 
         #[track_caller]
         fn hit_epoch(&self, deps: DepsMut) -> HitEpochResult {
-            let deps = SudoCtx::from(
-                (
-                    deps,
-                    mock_env(),
-                )
-            );
+            let deps = SudoCtx::from((deps, mock_env()));
             HitEpochResult::new(self.handle_epoch(deps).unwrap())
         }
 
@@ -1709,13 +1714,7 @@ mod tests {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.bond(
-                ExecCtx::from(
-                    (
-                        deps,
-                        mock_env(),
-                        message_info(&"me".into_bech32(), &[]),
-                    )
-                ),
+                ExecCtx::from((deps, mock_env(), message_info(&"me".into_bech32(), &[]))),
                 delegator.to_string(),
                 validator.to_string(),
                 coin(amount, denom),
@@ -1727,13 +1726,7 @@ mod tests {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.unbond(
-                ExecCtx::from(
-                    (
-                        deps,
-                        mock_env(),
-                        message_info(&"me".into_bech32(), &[]),
-                    )
-                ),
+                ExecCtx::from((deps, mock_env(), message_info(&"me".into_bech32(), &[]))),
                 delegator.to_string(),
                 validator.to_string(),
                 coin(amount, denom),
@@ -1750,13 +1743,7 @@ mod tests {
             let denom = self.config.load(deps.storage).unwrap().denom;
 
             self.burn(
-                ExecCtx::from(
-                    (
-                        deps,
-                        mock_env(),
-                        message_info(&"me".into_bech32(), &[]),
-                    )
-                ),
+                ExecCtx::from((deps, mock_env(), message_info(&"me".into_bech32(), &[]))),
                 validators.iter().map(<&str>::to_string).collect(),
                 coin(amount, denom),
             )
@@ -1769,12 +1756,7 @@ mod tests {
             nominal_slash_ratio: Decimal,
             slash_amount: Uint128,
         ) {
-            let deps = SudoCtx::from(
-                (
-                    deps,
-                    mock_env(),
-                )
-            );
+            let deps = SudoCtx::from((deps, mock_env()));
             // We sent a removal and a slash along with the jail, as this is what the blockchain does
             self.handle_valset_update(
                 deps,
@@ -1800,12 +1782,7 @@ mod tests {
         }
 
         fn unjail(&self, deps: DepsMut, val: &str) {
-            let deps = SudoCtx::from(
-                (
-                    deps,
-                    mock_env(),
-                )
-            );
+            let deps = SudoCtx::from((deps, mock_env()));
             self.handle_valset_update(
                 deps,
                 None,
@@ -1826,12 +1803,7 @@ mod tests {
             nominal_slash_ratio: Decimal,
             slash_amount: Uint128,
         ) {
-            let deps = SudoCtx::from(
-                (
-                    deps,
-                    mock_env(),
-                )
-            );
+            let deps = SudoCtx::from((deps, mock_env()));
             // We sent a slash along with the tombstone, as this is what the blockchain does
             self.handle_valset_update(
                 deps,
@@ -1862,26 +1834,14 @@ mod tests {
                 Decimal::zero(),
                 Decimal::zero(),
                 Decimal::zero(),
-            
-            
             );
-            let deps = SudoCtx::from(
-                (
-                    deps,
-                    mock_env(),
-                )
-            );
+            let deps = SudoCtx::from((deps, mock_env()));
             self.handle_valset_update(deps, Some(vec![val]), None, None, None, None, None, None)
                 .unwrap();
         }
 
         fn remove_val(&self, deps: DepsMut, val: &str) {
-            let deps = SudoCtx::from(
-                (
-                    deps,
-                    mock_env(),
-                )
-            );
+            let deps = SudoCtx::from((deps, mock_env()));
             self.handle_valset_update(
                 deps,
                 None,

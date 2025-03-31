@@ -1,4 +1,3 @@
-use std::ops::Add;
 
 use cosmwasm_std::{to_json_binary, Addr, Coin};
 use cw_multi_test::{App as MtApp, AppResponse};

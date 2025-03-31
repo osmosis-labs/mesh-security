@@ -1,6 +1,6 @@
 use cosmwasm_std::Order::Ascending;
 use cosmwasm_std::{
-    from_json, Addr, Binary, Decimal, DepsMut, Event, Reply, Response, StdResult, SubMsgResponse, SubMsgResult, WasmMsg
+    from_json, Addr, Decimal, DepsMut, Event, Reply, Response, StdResult, SubMsgResponse, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -8,7 +8,7 @@ use cw_utils::parse_instantiate_response_data;
 use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 #[allow(deprecated)]
 use sylvia::types::ReplyCtx;
-use sylvia::{contract, schemars};
+use sylvia::contract;
 
 use mesh_apis::local_staking_api;
 use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};
@@ -156,7 +156,8 @@ impl NativeStakingContract {
 
             if delegation.is_zero() {
                 // Maintenance: Remove delegator from map in passing
-                self.delegators.remove(deps.storage, (validator.to_string(), owner.clone()));
+                self.delegators
+                    .remove(deps.storage, (validator.to_string(), owner.clone()));
                 continue;
             }
 

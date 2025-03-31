@@ -10,8 +10,8 @@ use mesh_vault::mock::sv::mt::VaultMockProxy;
 use mesh_vault::mock::VaultMock;
 use mesh_vault::msg::LocalStakingInfo;
 
-use mesh_native_staking::contract::NativeStakingContract;
 use mesh_native_staking::contract::sv::mt::NativeStakingContractProxy;
+use mesh_native_staking::contract::NativeStakingContract;
 
 use crate::mock::sv::mt::NativeStakingProxyMockProxy;
 use crate::mock::NativeStakingProxyMock;
@@ -127,7 +127,10 @@ fn instantiation() {
     let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
         Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
-    let proxy_addr = local_staking.proxy_by_owner(user.into_bech32().to_string()).unwrap().proxy;
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
     // Access staking proxy instance
     let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
@@ -139,7 +142,7 @@ fn instantiation() {
         ConfigResponse {
             denom: OSMO.to_owned(),
             parent: Addr::unchecked(staking_addr), // parent is the staking contract
-            owner: user.into_bech32(),          // owner is the user
+            owner: user.into_bech32(),             // owner is the user
         }
     );
 
@@ -173,7 +176,10 @@ fn staking() {
     let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
         Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
-    let proxy_addr = local_staking.proxy_by_owner(user.into_bech32().to_string()).unwrap().proxy;
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
     let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
@@ -222,7 +228,10 @@ fn restaking() {
     let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
         Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
-    let proxy_addr = local_staking.proxy_by_owner(user.into_bech32().to_string()).unwrap().proxy;
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
     let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
@@ -264,7 +273,10 @@ fn unstaking() {
     let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
         Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
-    let proxy_addr = local_staking.proxy_by_owner(user.into_bech32().to_string()).unwrap().proxy;
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
     let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
@@ -321,7 +333,10 @@ fn burning() {
     let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
         Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
-    let proxy_addr = local_staking.proxy_by_owner(user.into_bech32().to_string()).unwrap().proxy;
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
     let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
@@ -365,7 +380,10 @@ fn burning() {
     );
 
     // But they cannot be released
-    staking_proxy.release_unbonded().call(&user.into_bech32()).unwrap();
+    staking_proxy
+        .release_unbonded()
+        .call(&user.into_bech32())
+        .unwrap();
 
     // Check that the contract still has the funds (they are being effectively "burned")
     assert_eq!(
@@ -390,7 +408,10 @@ fn burning_multiple_delegations() {
     let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
         Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
-    let proxy_addr = local_staking.proxy_by_owner(user.into_bech32().to_string()).unwrap().proxy;
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
     let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
@@ -449,7 +470,10 @@ fn burning_multiple_delegations() {
     );
 
     // But they cannot be released
-    staking_proxy.release_unbonded().call(&user.into_bech32()).unwrap();
+    staking_proxy
+        .release_unbonded()
+        .call(&user.into_bech32())
+        .unwrap();
 
     // Check that the contract still has the funds (they are being effectively "burned")
     assert_eq!(
@@ -474,7 +498,10 @@ fn releasing_unbonded() {
     let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
         Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
-    let proxy_addr = local_staking.proxy_by_owner(user.into_bech32().to_string()).unwrap().proxy;
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
     let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
@@ -498,7 +525,10 @@ fn releasing_unbonded() {
     process_staking_unbondings(&app);
 
     // Release the unbonded funds
-    staking_proxy.release_unbonded().call(&user.into_bech32()).unwrap();
+    staking_proxy
+        .release_unbonded()
+        .call(&user.into_bech32())
+        .unwrap();
 
     // Check that the vault has the funds again
     assert_eq!(
@@ -523,7 +553,10 @@ fn withdrawing_rewards() {
     let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
         Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
-    let proxy_addr = local_staking.proxy_by_owner(user.into_bech32().to_string()).unwrap().proxy;
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Record current vault, staking and user funds
     let original_vault_funds = app
@@ -531,8 +564,16 @@ fn withdrawing_rewards() {
         .wrap()
         .query_balance(vault.contract_addr.clone(), OSMO)
         .unwrap();
-    let original_staking_funds = app.app().wrap().query_balance(staking_addr.clone(), OSMO).unwrap();
-    let original_user_funds = app.app().wrap().query_balance(user.into_bech32().to_string(), OSMO).unwrap();
+    let original_staking_funds = app
+        .app()
+        .wrap()
+        .query_balance(staking_addr.clone(), OSMO)
+        .unwrap();
+    let original_user_funds = app
+        .app()
+        .wrap()
+        .query_balance(user.into_bech32().to_string(), OSMO)
+        .unwrap();
 
     // Access staking proxy instance
     let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
@@ -545,10 +586,17 @@ fn withdrawing_rewards() {
     });
 
     // Withdraw rewards
-    staking_proxy.withdraw_rewards().call(&user.into_bech32()).unwrap();
+    staking_proxy
+        .withdraw_rewards()
+        .call(&user.into_bech32())
+        .unwrap();
 
     // User now has some rewards
-    let current_funds = app.app().wrap().query_balance(user.into_bech32().to_string(), OSMO).unwrap();
+    let current_funds = app
+        .app()
+        .wrap()
+        .query_balance(user.into_bech32().to_string(), OSMO)
+        .unwrap();
     assert!(current_funds.amount > original_user_funds.amount);
 
     // Staking hasn't received any rewards

@@ -129,7 +129,8 @@ impl CrdtState {
                 state: State::Active {},
             };
             validator_state.insert_unique(val_state);
-            self.validators.save(storage, valoper.to_string(), &validator_state)?;
+            self.validators
+                .save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -166,7 +167,8 @@ impl CrdtState {
                 state: old.state,
             };
             validator_state.insert_unique(val_state);
-            self.validators.save(storage, valoper.to_string(), &validator_state)?;
+            self.validators
+                .save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -202,7 +204,8 @@ impl CrdtState {
                 state: State::Unbonded {},
             };
             validator_state.insert_unique(val_state);
-            self.validators.save(storage, valoper.to_string(), &validator_state)?;
+            self.validators
+                .save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -238,7 +241,8 @@ impl CrdtState {
                 state: State::Jailed {},
             };
             validator_state.insert_unique(val_state);
-            self.validators.save(storage, valoper.to_string(), &validator_state)?;
+            self.validators
+                .save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -271,7 +275,8 @@ impl CrdtState {
             };
             validator_state.insert_unique(val_state);
 
-            self.validators.save(storage, valoper.to_string(), &validator_state)?;
+            self.validators
+                .save(storage, valoper.to_string(), &validator_state)?;
         }
         Ok(())
     }
@@ -391,7 +396,8 @@ impl CrdtState {
             return Ok(());
         }
         validator_state.drain_older(time);
-        self.validators.save(storage, valoper.to_string(), &validator_state)?;
+        self.validators
+            .save(storage, valoper.to_string(), &validator_state)?;
         Ok(())
     }
 

@@ -1,4 +1,3 @@
-use std::ops::Add;
 
 use cosmwasm_std::{
     coin, coins, to_json_binary, Addr, Decimal, Delegation, StdError, Uint128, Validator,
@@ -16,8 +15,8 @@ use mesh_sync::ValueRange;
 use mesh_vault::mock::sv::mt::VaultMockProxy;
 use mesh_vault::msg::LocalStakingInfo;
 
-use crate::contract::{self, NativeStakingContract};
 use crate::contract::sv::mt::NativeStakingContractProxy;
+use crate::contract::{self, NativeStakingContract};
 use crate::error::ContractError;
 use crate::msg;
 use crate::msg::{OwnerByProxyResponse, ProxyByOwnerResponse};
@@ -285,7 +284,10 @@ fn releasing_proxy_stake() {
     let staking_addr = vault.config().unwrap().local_staking.unwrap();
     // Vault is empty
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr.to_string(), OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(vault_addr.to_string(), OSMO)
+            .unwrap(),
         coin(0, OSMO)
     );
 
@@ -302,7 +304,10 @@ fn releasing_proxy_stake() {
 
     // Vault has the funds
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr.to_string(), OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(vault_addr.to_string(), OSMO)
+            .unwrap(),
         coin(200, OSMO)
     );
 
@@ -321,7 +326,10 @@ fn releasing_proxy_stake() {
 
     // Vault has half the funds
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr.to_string(), OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(vault_addr.to_string(), OSMO)
+            .unwrap(),
         coin(100, OSMO)
     );
 
@@ -335,7 +343,10 @@ fn releasing_proxy_stake() {
         }]
     );
 
-    let proxy_addr = local_staking.proxy_by_owner(user.to_string()).unwrap().proxy;
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.to_string())
+        .unwrap()
+        .proxy;
     let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr.clone()), &app);
     // The other half is delegated
@@ -352,7 +363,10 @@ fn releasing_proxy_stake() {
 
     // Check that the vault has the funds again
     assert_eq!(
-        app.app().wrap().query_balance(vault_addr.to_string(), OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(vault_addr.to_string(), OSMO)
+            .unwrap(),
         coin(200, OSMO)
     );
     // And there are no more liens

@@ -1,5 +1,7 @@
 use cosmwasm_std::{
-    ensure_eq, to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event, Fraction, IbcMsg, MessageInfo, Querier, Reply, Response, StdError, SubMsg, SubMsgResponse, SubMsgResult, Uint128, Validator, WasmMsg
+    ensure_eq, to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut,
+    Event, Fraction, IbcMsg, MessageInfo, Reply, Response, StdError, SubMsg,
+    SubMsgResponse, Uint128, Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -8,7 +10,7 @@ use mesh_apis::ibc::ConsumerPacket;
 use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
 #[allow(deprecated)]
 use sylvia::types::ReplyCtx;
-use sylvia::{contract, schemars};
+use sylvia::contract;
 
 use mesh_apis::converter_api::{self, ConverterApi, RewardInfo, ValidatorSlashInfo};
 use mesh_apis::virtual_staking_api;
@@ -129,6 +131,7 @@ impl ConverterContract {
     }
 
     /// Store virtual staking address
+    #[allow(deprecated)]
     fn reply_init_callback(
         &self,
         deps: DepsMut<custom::ConverterQuery>,
@@ -322,13 +325,13 @@ impl ConverterContract {
         // FIXME not sure how to get this to compile with latest sylvia
         // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
-        use crate::price_feed::sv::{Querier, InterfaceMessagesApi};
+        use crate::price_feed::sv::{InterfaceMessagesApi, Querier};
         use crate::price_feed::CustomPriceFeedApi;
-        let querier = 
-            <dyn CustomPriceFeedApi<
-                Error = StdError,
-            > as InterfaceMessagesApi>::Querier
-        ::borrowed(&config.price_feed, &deps.querier);
+        let querier =
+            <dyn CustomPriceFeedApi<Error = StdError> as InterfaceMessagesApi>::Querier::borrowed(
+                &config.price_feed,
+                &deps.querier,
+            );
         let price = Querier::price(&querier)?.native_per_foreign;
         let converted = (amount.amount.mul_floor(price)).mul_floor(config.price_adjustment);
 
@@ -355,20 +358,21 @@ impl ConverterContract {
 
         // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
-        use crate::price_feed::sv::{Querier, InterfaceMessagesApi};
+        use crate::price_feed::sv::{InterfaceMessagesApi, Querier};
         use crate::price_feed::CustomPriceFeedApi;
-        let querier = 
-            <dyn CustomPriceFeedApi<
-                Error = StdError,
-            > as InterfaceMessagesApi>::Querier
-        ::borrowed(&config.price_feed, &deps.querier);
+        let querier =
+            <dyn CustomPriceFeedApi<Error = StdError> as InterfaceMessagesApi>::Querier::borrowed(
+                &config.price_feed,
+                &deps.querier,
+            );
         let price = querier.price()?.native_per_foreign;
-        let invert_price =price.inv().ok_or(ContractError::InvalidPrice {})?;
-        let converted = amount.amount.mul_floor(invert_price)
-            .mul_floor(config
+        let invert_price = price.inv().ok_or(ContractError::InvalidPrice {})?;
+        let converted = amount.amount.mul_floor(invert_price).mul_floor(
+            config
                 .price_adjustment
                 .inv()
-                .ok_or(ContractError::InvalidDiscount {})?);
+                .ok_or(ContractError::InvalidDiscount {})?,
+        );
 
         Ok(Coin {
             denom: config.remote_denom,
