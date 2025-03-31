@@ -333,15 +333,17 @@ impl NativeStakingProxyMock {
 }
 
 // Some unit tests, due to mt limitations / unsupported msgs
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use cosmwasm_std::DistributionMsg::SetWithdrawAddress;
     use cosmwasm_std::GovMsg::{Vote, VoteWeighted};
-    use cosmwasm_std::{Addr, CosmosMsg, Decimal, DepsMut};
+    use cosmwasm_std::{CosmosMsg, Decimal, DepsMut};
 
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::VoteOption::Yes;
+    use cw_multi_test::IntoBech32;
     use cw_utils::PaymentError;
 
     static OSMO: &str = "uosmo";
@@ -354,20 +356,20 @@ mod tests {
         let mut ctx = InstantiateCtx::from((
             deps,
             mock_env(),
-            message_info(&Addr::unchecked(CREATOR), &[coin(100, OSMO)]),
+            message_info(&CREATOR.into_bech32(), &[coin(100, OSMO)]),
         ));
         contract
             .instantiate(
                 ctx.branch(),
                 OSMO.to_owned(),
-                OWNER.to_owned(),
+                OWNER.into_bech32().to_string(),
                 VALIDATOR.to_owned(),
             )
             .unwrap();
         let exec_ctx = ExecCtx::from((
             ctx.deps,
             ctx.env,
-            message_info(&Addr::unchecked(OWNER), &[]),
+            message_info(&OWNER.into_bech32(), &[]),
         ));
         (exec_ctx, contract)
     }
@@ -380,13 +382,13 @@ mod tests {
         let mut ctx = InstantiateCtx::from((
             deps.as_mut(),
             mock_env(),
-            message_info(&Addr::unchecked(CREATOR), &[coin(100, OSMO)]),
+            message_info(&CREATOR.into_bech32(), &[coin(100, OSMO)]),
         ));
         let res = contract
             .instantiate(
                 ctx.branch(),
                 OSMO.to_owned(),
-                OWNER.to_owned(),
+                OWNER.into_bech32().to_string(),
                 VALIDATOR.to_owned(),
             )
             .unwrap();
@@ -402,7 +404,7 @@ mod tests {
         assert_eq!(
             res.messages[1].msg,
             CosmosMsg::Distribution(SetWithdrawAddress {
-                address: OWNER.to_owned(),
+                address: OWNER.into_bech32().to_string(),
             })
         );
 
@@ -410,7 +412,7 @@ mod tests {
         assert_eq!(
             res.data.unwrap(),
             to_json_binary(&OwnerMsg {
-                owner: OWNER.to_owned(),
+                owner: OWNER.into_bech32().to_string(),
             })
             .unwrap()
         );
@@ -438,7 +440,7 @@ mod tests {
         );
 
         // But not send funds
-        ctx.info = message_info(&Addr::unchecked(OWNER), &[coin(1, OSMO)]);
+        ctx.info = message_info(&OWNER.into_bech32(), &[coin(1, OSMO)]);
         let res = contract.vote(ctx.branch(), proposal_id, vote.clone());
         assert!(matches!(
             res.unwrap_err(),
@@ -446,12 +448,12 @@ mod tests {
         ));
 
         // Nobody else can vote
-        ctx.info = message_info(&Addr::unchecked("somebody"), &[]);
+        ctx.info = message_info(&"somebody".into_bech32(), &[]);
         let res = contract.vote(ctx.branch(), proposal_id, vote.clone());
         assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
 
         // Not even the creator
-        ctx.info = message_info(&Addr::unchecked(CREATOR), &[]);
+        ctx.info = message_info(&CREATOR.into_bech32(), &[]);
         let res = contract.vote(ctx, proposal_id, vote);
         assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
     }
@@ -481,7 +483,7 @@ mod tests {
         );
 
         // But not send funds
-        ctx.info = message_info(&Addr::unchecked(OWNER), &[coin(1, OSMO)]);
+        ctx.info = message_info(&OWNER.into_bech32(), &[coin(1, OSMO)]);
         let res = contract.vote_weighted(ctx.branch(), proposal_id, vote.clone());
         assert!(matches!(
             res.unwrap_err(),
@@ -489,12 +491,12 @@ mod tests {
         ));
 
         // Nobody else can vote
-        ctx.info = message_info(&Addr::unchecked("somebody"), &[]);
+        ctx.info = message_info(&"somebody".into_bech32(), &[]);
         let res = contract.vote_weighted(ctx.branch(), proposal_id, vote.clone());
         assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
 
         // Not even the creator
-        ctx.info = message_info(&Addr::unchecked(CREATOR), &[]);
+        ctx.info = message_info(&CREATOR.into_bech32(), &[]);
         let res = contract.vote_weighted(ctx, proposal_id, vote);
         assert!(matches!(res.unwrap_err(), ContractError::Unauthorized {}));
     }
