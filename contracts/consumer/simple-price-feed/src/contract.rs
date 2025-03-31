@@ -2,8 +2,8 @@ use cosmwasm_std::{ensure_eq, Decimal, Response};
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::nonpayable;
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::contract;
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 
 use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
 

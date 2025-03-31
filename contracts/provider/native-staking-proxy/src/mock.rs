@@ -7,8 +7,8 @@ use cw2::set_contract_version;
 use cw_storage_plus::Item;
 
 use cw_utils::{must_pay, nonpayable};
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
 use sylvia::contract;
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use crate::error::ContractError;
 use crate::msg::{ConfigResponse, OwnerMsg};
@@ -366,11 +366,7 @@ mod tests {
                 VALIDATOR.to_owned(),
             )
             .unwrap();
-        let exec_ctx = ExecCtx::from((
-            ctx.deps,
-            ctx.env,
-            message_info(&OWNER.into_bech32(), &[]),
-        ));
+        let exec_ctx = ExecCtx::from((ctx.deps, ctx.env, message_info(&OWNER.into_bech32(), &[])));
         (exec_ctx, contract)
     }
 

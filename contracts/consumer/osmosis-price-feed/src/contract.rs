@@ -7,8 +7,8 @@ use cw_utils::nonpayable;
 use mesh_apis::ibc::{encode_request, ibc_query_packet, ArithmeticTwapToNowRequest, CosmosQuery};
 use osmosis_std::shim::Timestamp as OsmosisTimestamp;
 use osmosis_std::types::tendermint::abci::RequestQuery;
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::contract;
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 
 use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
 

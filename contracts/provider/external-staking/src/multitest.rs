@@ -1,6 +1,5 @@
 mod utils;
 
-
 use anyhow::Result as AnyResult;
 
 use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Uint128};

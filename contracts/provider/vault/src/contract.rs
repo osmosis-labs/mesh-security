@@ -259,7 +259,6 @@ impl VaultContract {
                 false,
             )?;
 
-
             /// The message that is binary encoded in `receive_stake(..msg)`
             #[cosmwasm_schema::cw_serde]
             struct StakeMsg {

@@ -4,8 +4,8 @@ use std::u32;
 
 use cosmwasm_std::{
     coin, ensure_eq, to_json_binary, Binary, Coin, CosmosMsg, CustomQuery, DepsMut,
-    DistributionMsg, Env, Event, Response, StdResult, Storage, SubMsg, SubMsgResult,
-    Uint128, Validator, WasmMsg,
+    DistributionMsg, Env, Event, Response, StdResult, Storage, SubMsg, SubMsgResult, Uint128,
+    Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
@@ -14,8 +14,8 @@ use mesh_apis::converter_api::{self, RewardInfo, ValidatorSlashInfo};
 use mesh_bindings::{
     TokenQuerier, VirtualStakeCustomMsg, VirtualStakeCustomQuery, VirtualStakeMsg,
 };
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
 use sylvia::contract;
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx, SudoCtx};
 
 use mesh_apis::virtual_staking_api::{self, ValidatorSlash, VirtualStakingApi};
 
@@ -920,7 +920,8 @@ mod tests {
 
     use cosmwasm_std::{
         coins, from_json,
-        testing::{message_info, mock_env, MockApi, MockQuerier, MockStorage}, AllDelegationsResponse, Decimal,
+        testing::{message_info, mock_env, MockApi, MockQuerier, MockStorage},
+        AllDelegationsResponse, Decimal,
     };
     use cw_multi_test::IntoBech32;
     use mesh_bindings::{BondStatusResponse, SlashRatioResponse, TotalDelegationResponse};

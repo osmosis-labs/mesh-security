@@ -1,6 +1,5 @@
 use cosmwasm_std::{
-    to_json_binary, Binary, Coin, DepsMut, Env, IbcChannel, IbcMsg, IbcTimeout,
-    Response, Uint64,
+    to_json_binary, Binary, Coin, DepsMut, Env, IbcChannel, IbcMsg, IbcTimeout, Response, Uint64,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
@@ -10,8 +9,8 @@ use mesh_apis::price_feed_api::{PriceFeedApi, PriceResponse};
 use crate::error::ContractError;
 use crate::state::{Config, TradingPair};
 
-use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 use sylvia::contract;
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 
 use cw_band::oracle::oracle_script::std_crypto::Input;
 use cw_band::oracle::packet::OracleRequestPacketData;
@@ -170,7 +169,8 @@ pub fn try_request(deps: DepsMut, env: &Env) -> Result<Response, ContractError> 
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::{
-        testing::{message_info, mock_dependencies, mock_env}, Uint128, Uint64,
+        testing::{message_info, mock_dependencies, mock_env},
+        Uint128, Uint64,
     };
     use cw_multi_test::IntoBech32;
 

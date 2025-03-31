@@ -5,10 +5,10 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use cw_utils::parse_instantiate_response_data;
+use sylvia::contract;
 use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 #[allow(deprecated)]
 use sylvia::types::ReplyCtx;
-use sylvia::contract;
 
 use mesh_apis::local_staking_api;
 use mesh_apis::vault_api::{SlashInfo, VaultApiHelper};

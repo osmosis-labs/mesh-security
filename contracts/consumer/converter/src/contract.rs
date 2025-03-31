@@ -1,16 +1,16 @@
 use cosmwasm_std::{
-    ensure_eq, to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut,
-    Event, Fraction, IbcMsg, MessageInfo, Reply, Response, StdError, SubMsg,
-    SubMsgResponse, Uint128, Validator, WasmMsg,
+    ensure_eq, to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Event,
+    Fraction, IbcMsg, MessageInfo, Reply, Response, StdError, SubMsg, SubMsgResponse, Uint128,
+    Validator, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
 use mesh_apis::ibc::ConsumerPacket;
+use sylvia::contract;
 use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
 #[allow(deprecated)]
 use sylvia::types::ReplyCtx;
-use sylvia::contract;
 
 use mesh_apis::converter_api::{self, ConverterApi, RewardInfo, ValidatorSlashInfo};
 use mesh_apis::virtual_staking_api;

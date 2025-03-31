@@ -1568,11 +1568,8 @@ mod tests {
 
     fn do_instantiate(deps: DepsMut) -> (ExecCtx, ExternalStakingContract) {
         let contract = ExternalStakingContract::new();
-        let mut ctx = InstantiateCtx::from((
-            deps,
-            mock_env(),
-            message_info(&CREATOR.into_bech32(), &[]),
-        ));
+        let mut ctx =
+            InstantiateCtx::from((deps, mock_env(), message_info(&CREATOR.into_bech32(), &[])));
         contract
             .instantiate(
                 ctx.branch(),
@@ -1590,11 +1587,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let exec_ctx = ExecCtx::from((
-            ctx.deps,
-            ctx.env,
-            message_info(&OWNER.into_bech32(), &[]),
-        ));
+        let exec_ctx = ExecCtx::from((ctx.deps, ctx.env, message_info(&OWNER.into_bech32(), &[])));
         (exec_ctx, contract)
     }
 

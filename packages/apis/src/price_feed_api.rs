@@ -1,8 +1,8 @@
 use cosmwasm_schema::cw_serde;
 use sylvia::ctx::{QueryCtx, SudoCtx};
 use sylvia::cw_std::{Decimal, Response, StdError};
-use sylvia::types::{CustomMsg, CustomQuery};
 use sylvia::interface;
+use sylvia::types::{CustomMsg, CustomQuery};
 
 /// This is a common interface to any price feed provider.
 /// It may be a minimal example with a single price set by an governance vote,

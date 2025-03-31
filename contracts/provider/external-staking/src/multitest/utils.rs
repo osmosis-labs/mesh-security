@@ -1,4 +1,3 @@
-
 use cosmwasm_std::{to_json_binary, Addr, Coin};
 use cw_multi_test::{App as MtApp, AppResponse};
 use mesh_apis::{converter_api::RewardInfo, ibc::AddValidator};

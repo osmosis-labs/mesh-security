@@ -1,4 +1,3 @@
-
 use cosmwasm_std::{
     coin, coins, to_json_binary, Addr, Decimal, Delegation, StdError, Uint128, Validator,
 };
