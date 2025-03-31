@@ -21,7 +21,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.70.0
+          toolchain: 1.85.0
           target: wasm32-unknown-unknown
           override: true
 
@@ -33,7 +33,7 @@ jobs:
       - name: Build Wasm images
         uses: addnab/docker-run-action@v3
         with:
-          image: cosmwasm/optimizer:0.15.0
+          image: cosmwasm/optimizer:0.16.0
           options: -v ${{ github.workspace }}:/code 
           run: optimize.sh .
 
