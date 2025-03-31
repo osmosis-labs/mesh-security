@@ -33,8 +33,8 @@ macro_rules! assert_rewards {
 pub(crate) use assert_rewards;
 
 #[track_caller]
-pub(crate) fn get_last_external_staking_pending_tx_id<'a>(
-    contract: &Proxy<'a, MtApp, ExternalStakingContract>,
+pub(crate) fn get_last_external_staking_pending_tx_id(
+    contract: &Proxy<'_, MtApp, ExternalStakingContract>,
 ) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(Tx::id)

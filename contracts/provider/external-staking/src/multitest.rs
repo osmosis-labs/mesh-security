@@ -113,6 +113,7 @@ fn instantiate() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn staking() {
     let users = ["user1".into_bech32(), "user2".into_bech32()];
     let owner = "owner";
