@@ -1554,6 +1554,7 @@ pub mod cross_staking {
 mod tests {
     use super::*;
     use cosmwasm_std::{Attribute, Decimal, DepsMut};
+    use cw_multi_test::IntoBech32;
 
     use crate::crdt::State;
     use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, ValidatorState};
@@ -1570,14 +1571,14 @@ mod tests {
         let mut ctx = InstantiateCtx::from((
             deps,
             mock_env(),
-            message_info(&Addr::unchecked(CREATOR), &[]),
+            message_info(&CREATOR.into_bech32(), &[]),
         ));
         contract
             .instantiate(
                 ctx.branch(),
                 OSMO.to_owned(),
                 "ujuno".to_string(),
-                "vault_addr".to_string(),
+                "vault_addr".into_bech32().to_string(),
                 100,
                 AuthorizedEndpoint {
                     connection_id: "connection_id_1".to_string(),
@@ -1592,7 +1593,7 @@ mod tests {
         let exec_ctx = ExecCtx::from((
             ctx.deps,
             ctx.env,
-            message_info(&Addr::unchecked(OWNER), &[]),
+            message_info(&OWNER.into_bech32(), &[]),
         ));
         (exec_ctx, contract)
     }
@@ -1711,12 +1712,12 @@ mod tests {
 
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
-        let vault_info = message_info(&Addr::unchecked("vault_addr"), &[]);
+        let vault_info = message_info(&"vault_addr".into_bech32(), &[]);
         let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
-                OWNER.to_string(),
+                OWNER.into_bech32().to_string(),
                 coin(100, "uosmo"),
                 1,
                 to_json_binary(&ReceiveVirtualStake {
@@ -1768,10 +1769,10 @@ mod tests {
         assert_eq!(
             msgs[0],
             WasmMsg::Execute {
-                contract_addr: "vault_addr".to_string(),
+                contract_addr: "vault_addr".into_bech32().to_string(),
                 msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
-                        user: OWNER.to_string(),
+                        user: OWNER.into_bech32().to_string(),
                         slash: Uint128::new(10),
                     }],
                     validator: "bob".to_string(),
@@ -1835,12 +1836,12 @@ mod tests {
 
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
-        let vault_info = message_info(&Addr::unchecked("vault_addr"), &[]);
+        let vault_info = message_info(&"vault_addr".into_bech32(), &[]);
         let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
-                OWNER.to_string(),
+                OWNER.into_bech32().to_string(),
                 coin(100, "uosmo"),
                 1,
                 to_json_binary(&ReceiveVirtualStake {
@@ -1891,10 +1892,10 @@ mod tests {
         assert_eq!(
             msgs[0],
             WasmMsg::Execute {
-                contract_addr: "vault_addr".to_string(),
+                contract_addr: "vault_addr".into_bech32().to_string(),
                 msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
-                        user: OWNER.to_string(),
+                        user: OWNER.into_bech32().to_string(),
                         slash: Uint128::new(10),
                     }],
                     validator: "bob".to_string(),
@@ -1958,12 +1959,12 @@ mod tests {
 
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
-        let vault_info = message_info(&Addr::unchecked("vault_addr"), &[]);
+        let vault_info = message_info(&"vault_addr".into_bech32(), &[]);
         let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
-                OWNER.to_string(),
+                OWNER.into_bech32().to_string(),
                 coin(100, "uosmo"),
                 1,
                 to_json_binary(&ReceiveVirtualStake {
@@ -1977,7 +1978,7 @@ mod tests {
 
         // OWNER then cross-unstakes half of the stake
         let mut stake_deps = ctx.deps.branch();
-        let owner_info = message_info(&Addr::unchecked(OWNER), &[]);
+        let owner_info = message_info(&OWNER.into_bech32(), &[]);
         let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), owner_info));
         contract
             .unstake(stake_ctx, "bob".to_string(), coin(50, "uosmo"))
@@ -2024,10 +2025,10 @@ mod tests {
         assert_eq!(
             msgs[0],
             WasmMsg::Execute {
-                contract_addr: "vault_addr".to_string(),
+                contract_addr: "vault_addr".into_bech32().to_string(),
                 msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
-                        user: OWNER.to_string(),
+                        user: OWNER.into_bech32().to_string(),
                         slash: Uint128::new(10), // Owner is slashed over the full stake, including pending
                     }],
                     validator: "bob".to_string(),
@@ -2352,12 +2353,12 @@ mod tests {
 
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
-        let vault_info = message_info(&Addr::unchecked("vault_addr"), &[]);
+        let vault_info = message_info(&"vault_addr".into_bech32(), &[]);
         let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
-                OWNER.to_string(),
+                OWNER.into_bech32().to_string(),
                 coin(100, "uosmo"),
                 1,
                 to_json_binary(&ReceiveVirtualStake {
@@ -2409,10 +2410,10 @@ mod tests {
         assert_eq!(
             msgs[0],
             WasmMsg::Execute {
-                contract_addr: "vault_addr".to_string(),
+                contract_addr: "vault_addr".into_bech32().to_string(),
                 msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
-                        user: OWNER.to_string(),
+                        user: OWNER.into_bech32().to_string(),
                         slash: Uint128::new(10),
                     }],
                     validator: "bob".to_string(),
