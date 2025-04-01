@@ -3,12 +3,15 @@ use anyhow::Result as AnyResult;
 use cosmwasm_std::testing::mock_env;
 use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Validator};
 
-use cw_multi_test::{App as MtApp, StakingInfo};
+use cw_multi_test::{App as MtApp, IntoBech32, StakingInfo};
 use sylvia::multitest::{App, Proxy};
 
 use mesh_vault::mock::sv::mt::VaultMockProxy;
 use mesh_vault::mock::VaultMock;
 use mesh_vault::msg::LocalStakingInfo;
+
+use mesh_native_staking::contract::sv::mt::NativeStakingContractProxy;
+use mesh_native_staking::contract::NativeStakingContract;
 
 use crate::mock::sv::mt::NativeStakingProxyMockProxy;
 use crate::mock::NativeStakingProxyMock;
@@ -23,7 +26,7 @@ fn init_app(owner: &str, validators: &[&str]) -> App<MtApp> {
     let app = MtApp::new(|router, api, storage| {
         router
             .bank
-            .init_balance(storage, &Addr::unchecked(owner), coins(1000, OSMO))
+            .init_balance(storage, &owner.into_bech32(), coins(1000, OSMO))
             .unwrap();
         router
             .staking
@@ -38,12 +41,12 @@ fn init_app(owner: &str, validators: &[&str]) -> App<MtApp> {
             .unwrap();
 
         for &validator in validators {
-            let valoper1 = Validator {
-                address: validator.to_owned(),
-                commission: Decimal::percent(10),
-                max_commission: Decimal::percent(20),
-                max_change_rate: Decimal::percent(1),
-            };
+            let valoper1 = Validator::create(
+                validator.to_owned(),
+                Decimal::percent(10),
+                Decimal::percent(20),
+                Decimal::percent(1),
+            );
             router
                 .staking
                 .add_validator(api, storage, &block, valoper1)
@@ -58,7 +61,7 @@ fn setup<'app>(
     owner: &'app str,
     user: &str,
     validators: &[&str],
-) -> AnyResult<Proxy<'app, MtApp, VaultMock<'app>>> {
+) -> AnyResult<Proxy<'app, MtApp, VaultMock>> {
     let vault_code = mesh_vault::mock::sv::mt::CodeId::store_code(app);
     let staking_code = mesh_native_staking::contract::sv::mt::CodeId::store_code(app);
     let staking_proxy_code = crate::mock::sv::mt::CodeId::store_code(app);
@@ -84,14 +87,14 @@ fn setup<'app>(
             Some(LocalStakingInfo::New(staking_init_info)),
         )
         .with_label("Vault")
-        .call(owner)
+        .call(&owner.into_bech32())
         .unwrap();
 
     // Bond some funds to the vault
     vault
         .bond()
         .with_funds(&coins(200, OSMO))
-        .call(user)
+        .call(&user.into_bech32())
         .unwrap();
 
     // Stakes some of it locally. This instantiates the staking proxy contract for user
@@ -104,7 +107,7 @@ fn setup<'app>(
                 })
                 .unwrap(),
             )
-            .call(user)
+            .call(&user.into_bech32())
             .unwrap();
     }
 
@@ -115,17 +118,21 @@ fn setup<'app>(
 fn instantiation() {
     let owner = "vault_admin";
 
-    let staking_addr = "contract1"; // Second contract (instantiated by vault)
-    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
-
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    setup(&app, owner, user, &[validator]).unwrap();
+    let vault = setup(&app, owner, user, &[validator]).unwrap();
+    let staking_addr = vault.config().unwrap().local_staking.unwrap();
+    let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
+        Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
 
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Check config
@@ -135,7 +142,7 @@ fn instantiation() {
         ConfigResponse {
             denom: OSMO.to_owned(),
             parent: Addr::unchecked(staking_addr), // parent is the staking contract
-            owner: Addr::unchecked(user),          // owner is the user
+            owner: user.into_bech32(),             // owner is the user
         }
     );
 
@@ -160,16 +167,22 @@ fn instantiation() {
 fn staking() {
     let owner = "vault_admin";
 
-    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
-
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
     let vault = setup(&app, owner, user, &[validator]).unwrap();
+    let staking_addr = vault.config().unwrap().local_staking.unwrap();
+    let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
+        Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
+
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Stake some more
@@ -181,7 +194,7 @@ fn staking() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user.into_bech32())
         .unwrap();
 
     // Check that new funds have been staked as well
@@ -205,23 +218,29 @@ fn staking() {
 fn restaking() {
     let owner = "vault_admin";
 
-    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
-
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
     let validator2 = "validator2"; // Where to re-stake
 
     let app = init_app(user, &[validator, validator2]); // Fund user, create validator
-    setup(&app, owner, user, &[validator]).unwrap();
+    let vault = setup(&app, owner, user, &[validator]).unwrap();
+    let staking_addr = vault.config().unwrap().local_staking.unwrap();
+    let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
+        Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
+
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Restake 30% to a different validator
     staking_proxy
         .restake(validator.to_owned(), validator2.to_owned(), coin(30, OSMO))
-        .call(user)
+        .call(&user.into_bech32())
         .unwrap();
 
     // Check that funds have been re-staked
@@ -245,22 +264,28 @@ fn restaking() {
 fn unstaking() {
     let owner = "vault_admin";
 
-    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
-
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    setup(&app, owner, user, &[validator]).unwrap();
+    let vault = setup(&app, owner, user, &[validator]).unwrap();
+    let staking_addr = vault.config().unwrap().local_staking.unwrap();
+    let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
+        Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
+
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Unstake 50%
     staking_proxy
         .unstake(validator.to_owned(), coin(50, OSMO))
-        .call(user)
+        .call(&user.into_bech32())
         .unwrap();
 
     // Check that funds have been unstaked
@@ -299,23 +324,28 @@ fn unstaking() {
 fn burning() {
     let owner = "vault_admin";
 
-    let staking_addr = "contract1"; // Second contract (instantiated by vault on instantiation)
-    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
-
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
-    setup(&app, owner, user, &[validator]).unwrap();
+    let vault = setup(&app, owner, user, &[validator]).unwrap();
+    let staking_addr = vault.config().unwrap().local_staking.unwrap();
+    let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
+        Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
+
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Burn 10%, from validator
     staking_proxy
         .burn(Some(validator.to_owned()), coin(10, OSMO))
-        .call(staking_addr)
+        .call(&Addr::unchecked(staking_addr))
         .unwrap();
 
     // Check that funds have been unstaked
@@ -350,7 +380,10 @@ fn burning() {
     );
 
     // But they cannot be released
-    staking_proxy.release_unbonded().call(user).unwrap();
+    staking_proxy
+        .release_unbonded()
+        .call(&user.into_bech32())
+        .unwrap();
 
     // Check that the contract still has the funds (they are being effectively "burned")
     assert_eq!(
@@ -366,24 +399,29 @@ fn burning() {
 fn burning_multiple_delegations() {
     let owner = "vault_admin";
 
-    let staking_addr = "contract1"; // Second contract (instantiated by vault on instantiation)
-    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
-
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validators = ["validator1", "validator2"]; // Where to stake / unstake
 
     let app = init_app(user, &validators); // Fund user, create validator
-    setup(&app, owner, user, &validators).unwrap();
+    let vault = setup(&app, owner, user, &validators).unwrap();
+    let staking_addr = vault.config().unwrap().local_staking.unwrap();
+    let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
+        Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
+
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Burn 15%, no validator specified
     let burn_amount = 15;
     staking_proxy
         .burn(None, coin(burn_amount, OSMO))
-        .call(staking_addr)
+        .call(&Addr::unchecked(staking_addr))
         .unwrap();
 
     // Check that funds have been unstaked (15 / 2 = 7.5, rounded down to 7, rounded up to 8)
@@ -432,7 +470,10 @@ fn burning_multiple_delegations() {
     );
 
     // But they cannot be released
-    staking_proxy.release_unbonded().call(user).unwrap();
+    staking_proxy
+        .release_unbonded()
+        .call(&user.into_bech32())
+        .unwrap();
 
     // Check that the contract still has the funds (they are being effectively "burned")
     assert_eq!(
@@ -448,22 +489,28 @@ fn burning_multiple_delegations() {
 fn releasing_unbonded() {
     let owner = "vault_admin";
 
-    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
-
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
     let vault = setup(&app, owner, user, &[validator]).unwrap();
+    let staking_addr = vault.config().unwrap().local_staking.unwrap();
+    let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
+        Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
+
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Unstake 100%
     staking_proxy
         .unstake(validator.to_owned(), coin(100, OSMO))
-        .call(user)
+        .call(&user.into_bech32())
         .unwrap();
 
     // Check that funds have been fully unstaked
@@ -478,7 +525,10 @@ fn releasing_unbonded() {
     process_staking_unbondings(&app);
 
     // Release the unbonded funds
-    staking_proxy.release_unbonded().call(user).unwrap();
+    staking_proxy
+        .release_unbonded()
+        .call(&user.into_bech32())
+        .unwrap();
 
     // Check that the vault has the funds again
     assert_eq!(
@@ -494,14 +544,19 @@ fn releasing_unbonded() {
 fn withdrawing_rewards() {
     let owner = "vault_admin";
 
-    let staking_addr = "contract1"; // Second contract (instantiated by vault)
-    let proxy_addr = "contract2"; // Third contract (instantiated by staking contract on stake)
-
     let user = "user1"; // One who wants to local stake (uses the proxy)
     let validator = "validator1"; // Where to stake / unstake
 
     let app = init_app(user, &[validator]); // Fund user, create validator
     let vault = setup(&app, owner, user, &[validator]).unwrap();
+    let staking_addr = vault.config().unwrap().local_staking.unwrap();
+    let local_staking: Proxy<'_, MtApp, NativeStakingContract> =
+        Proxy::new(Addr::unchecked(staking_addr.clone()), &app);
+
+    let proxy_addr = local_staking
+        .proxy_by_owner(user.into_bech32().to_string())
+        .unwrap()
+        .proxy;
 
     // Record current vault, staking and user funds
     let original_vault_funds = app
@@ -509,11 +564,19 @@ fn withdrawing_rewards() {
         .wrap()
         .query_balance(vault.contract_addr.clone(), OSMO)
         .unwrap();
-    let original_staking_funds = app.app().wrap().query_balance(staking_addr, OSMO).unwrap();
-    let original_user_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
+    let original_staking_funds = app
+        .app()
+        .wrap()
+        .query_balance(staking_addr.clone(), OSMO)
+        .unwrap();
+    let original_user_funds = app
+        .app()
+        .wrap()
+        .query_balance(user.into_bech32().to_string(), OSMO)
+        .unwrap();
 
     // Access staking proxy instance
-    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock<'_>> =
+    let staking_proxy: Proxy<'_, MtApp, NativeStakingProxyMock> =
         Proxy::new(Addr::unchecked(proxy_addr), &app);
 
     // Advance time enough for rewards to accrue
@@ -523,10 +586,17 @@ fn withdrawing_rewards() {
     });
 
     // Withdraw rewards
-    staking_proxy.withdraw_rewards().call(user).unwrap();
+    staking_proxy
+        .withdraw_rewards()
+        .call(&user.into_bech32())
+        .unwrap();
 
     // User now has some rewards
-    let current_funds = app.app().wrap().query_balance(user, OSMO).unwrap();
+    let current_funds = app
+        .app()
+        .wrap()
+        .query_balance(user.into_bech32().to_string(), OSMO)
+        .unwrap();
     assert!(current_funds.amount > original_user_funds.amount);
 
     // Staking hasn't received any rewards
@@ -548,11 +618,11 @@ fn process_staking_unbondings(app: &App<MtApp>) {
         block.time = block.time.plus_seconds(UNBONDING_PERIOD);
         block.height += UNBONDING_PERIOD / 5;
     });
-    // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
-    app.app_mut()
-        .sudo(cw_multi_test::SudoMsg::Staking(
-            #[allow(deprecated)]
-            cw_multi_test::StakingSudo::ProcessQueue {},
-        ))
-        .unwrap();
+    // // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
+    // app.app_mut()
+    //     .sudo(cw_multi_test::SudoMsg::Staking(
+    //         #[allow(deprecated)]
+    //         cw_multi_test::StakingSudo::ProcessQueue {},
+    //     ))
+    //     .unwrap();
 }

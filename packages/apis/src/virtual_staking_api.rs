@@ -3,9 +3,9 @@
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Coin, Response, StdError, Uint128, Validator};
+use sylvia::ctx::{ExecCtx, SudoCtx};
 use sylvia::cw_std::{CustomMsg, CustomQuery};
-use sylvia::types::{ExecCtx, SudoCtx};
-use sylvia::{interface, schemars};
+use sylvia::interface;
 
 // TODO: make these parameters of the trait?
 

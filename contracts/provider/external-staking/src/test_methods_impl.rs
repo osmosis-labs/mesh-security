@@ -6,12 +6,12 @@ use cosmwasm_std::{Coin, Response, Uint128};
 use mesh_apis::converter_api::RewardInfo;
 use mesh_apis::ibc::AddValidator;
 use sylvia::contract;
-use sylvia::types::ExecCtx;
+use sylvia::ctx::ExecCtx;
 
 /// These methods are for test usage only
 #[contract(module=crate::contract)]
 #[sv::messages(crate::test_methods as TestMethods)]
-impl TestMethods for ExternalStakingContract<'_> {
+impl TestMethods for ExternalStakingContract {
     type Error = ContractError;
 
     /// Commits a pending stake.

@@ -8,19 +8,19 @@ pub struct TxIndexes<'a> {
     pub users: MultiIndex<'a, Addr, Tx, Addr>,
 }
 
-impl<'a> IndexList<Tx> for TxIndexes<'a> {
+impl IndexList<Tx> for TxIndexes<'_> {
     fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<Tx>> + '_> {
         let v: Vec<&dyn Index<Tx>> = vec![&self.users];
         Box::new(v.into_iter())
     }
 }
 
-pub struct Txs<'a> {
-    pub txs: IndexedMap<'a, u64, Tx, TxIndexes<'a>>,
+pub struct Txs {
+    pub txs: IndexedMap<u64, Tx, TxIndexes<'static>>,
 }
 
-impl<'a> Txs<'a> {
-    pub fn new(storage_key: &'a str, user_subkey: &'a str) -> Self {
+impl Txs {
+    pub fn new(storage_key: &'static str, user_subkey: &'static str) -> Self {
         let indexes = TxIndexes {
             users: MultiIndex::new(
                 |_, tx| {

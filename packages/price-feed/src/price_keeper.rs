@@ -10,8 +10,8 @@ pub struct PriceInfo {
 
 /// A component that keeps track of the latest price info.
 pub struct PriceKeeper {
-    pub price_info: Item<'static, PriceInfo>,
-    pub price_info_ttl_in_secs: Item<'static, u64>,
+    pub price_info: Item<PriceInfo>,
+    pub price_info_ttl_in_secs: Item<u64>,
 }
 
 impl PriceKeeper {
@@ -67,6 +67,12 @@ impl PriceKeeper {
         } else {
             Err(PriceKeeperError::OutdatedPriceData)
         }
+    }
+}
+
+impl Default for PriceKeeper {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

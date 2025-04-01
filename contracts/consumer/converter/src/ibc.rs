@@ -15,7 +15,7 @@ use mesh_apis::ibc::{
     ProviderPacket, StakeAck, TransferRewardsAck, UnstakeAck, PROTOCOL_NAME,
 };
 use mesh_apis::virtual_staking_api;
-use sylvia::types::ExecCtx;
+use sylvia::ctx::ExecCtx;
 
 use crate::{
     contract::{custom, ConverterContract},
@@ -222,8 +222,7 @@ pub fn ibc_packet_receive(
         } => {
             let response = contract.stake(deps, delegator, validator, stake)?;
             let ack = ack_success(&StakeAck {})?;
-            IbcReceiveResponse::new()
-                .set_ack(ack)
+            IbcReceiveResponse::new(ack)
                 .add_submessages(response.messages)
                 .add_events(response.events)
                 .add_attributes(response.attributes)
@@ -236,8 +235,7 @@ pub fn ibc_packet_receive(
         } => {
             let response = contract.unstake(deps, delegator, validator, unstake)?;
             let ack: cosmwasm_std::Binary = ack_success(&UnstakeAck {})?;
-            IbcReceiveResponse::new()
-                .set_ack(ack)
+            IbcReceiveResponse::new(ack)
                 .add_submessages(response.messages)
                 .add_events(response.events)
                 .add_attributes(response.attributes)
@@ -245,8 +243,7 @@ pub fn ibc_packet_receive(
         ProviderPacket::Burn { validators, burn } => {
             let response = contract.burn(deps, &validators, burn)?;
             let ack = ack_success(&UnstakeAck {})?;
-            IbcReceiveResponse::new()
-                .set_ack(ack)
+            IbcReceiveResponse::new(ack)
                 .add_submessages(response.messages)
                 .add_events(response.events)
                 .add_attributes(response.attributes)
@@ -260,8 +257,7 @@ pub fn ibc_packet_receive(
                 .add_attribute("recipient", &recipient)
                 .add_attribute("rewards", rewards.amount.to_string());
             let ack = ack_success(&TransferRewardsAck {})?;
-            IbcReceiveResponse::new()
-                .set_ack(ack)
+            IbcReceiveResponse::new(ack)
                 .add_message(msg)
                 .add_event(event)
         }

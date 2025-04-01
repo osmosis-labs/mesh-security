@@ -7,11 +7,12 @@ use cw2::set_contract_version;
 use cw_storage_plus::Item;
 use cw_utils::{must_pay, nonpayable, parse_instantiate_response_data};
 use mesh_apis::ibc::ConsumerPacket;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
-use sylvia::{contract, schemars};
+use sylvia::contract;
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
+#[allow(deprecated)]
+use sylvia::types::ReplyCtx;
 
 use mesh_apis::converter_api::{self, ConverterApi, RewardInfo, ValidatorSlashInfo};
-use mesh_apis::price_feed_api;
 use mesh_apis::virtual_staking_api;
 
 use crate::error::ContractError;
@@ -39,9 +40,9 @@ pub mod custom {
     pub type Response = cosmwasm_std::Response<ConverterMsg>;
 }
 
-pub struct ConverterContract<'a> {
-    pub config: Item<'a, Config>,
-    pub virtual_stake: Item<'a, Addr>,
+pub struct ConverterContract {
+    pub config: Item<Config>,
+    pub virtual_stake: Item<Addr>,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -50,7 +51,7 @@ pub struct ConverterContract<'a> {
 #[sv::messages(converter_api as ConverterApi)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
 #[sv::custom(query=custom::ConverterQuery, msg=custom::ConverterMsg)]
-impl ConverterContract<'_> {
+impl ConverterContract {
     pub const fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -99,7 +100,12 @@ impl ConverterContract<'_> {
             ctx.deps.api.addr_validate(admin)?;
         }
 
-        let msg = to_json_binary(&mesh_virtual_staking::contract::sv::InstantiateMsg {
+        #[cosmwasm_schema::cw_serde]
+        struct VirtualStakingInitMsg {
+            max_retrieve: u32,
+            tombstoned_unbond_enable: bool,
+        }
+        let msg = to_json_binary(&VirtualStakingInitMsg {
             max_retrieve,
             tombstoned_unbond_enable,
         })?;
@@ -117,6 +123,7 @@ impl ConverterContract<'_> {
     }
 
     #[sv::msg(reply)]
+    #[allow(deprecated)]
     fn reply(
         &self,
         ctx: ReplyCtx<custom::ConverterQuery>,
@@ -129,6 +136,7 @@ impl ConverterContract<'_> {
     }
 
     /// Store virtual staking address
+    #[allow(deprecated)]
     fn reply_init_callback(
         &self,
         deps: DepsMut<custom::ConverterQuery>,
@@ -322,17 +330,15 @@ impl ConverterContract<'_> {
         // FIXME not sure how to get this to compile with latest sylvia
         // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
-        use price_feed_api::sv::Querier;
-        use sylvia::types::Remote;
-        let remote = Remote::<
-            &dyn price_feed_api::PriceFeedApi<
-                Error = StdError,
-                ExecC = custom::ConverterMsg,
-                QueryC = custom::ConverterQuery,
-            >,
-        >::new(config.price_feed);
-        let price = remote.querier(&deps.querier).price()?.native_per_foreign;
-        let converted = (amount.amount * price) * config.price_adjustment;
+        use crate::price_feed::sv::{InterfaceMessagesApi, Querier};
+        use crate::price_feed::CustomPriceFeedApi;
+        let querier =
+            <dyn CustomPriceFeedApi<Error = StdError> as InterfaceMessagesApi>::Querier::borrowed(
+                &config.price_feed,
+                &deps.querier,
+            );
+        let price = Querier::price(&querier)?.native_per_foreign;
+        let converted = (amount.amount.mul_floor(price)).mul_floor(config.price_adjustment);
 
         Ok(Coin {
             denom: config.local_denom,
@@ -357,22 +363,21 @@ impl ConverterContract<'_> {
 
         // get the price value (usage is a bit clunky, need to use trait and cannot chain Remote::new() with .querier())
         // also see https://github.com/CosmWasm/sylvia/issues/181 to just store Remote in state
-        use price_feed_api::sv::Querier;
-        use sylvia::types::Remote;
-        // Note: it doesn't seem to matter which error type goes here...
-        let remote = Remote::<
-            &dyn price_feed_api::PriceFeedApi<
-                Error = StdError,
-                ExecC = custom::ConverterMsg,
-                QueryC = custom::ConverterQuery,
-            >,
-        >::new(config.price_feed);
-        let price = remote.querier(&deps.querier).price()?.native_per_foreign;
-        let converted = (amount.amount * price.inv().ok_or(ContractError::InvalidPrice {})?)
-            * config
+        use crate::price_feed::sv::{InterfaceMessagesApi, Querier};
+        use crate::price_feed::CustomPriceFeedApi;
+        let querier =
+            <dyn CustomPriceFeedApi<Error = StdError> as InterfaceMessagesApi>::Querier::borrowed(
+                &config.price_feed,
+                &deps.querier,
+            );
+        let price = querier.price()?.native_per_foreign;
+        let invert_price = price.inv().ok_or(ContractError::InvalidPrice {})?;
+        let converted = amount.amount.mul_floor(invert_price).mul_floor(
+            config
                 .price_adjustment
                 .inv()
-                .ok_or(ContractError::InvalidDiscount {})?;
+                .ok_or(ContractError::InvalidDiscount {})?,
+        );
 
         Ok(Coin {
             denom: config.remote_denom,
@@ -420,7 +425,7 @@ impl ConverterContract<'_> {
     }
 }
 
-impl ConverterApi for ConverterContract<'_> {
+impl ConverterApi for ConverterContract {
     type Error = ContractError;
     type ExecC = custom::ConverterMsg;
     type QueryC = custom::ConverterQuery;

@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 use mesh_apis::converter_api::{RewardInfo, ValidatorSlashInfo};
 use sylvia::contract;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
 
 use mesh_apis::cross_staking_api::{self};
 use mesh_apis::ibc::{AddValidator, ProviderPacket};
@@ -41,20 +41,20 @@ fn clamp_page_limit(limit: Option<u32>) -> usize {
     limit.unwrap_or(DEFAULT_PAGE_LIMIT).max(MAX_PAGE_LIMIT) as usize
 }
 
-pub struct ExternalStakingContract<'a> {
-    pub config: Item<'a, Config>,
+pub struct ExternalStakingContract {
+    pub config: Item<Config>,
     /// Stakes indexed by `(owner, validator)` pair
-    pub stakes: Stakes<'a>,
+    pub stakes: Stakes,
     /// Per-validator distribution information
-    pub distribution: Map<'a, &'a str, Distribution>,
+    pub distribution: Map<String, Distribution>,
     /// Pending txs information
-    pub tx_count: Item<'a, u64>,
-    pub pending_txs: Map<'a, u64, Tx>,
+    pub tx_count: Item<u64>,
+    pub pending_txs: Map<u64, Tx>,
     /// Valset CRDT
-    pub val_set: CrdtState<'a>,
+    pub val_set: CrdtState,
 }
 
-impl Default for ExternalStakingContract<'_> {
+impl Default for ExternalStakingContract {
     fn default() -> Self {
         Self::new()
     }
@@ -65,7 +65,7 @@ impl Default for ExternalStakingContract<'_> {
 #[sv::error(ContractError)]
 #[sv::messages(cross_staking_api as CrossStakingApi)]
 #[sv::messages(crate::test_methods as TestMethods)]
-impl ExternalStakingContract<'_> {
+impl ExternalStakingContract {
     pub fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -164,7 +164,7 @@ impl ExternalStakingContract<'_> {
         // Load distribution
         let mut distribution = self
             .distribution
-            .may_load(deps.storage, &tx_validator)?
+            .may_load(deps.storage, tx_validator.clone())?
             .unwrap_or_default();
 
         // Commit stake (saturating up if slashed)
@@ -183,7 +183,7 @@ impl ExternalStakingContract<'_> {
 
         // Save distribution
         self.distribution
-            .save(deps.storage, &tx_validator, &distribution)?;
+            .save(deps.storage, tx_validator, &distribution)?;
 
         // Remove tx
         self.pending_txs.remove(deps.storage, tx_id);
@@ -252,7 +252,9 @@ impl ExternalStakingContract<'_> {
         validator: String,
         amount: Coin,
     ) -> Result<Response, ContractError> {
-        let ExecCtx { info, deps, env } = ctx;
+        let ExecCtx {
+            info, deps, env, ..
+        } = ctx;
         nonpayable(&info)?;
 
         let config = self.config.load(deps.storage)?;
@@ -364,7 +366,7 @@ impl ExternalStakingContract<'_> {
         // Load distribution
         let mut distribution = self
             .distribution
-            .may_load(deps.storage, &tx_validator)?
+            .may_load(deps.storage, tx_validator.clone())?
             .unwrap_or_default();
 
         // Commit sub amount, saturating if slashed
@@ -399,7 +401,7 @@ impl ExternalStakingContract<'_> {
 
         // Save distribution
         self.distribution
-            .save(deps.storage, &tx_validator, &distribution)?;
+            .save(deps.storage, tx_validator, &distribution)?;
 
         // Remove tx
         self.pending_txs.remove(deps.storage, tx_id);
@@ -462,7 +464,7 @@ impl ExternalStakingContract<'_> {
         // Load distribution
         let mut distribution = self
             .distribution
-            .may_load(deps.storage, &validator)?
+            .may_load(deps.storage, validator.clone())?
             .unwrap_or_default();
 
         // Commit sub amount, saturating if slashed
@@ -488,7 +490,7 @@ impl ExternalStakingContract<'_> {
 
         // Save distribution
         self.distribution
-            .save(deps.storage, &validator, &distribution)?;
+            .save(deps.storage, validator.clone(), &distribution)?;
         let event = Event::new("internal_unstake")
             .add_attribute("delegator", delegator)
             .add_attribute("validator", validator)
@@ -525,7 +527,7 @@ impl ExternalStakingContract<'_> {
 
             let mut distribution = self
                 .distribution
-                .may_load(deps.storage, validator)?
+                .may_load(deps.storage, validator.to_string())?
                 .unwrap_or_default();
             new_stake
                 .points_alignment
@@ -540,7 +542,7 @@ impl ExternalStakingContract<'_> {
 
             // Save distribution
             self.distribution
-                .save(deps.storage, validator, &distribution)?;
+                .save(deps.storage, validator.to_string(), &distribution)?;
         }
 
         Ok(())
@@ -780,7 +782,7 @@ impl ExternalStakingContract<'_> {
     ) -> Result<Event, ContractError> {
         let mut distribution = self
             .distribution
-            .may_load(deps.storage, validator)?
+            .may_load(deps.storage, validator.to_string())?
             .unwrap_or_default();
 
         let total_stake = Uint256::from(distribution.total_stake);
@@ -792,7 +794,7 @@ impl ExternalStakingContract<'_> {
         distribution.points_per_stake += points_per_stake;
 
         self.distribution
-            .save(deps.storage, validator, &distribution)?;
+            .save(deps.storage, validator.to_string(), &distribution)?;
 
         let event = Event::new("distribute_rewards")
             .add_attribute("validator", validator)
@@ -846,7 +848,7 @@ impl ExternalStakingContract<'_> {
 
         let distribution = self
             .distribution
-            .may_load(ctx.deps.storage, &validator)?
+            .may_load(ctx.deps.storage, validator.clone())?
             .unwrap_or_default();
 
         let amount = Self::calculate_reward(&stake, &distribution)?;
@@ -1012,7 +1014,7 @@ impl ExternalStakingContract<'_> {
             if stake_high.is_zero() {
                 continue;
             }
-            let stake_slash = stake_high * effective_slash_ratio;
+            let stake_slash = stake_high.mul_floor(effective_slash_ratio);
             // Requires proper saturating methods in commit/rollback_stake/unstake
             stake.stake = ValueRange::new(
                 stake_low.saturating_sub(stake_slash),
@@ -1022,13 +1024,14 @@ impl ExternalStakingContract<'_> {
             // Distribution alignment
             let mut distribution = self
                 .distribution
-                .may_load(storage, validator)?
+                .may_load(storage, validator.to_string())?
                 .unwrap_or_default();
             stake
                 .points_alignment
                 .stake_decreased(stake_slash, distribution.points_per_stake);
             distribution.total_stake = distribution.total_stake.saturating_sub(stake_slash); // Don't fail if pending bond tx
-            self.distribution.save(storage, validator, &distribution)?;
+            self.distribution
+                .save(storage, validator.to_string(), &distribution)?;
 
             // Slash the unbondings. We use the nominal slash ratio here, like in the blockchain
             let pending_slashed = stake.slash_pending(
@@ -1230,7 +1233,7 @@ impl ExternalStakingContract<'_> {
 
         let distribution = self
             .distribution
-            .may_load(ctx.deps.storage, &validator)?
+            .may_load(ctx.deps.storage, validator.to_string())?
             .unwrap_or_default();
 
         let amount = Self::calculate_reward(&stake, &distribution)?;
@@ -1268,7 +1271,7 @@ impl ExternalStakingContract<'_> {
                 let (validator, stake) = item?;
                 let distribution = self
                     .distribution
-                    .may_load(ctx.deps.storage, &validator)?
+                    .may_load(ctx.deps.storage, validator.clone())?
                     .unwrap_or_default();
                 let amount = Self::calculate_reward(&stake, &distribution)?;
                 Ok::<_, ContractError>(ValidatorPendingRewards::new(
@@ -1313,7 +1316,7 @@ pub mod cross_staking {
 
     #[contract(module=crate::contract)]
     #[sv::messages(mesh_apis::cross_staking_api as CrossStakingApi)]
-    impl CrossStakingApi for ExternalStakingContract<'_> {
+    impl CrossStakingApi for ExternalStakingContract {
         type Error = ContractError;
 
         #[sv::msg(exec)]
@@ -1479,7 +1482,7 @@ pub mod cross_staking {
                 // Load distribution
                 let mut distribution = self
                     .distribution
-                    .may_load(ctx.deps.storage, validator)?
+                    .may_load(ctx.deps.storage, validator.to_string())?
                     .unwrap_or_default();
 
                 // Distribution alignment
@@ -1495,7 +1498,7 @@ pub mod cross_staking {
 
                 // Save distribution
                 self.distribution
-                    .save(ctx.deps.storage, validator, &distribution)?;
+                    .save(ctx.deps.storage, validator.to_string(), &distribution)?;
             }
 
             let channel = IBC_CHANNEL.load(ctx.deps.storage)?;
@@ -1551,10 +1554,11 @@ pub mod cross_staking {
 mod tests {
     use super::*;
     use cosmwasm_std::{Attribute, Decimal, DepsMut};
+    use cw_multi_test::IntoBech32;
 
     use crate::crdt::State;
     use crate::msg::{AuthorizedEndpoint, ReceiveVirtualStake, ValidatorState};
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use mesh_apis::cross_staking_api::CrossStakingApi;
     use mesh_apis::vault_api::sv::VaultApiExecMsg::CrossSlash;
 
@@ -1564,17 +1568,14 @@ mod tests {
 
     fn do_instantiate(deps: DepsMut) -> (ExecCtx, ExternalStakingContract) {
         let contract = ExternalStakingContract::new();
-        let mut ctx = InstantiateCtx {
-            deps,
-            env: mock_env(),
-            info: mock_info(CREATOR, &[]),
-        };
+        let mut ctx =
+            InstantiateCtx::from((deps, mock_env(), message_info(&CREATOR.into_bech32(), &[])));
         contract
             .instantiate(
                 ctx.branch(),
                 OSMO.to_owned(),
                 "ujuno".to_string(),
-                "vault_addr".to_string(),
+                "vault_addr".into_bech32().to_string(),
                 100,
                 AuthorizedEndpoint {
                     connection_id: "connection_id_1".to_string(),
@@ -1586,11 +1587,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let exec_ctx = ExecCtx {
-            deps: ctx.deps,
-            info: mock_info(OWNER, &[]),
-            env: ctx.env,
-        };
+        let exec_ctx = ExecCtx::from((ctx.deps, ctx.env, message_info(&OWNER.into_bech32(), &[])));
         (exec_ctx, contract)
     }
 
@@ -1651,10 +1648,7 @@ mod tests {
         assert!(msgs.is_empty());
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -1711,16 +1705,12 @@ mod tests {
 
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
-        let vault_info = mock_info("vault_addr", &[]);
-        let stake_ctx = ExecCtx {
-            deps: stake_deps.branch(),
-            env: mock_env(),
-            info: vault_info,
-        };
+        let vault_info = message_info(&"vault_addr".into_bech32(), &[]);
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
-                OWNER.to_string(),
+                OWNER.into_bech32().to_string(),
                 coin(100, "uosmo"),
                 1,
                 to_json_binary(&ReceiveVirtualStake {
@@ -1772,10 +1762,10 @@ mod tests {
         assert_eq!(
             msgs[0],
             WasmMsg::Execute {
-                contract_addr: "vault_addr".to_string(),
+                contract_addr: "vault_addr".into_bech32().to_string(),
                 msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
-                        user: OWNER.to_string(),
+                        user: OWNER.into_bech32().to_string(),
                         slash: Uint128::new(10),
                     }],
                     validator: "bob".to_string(),
@@ -1786,10 +1776,7 @@ mod tests {
         );
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -1842,16 +1829,12 @@ mod tests {
 
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
-        let vault_info = mock_info("vault_addr", &[]);
-        let stake_ctx = ExecCtx {
-            deps: stake_deps.branch(),
-            env: mock_env(),
-            info: vault_info,
-        };
+        let vault_info = message_info(&"vault_addr".into_bech32(), &[]);
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
-                OWNER.to_string(),
+                OWNER.into_bech32().to_string(),
                 coin(100, "uosmo"),
                 1,
                 to_json_binary(&ReceiveVirtualStake {
@@ -1902,10 +1885,10 @@ mod tests {
         assert_eq!(
             msgs[0],
             WasmMsg::Execute {
-                contract_addr: "vault_addr".to_string(),
+                contract_addr: "vault_addr".into_bech32().to_string(),
                 msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
-                        user: OWNER.to_string(),
+                        user: OWNER.into_bech32().to_string(),
                         slash: Uint128::new(10),
                     }],
                     validator: "bob".to_string(),
@@ -1916,10 +1899,7 @@ mod tests {
         );
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -1972,16 +1952,12 @@ mod tests {
 
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
-        let vault_info = mock_info("vault_addr", &[]);
-        let stake_ctx = ExecCtx {
-            deps: stake_deps.branch(),
-            env: mock_env(),
-            info: vault_info,
-        };
+        let vault_info = message_info(&"vault_addr".into_bech32(), &[]);
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
-                OWNER.to_string(),
+                OWNER.into_bech32().to_string(),
                 coin(100, "uosmo"),
                 1,
                 to_json_binary(&ReceiveVirtualStake {
@@ -1995,12 +1971,8 @@ mod tests {
 
         // OWNER then cross-unstakes half of the stake
         let mut stake_deps = ctx.deps.branch();
-        let owner_info = mock_info(OWNER, &[]);
-        let stake_ctx = ExecCtx {
-            deps: stake_deps.branch(),
-            env: mock_env(),
-            info: owner_info,
-        };
+        let owner_info = message_info(&OWNER.into_bech32(), &[]);
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), owner_info));
         contract
             .unstake(stake_ctx, "bob".to_string(), coin(50, "uosmo"))
             .unwrap();
@@ -2046,10 +2018,10 @@ mod tests {
         assert_eq!(
             msgs[0],
             WasmMsg::Execute {
-                contract_addr: "vault_addr".to_string(),
+                contract_addr: "vault_addr".into_bech32().to_string(),
                 msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
-                        user: OWNER.to_string(),
+                        user: OWNER.into_bech32().to_string(),
                         slash: Uint128::new(10), // Owner is slashed over the full stake, including pending
                     }],
                     validator: "bob".to_string(),
@@ -2060,10 +2032,7 @@ mod tests {
         );
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2141,10 +2110,7 @@ mod tests {
         assert_eq!(msgs.len(), 0);
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2223,10 +2189,7 @@ mod tests {
         assert_eq!(msgs.len(), 0);
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2330,10 +2293,7 @@ mod tests {
 
         // Check that unjail is a no-op
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2386,16 +2346,12 @@ mod tests {
 
         // Cross stake with bob
         let mut stake_deps = ctx.deps.branch();
-        let vault_info = mock_info("vault_addr", &[]);
-        let stake_ctx = ExecCtx {
-            deps: stake_deps.branch(),
-            env: mock_env(),
-            info: vault_info,
-        };
+        let vault_info = message_info(&"vault_addr".into_bech32(), &[]);
+        let stake_ctx = ExecCtx::from((stake_deps.branch(), mock_env(), vault_info));
         contract
             .receive_virtual_stake(
                 stake_ctx,
-                OWNER.to_string(),
+                OWNER.into_bech32().to_string(),
                 coin(100, "uosmo"),
                 1,
                 to_json_binary(&ReceiveVirtualStake {
@@ -2447,10 +2403,10 @@ mod tests {
         assert_eq!(
             msgs[0],
             WasmMsg::Execute {
-                contract_addr: "vault_addr".to_string(),
+                contract_addr: "vault_addr".into_bech32().to_string(),
                 msg: to_json_binary(&CrossSlash {
                     slashes: vec![SlashInfo {
-                        user: OWNER.to_string(),
+                        user: OWNER.into_bech32().to_string(),
                         slash: Uint128::new(10),
                     }],
                     validator: "bob".to_string(),
@@ -2461,10 +2417,7 @@ mod tests {
         );
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2541,10 +2494,7 @@ mod tests {
         assert_eq!(msgs.len(), 0);
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         let vals = contract.list_validators(query_ctx, None, None).unwrap();
         assert_eq!(
@@ -2643,10 +2593,7 @@ mod tests {
         assert_eq!(evt.attributes, vec![Attribute::new("updated", "bob"),]);
 
         let query_deps = ctx.deps;
-        let query_ctx = QueryCtx {
-            deps: query_deps.as_ref(),
-            env: mock_env(),
-        };
+        let query_ctx = QueryCtx::from((query_deps.as_ref(), mock_env()));
 
         // Check that bob is still unbonded
         let vals = contract.list_validators(query_ctx, None, None).unwrap();

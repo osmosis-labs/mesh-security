@@ -107,7 +107,7 @@ impl Stake {
                     && pending.release_at > info.time
             })
             .map(|pending| {
-                let slash = pending.amount * slash_ratio;
+                let slash = pending.amount.mul_floor(slash_ratio);
                 // Slash it
                 pending.amount -= slash;
                 slash

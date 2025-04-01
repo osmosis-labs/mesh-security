@@ -1,5 +1,5 @@
 use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Uint128, Validator};
-use cw_multi_test::{App as MtApp, StakingInfo};
+use cw_multi_test::{App as MtApp, IntoBech32, StakingInfo};
 use mesh_apis::ibc::AddValidator;
 use mesh_external_staking::contract::sv::mt::ExternalStakingContractProxy;
 use mesh_external_staking::contract::ExternalStakingContract;
@@ -38,7 +38,7 @@ fn init_app(users: &[&str], amounts: &[u128]) -> App<MtApp> {
         for (&user, amount) in std::iter::zip(users, amounts) {
             router
                 .bank
-                .init_balance(storage, &Addr::unchecked(user), coins(*amount, OSMO))
+                .init_balance(storage, &user.into_bech32(), coins(*amount, OSMO))
                 .unwrap();
         }
     });
@@ -56,12 +56,12 @@ fn add_local_validator(app: &mut App<MtApp>, validator: &str) {
                 api,
                 storage,
                 &block_info,
-                Validator {
-                    address: validator.to_string(),
-                    commission: Decimal::zero(),
-                    max_commission: Decimal::zero(),
-                    max_change_rate: Decimal::zero(),
-                },
+                Validator::create(
+                    validator.to_string(),
+                    Decimal::zero(),
+                    Decimal::zero(),
+                    Decimal::zero(),
+                ),
             )
         })
         .unwrap();
@@ -87,9 +87,9 @@ fn setup<'app>(
     slash_percent: u64,
     unbond_period: u64,
 ) -> (
-    Proxy<'app, MtApp, VaultMock<'app>>,
-    Proxy<'app, MtApp, NativeStakingContract<'app>>,
-    Proxy<'app, MtApp, ExternalStakingContract<'app>>,
+    Proxy<'app, MtApp, VaultMock>,
+    Proxy<'app, MtApp, NativeStakingContract>,
+    Proxy<'app, MtApp, ExternalStakingContract>,
 ) {
     let (vault, native, external) = setup_inner(app, owner, slash_percent, unbond_period, true);
     (vault, native.unwrap(), external)
@@ -102,8 +102,8 @@ fn setup_without_local_staking<'app>(
     slash_percent: u64,
     unbond_period: u64,
 ) -> (
-    Proxy<'app, MtApp, VaultMock<'app>>,
-    Proxy<'app, MtApp, ExternalStakingContract<'app>>,
+    Proxy<'app, MtApp, VaultMock>,
+    Proxy<'app, MtApp, ExternalStakingContract>,
 ) {
     let (vault, _, external) = setup_inner(app, owner, slash_percent, unbond_period, false);
     (vault, external)
@@ -117,9 +117,9 @@ fn setup_inner<'app>(
     unbond_period: u64,
     local_staking: bool,
 ) -> (
-    Proxy<'app, MtApp, VaultMock<'app>>,
-    Option<Proxy<'app, MtApp, NativeStakingContract<'app>>>,
-    Proxy<'app, MtApp, ExternalStakingContract<'app>>,
+    Proxy<'app, MtApp, VaultMock>,
+    Option<Proxy<'app, MtApp, NativeStakingContract>>,
+    Proxy<'app, MtApp, ExternalStakingContract>,
 ) {
     let vault_code = VaultCodeId::store_code(app);
 
@@ -148,7 +148,7 @@ fn setup_inner<'app>(
     let vault = vault_code
         .instantiate(OSMO.to_owned(), staking_init_info)
         .with_label("Vault")
-        .call(owner)
+        .call(&owner.into_bech32())
         .unwrap();
     let native_staking_addr = vault.config().unwrap().local_staking.map(Addr::unchecked);
     let native_staking = native_staking_addr.map(|addr| Proxy::new(addr, app));
@@ -160,10 +160,10 @@ fn setup_inner<'app>(
 fn setup_cross_stake<'app>(
     app: &'app App<MtApp>,
     owner: &'app str,
-    vault: &Proxy<'app, MtApp, VaultMock<'app>>,
+    vault: &Proxy<'app, MtApp, VaultMock>,
     slash_percent: u64,
     unbond_period: u64,
-) -> Proxy<'app, MtApp, ExternalStakingContract<'app>> {
+) -> Proxy<'app, MtApp, ExternalStakingContract> {
     // FIXME: Code shouldn't be duplicated
     let cross_staking_code = mesh_external_staking::contract::sv::mt::CodeId::store_code(app);
     // FIXME: Connection endpoint should be unique
@@ -181,13 +181,13 @@ fn setup_cross_stake<'app>(
                 offline: Decimal::percent(slash_percent),
             },
         )
-        .call(owner)
+        .call(&owner.into_bech32())
         .unwrap()
 }
 
 /// Set some active validators
 fn set_active_validators(
-    cross_staking: &Proxy<'_, MtApp, ExternalStakingContract<'_>>,
+    cross_staking: &Proxy<'_, MtApp, ExternalStakingContract>,
     validators: &[&str],
 ) -> (u64, u64) {
     let update_valset_height = 100;
@@ -197,23 +197,23 @@ fn set_active_validators(
         let activate = AddValidator::mock(validator);
         cross_staking
             .test_set_active_validator(activate.clone(), update_valset_height, update_valset_time)
-            .call("test")
+            .call(&"test".into_bech32())
             .unwrap();
     }
     (update_valset_height, update_valset_time)
 }
 
 /// Bond some tokens
-fn bond(vault: &Proxy<'_, MtApp, VaultMock<'_>>, user: &str, amount: u128) {
+fn bond(vault: &Proxy<'_, MtApp, VaultMock>, user: &str, amount: u128) {
     vault
         .bond()
         .with_funds(&coins(amount, OSMO))
-        .call(user)
+        .call(&user.into_bech32())
         .unwrap();
 }
 
 fn stake_locally(
-    vault: &Proxy<'_, MtApp, VaultMock<'_>>,
+    vault: &Proxy<'_, MtApp, VaultMock>,
     user: &str,
     stake: u128,
     validator: &str,
@@ -224,12 +224,12 @@ fn stake_locally(
 
     vault
         .stake_local(coin(stake, OSMO), to_json_binary(&msg).unwrap())
-        .call(user)
+        .call(&user.into_bech32())
 }
 
 fn stake_remotely(
-    vault: &Proxy<'_, MtApp, VaultMock<'_>>,
-    cross_staking: &Proxy<'_, MtApp, ExternalStakingContract<'_>>,
+    vault: &Proxy<'_, MtApp, VaultMock>,
+    cross_staking: &Proxy<'_, MtApp, ExternalStakingContract>,
     user: &str,
     validators: &[&str],
     amounts: &[u128],
@@ -244,7 +244,7 @@ fn stake_remotely(
                 })
                 .unwrap(),
             )
-            .call(user)
+            .call(&user.into_bech32())
             .unwrap();
 
         // TODO: Hardcoded `external-staking`'s commit_stake call (lack of IBC support yet).
@@ -253,18 +253,18 @@ fn stake_remotely(
             get_last_external_staking_pending_tx_id(cross_staking).unwrap();
         cross_staking
             .test_commit_stake(last_external_staking_tx)
-            .call("test")
+            .call(&"test".into_bech32())
             .unwrap();
     }
 }
 
 fn proxy_for_user<'a>(
-    local_staking: &Proxy<'_, MtApp, NativeStakingContract<'_>>,
+    local_staking: &Proxy<'_, MtApp, NativeStakingContract>,
     user: &str,
     app: &'a App<MtApp>,
-) -> Proxy<'a, MtApp, NativeStakingProxyMock<'a>> {
+) -> Proxy<'a, MtApp, NativeStakingProxyMock> {
     let proxy_addr = local_staking
-        .proxy_by_owner(user.to_string())
+        .proxy_by_owner(user.into_bech32().to_string())
         .unwrap()
         .proxy;
     Proxy::new(Addr::unchecked(proxy_addr), app)
@@ -275,24 +275,24 @@ fn process_staking_unbondings(app: &App<MtApp>) {
         block.time = block.time.plus_seconds(61);
         block.height += 13;
     });
-    // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
-    app.app_mut()
-        .sudo(cw_multi_test::SudoMsg::Staking(
-            #[allow(deprecated)]
-            cw_multi_test::StakingSudo::ProcessQueue {},
-        ))
-        .unwrap();
+    // // This is deprecated as unneeded, but tests fail if it isn't here. What's up???
+    // app.app_mut()
+    //     .sudo(cw_multi_test::SudoMsg::Staking(
+    //         #[allow(deprecated)]
+    //         cw_multi_test::StakingSudo::ProcessQueue {},
+    //     ))
+    //     .unwrap();
 }
 
 #[track_caller]
-fn get_last_vault_pending_tx_id(contract: &Proxy<'_, MtApp, VaultMock<'_>>) -> Option<u64> {
+fn get_last_vault_pending_tx_id(contract: &Proxy<'_, MtApp, VaultMock>) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(Tx::id)
 }
 
 #[track_caller]
 fn get_last_external_staking_pending_tx_id(
-    contract: &Proxy<'_, MtApp, ExternalStakingContract<'_>>,
+    contract: &Proxy<'_, MtApp, ExternalStakingContract>,
 ) -> Option<u64> {
     let txs = contract.all_pending_txs_desc(None, None).unwrap().txs;
     txs.first().map(Tx::id)
@@ -324,36 +324,44 @@ fn instantiation() {
 fn bonding() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
 
     let app = init_app(&[user], &[300]);
 
     let (vault, _local_staking, _cross_staking1) = setup(&app, owner, 0, 100);
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::zero(),
             free: ValueRange::new_val(Uint128::zero()),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
 
     bond(&vault, user, 100);
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(100),
             free: ValueRange::new_val(Uint128::new(100)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
-        app.app().wrap().query_balance(user, OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(user_addr.to_string(), OSMO)
+            .unwrap(),
         coin(200, OSMO)
     );
     assert_eq!(
@@ -367,17 +375,22 @@ fn bonding() {
     bond(&vault, user, 150);
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(250),
             free: ValueRange::new_val(Uint128::new(250)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
-        app.app().wrap().query_balance(user, OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(user_addr.to_string(), OSMO)
+            .unwrap(),
         coin(50, OSMO)
     );
     assert_eq!(
@@ -390,19 +403,27 @@ fn bonding() {
 
     // Unbond some tokens
 
-    vault.unbond(coin(200, OSMO)).call(user).unwrap();
+    vault
+        .unbond(coin(200, OSMO))
+        .call(&user.into_bech32())
+        .unwrap();
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(50),
             free: ValueRange::new_val(Uint128::new(50)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
-        app.app().wrap().query_balance(user, OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(user_addr.to_string(), OSMO)
+            .unwrap(),
         coin(250, OSMO)
     );
     assert_eq!(
@@ -413,19 +434,24 @@ fn bonding() {
         coin(50, OSMO)
     );
 
-    vault.unbond(coin(20, OSMO)).call(user).unwrap();
+    vault.unbond(coin(20, OSMO)).call(&user_addr).unwrap();
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(30),
             free: ValueRange::new_val(Uint128::new(30)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
-        app.app().wrap().query_balance(user, OSMO).unwrap(),
+        app.app()
+            .wrap()
+            .query_balance(user_addr.to_string(), OSMO)
+            .unwrap(),
         coin(270, OSMO)
     );
     assert_eq!(
@@ -438,7 +464,10 @@ fn bonding() {
 
     // Unbonding over bounded fails
 
-    let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
+    let err = vault
+        .unbond(coin(100, OSMO))
+        .call(&user.into_bech32())
+        .unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(30)))
@@ -477,10 +506,10 @@ fn local_staking_disabled() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user.into_bech32())
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user.into_bech32().to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -495,6 +524,7 @@ fn local_staking_disabled() {
 fn stake_local() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     let val = "validator";
 
     let mut app = init_app(&[user], &[300]);
@@ -505,14 +535,16 @@ fn stake_local() {
     bond(&vault, user, 300);
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: ValueRange::new_val(Uint128::new(300)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
         app.app()
@@ -533,14 +565,16 @@ fn stake_local() {
     stake_locally(&vault, user, 100, val).unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: ValueRange::new_val(Uint128::new(200)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -559,14 +593,16 @@ fn stake_local() {
     stake_locally(&vault, user, 150, val).unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: ValueRange::new_val(Uint128::new(50)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -590,7 +626,7 @@ fn stake_local() {
 
     // Cannot unbond used collateral
 
-    let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
+    let err = vault.unbond(coin(100, OSMO)).call(&user_addr).unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
@@ -601,20 +637,22 @@ fn stake_local() {
     let proxy = proxy_for_user(&local_staking, user, &app);
     proxy
         .unstake(val.to_string(), coin(50, OSMO))
-        .call(user)
+        .call(&user_addr)
         .unwrap();
     process_staking_unbondings(&app);
-    proxy.release_unbonded().call(user).unwrap();
+    proxy.release_unbonded().call(&user_addr).unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: ValueRange::new_val(Uint128::new(100)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -632,20 +670,22 @@ fn stake_local() {
 
     proxy
         .unstake(val.to_string(), coin(100, OSMO))
-        .call(user)
+        .call(&user_addr)
         .unwrap();
     process_staking_unbondings(&app);
-    proxy.release_unbonded().call(user).unwrap();
+    proxy.release_unbonded().call(&user_addr).unwrap();
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: ValueRange::new_val(Uint128::new(200)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -666,7 +706,7 @@ fn stake_local() {
     // TODO: catch subcall error here
     // let err = proxy
     //     .unstake(val.to_string(), coin(200, OSMO))
-    //     .call(user)
+    //     .call(&user_addr)
     //     .unwrap_err();
     // assert_eq!(
     //     err,
@@ -678,6 +718,7 @@ fn stake_local() {
 fn stake_cross() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
 
     let app = init_app(&[user], &[300]);
 
@@ -693,14 +734,16 @@ fn stake_cross() {
     bond(&vault, user, 300);
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: ValueRange::new_val(Uint128::new(300)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     assert_eq!(
         app.app()
@@ -730,7 +773,7 @@ fn stake_cross() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user_addr)
         .unwrap();
 
     let res = vault.active_external_staking().unwrap();
@@ -741,7 +784,7 @@ fn stake_cross() {
         }
     );
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -757,10 +800,10 @@ fn stake_cross() {
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking
         .test_commit_stake(last_external_staking_tx)
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -769,7 +812,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(200)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -802,10 +847,10 @@ fn stake_cross() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user_addr)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -821,10 +866,10 @@ fn stake_cross() {
     println!("last_external_staking_tx: {:?}", last_external_staking_tx);
     cross_staking
         .test_commit_stake(last_external_staking_tx)
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -833,7 +878,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(50)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -867,10 +914,10 @@ fn stake_cross() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user_addr)
         .unwrap_err();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -884,7 +931,7 @@ fn stake_cross() {
 
     // Cannot unbond used collateral
 
-    let err = vault.unbond(coin(100, OSMO)).call(user).unwrap_err();
+    let err = vault.unbond(coin(100, OSMO)).call(&user_addr).unwrap_err();
     assert_eq!(
         err,
         ContractError::ClaimsLocked(ValueRange::new_val(Uint128::new(50)))
@@ -893,10 +940,10 @@ fn stake_cross() {
     // Unstake does not free collateral on vault right away
     cross_staking
         .unstake(validator.to_owned(), coin(50, OSMO))
-        .call(user)
+        .call(&user_addr)
         .unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -905,7 +952,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(50)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -934,16 +983,16 @@ fn stake_cross() {
     let tx_id = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
     cross_staking
         .test_commit_unstake(tx_id)
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // No tokens is withdrawn before unbonding period is over
     let insufficient_time = 99;
     skip_time(&app, insufficient_time);
 
-    cross_staking.withdraw_unbonded().call(user).unwrap();
+    cross_staking.withdraw_unbonded().call(&user_addr).unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -957,9 +1006,9 @@ fn stake_cross() {
     let remaining_time = 1;
     skip_time(&app, remaining_time);
 
-    cross_staking.withdraw_unbonded().call(user).unwrap();
+    cross_staking.withdraw_unbonded().call(&user_addr).unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -968,7 +1017,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(100)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -995,20 +1046,20 @@ fn stake_cross() {
     // Wait for the unbonding period and withdraw unbonded tokens.
     cross_staking
         .unstake(validator.to_owned(), coin(100, OSMO))
-        .call(user)
+        .call(&user_addr)
         .unwrap();
 
     let tx_id = get_last_external_staking_pending_tx_id(&cross_staking).unwrap();
     cross_staking
         .test_commit_unstake(tx_id)
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     skip_time(&app, unbond_period);
 
-    cross_staking.withdraw_unbonded().call(user).unwrap();
+    cross_staking.withdraw_unbonded().call(&user_addr).unwrap();
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -1017,7 +1068,9 @@ fn stake_cross() {
             free: ValueRange::new_val(Uint128::new(200)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -1045,8 +1098,8 @@ fn stake_cross() {
     // Error not verified as it is swallowed by intermediate contract
     // in this scenario
     cross_staking
-        .unstake(user.to_owned(), coin(300, OSMO))
-        .call(owner)
+        .unstake(user_addr.to_string(), coin(300, OSMO))
+        .call(&Addr::unchecked(owner))
         .unwrap_err();
 }
 
@@ -1054,7 +1107,9 @@ fn stake_cross() {
 fn stake_cross_txs() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     let user2 = "user2";
+    let user_addr2 = user2.into_bech32();
 
     let app = init_app(&[user, user2], &[300, 500]);
 
@@ -1070,19 +1125,21 @@ fn stake_cross_txs() {
     bond(&vault, user, 300);
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
             free: ValueRange::new_val(Uint128::new(300)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
 
     bond(&vault, user2, 500);
     assert_eq!(
-        vault.account(user2.to_owned()).unwrap(),
+        vault.account(user_addr2.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(500),
@@ -1121,7 +1178,7 @@ fn stake_cross_txs() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user_addr)
         .unwrap();
 
     // One pending tx
@@ -1139,7 +1196,7 @@ fn stake_cross_txs() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user_addr)
         .unwrap();
     // Store for later
     let second_tx = get_last_vault_pending_tx_id(&vault).unwrap();
@@ -1154,7 +1211,7 @@ fn stake_cross_txs() {
             })
             .unwrap(),
         )
-        .call(user2)
+        .call(&user_addr2)
         .unwrap();
 
     // Three pending txs
@@ -1164,7 +1221,7 @@ fn stake_cross_txs() {
     let last_tx = get_last_vault_pending_tx_id(&vault).unwrap();
     vault
         .commit_tx(last_tx)
-        .call(cross_staking.contract_addr.as_str())
+        .call(&cross_staking.contract_addr)
         .unwrap();
 
     // Two pending txs now
@@ -1185,7 +1242,7 @@ fn stake_cross_txs() {
 
     // Can query account while pending
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse::new(
             OSMO,
             Uint128::new(300),
@@ -1195,11 +1252,11 @@ fn stake_cross_txs() {
     // Can query claims, and value ranges are reported
     assert_eq!(
         vault
-            .account_claims(user.to_owned(), None, None)
+            .account_claims(user_addr.to_string(), None, None)
             .unwrap()
             .claims,
         [LienResponse {
-            lienholder: "contract2".to_string(),
+            lienholder: cross_staking.contract_addr.to_string(),
             amount: ValueRange::new(Uint128::zero(), Uint128::new(150))
         }]
     );
@@ -1217,7 +1274,7 @@ fn stake_cross_txs() {
         accounts.accounts,
         vec![
             AllAccountsResponseItem {
-                user: user.to_string(),
+                user: user_addr.to_string(),
                 account: AccountResponse {
                     denom: OSMO.to_owned(),
                     bonded: Uint128::new(300),
@@ -1225,7 +1282,7 @@ fn stake_cross_txs() {
                 },
             },
             AllAccountsResponseItem {
-                user: user2.to_string(),
+                user: user_addr2.to_string(),
                 account: AccountResponse {
                     denom: OSMO.to_owned(),
                     bonded: Uint128::new(500),
@@ -1236,7 +1293,7 @@ fn stake_cross_txs() {
     );
 
     // Can query the other account as well
-    let acc = vault.account(user2.to_owned()).unwrap();
+    let acc = vault.account(user_addr2.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -1246,7 +1303,9 @@ fn stake_cross_txs() {
         }
     );
     // Can query the other account claims
-    let claims = vault.account_claims(user2.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr2.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -1258,11 +1317,11 @@ fn stake_cross_txs() {
     // Commit first tx
     vault
         .commit_tx(first_tx)
-        .call(cross_staking.contract_addr.as_str())
+        .call(&cross_staking.contract_addr)
         .unwrap();
 
     // Can query account
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -1273,7 +1332,9 @@ fn stake_cross_txs() {
     );
     // Can query claims
     // The other tx is still pending, and that is reflected in the reported value range
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [LienResponse {
@@ -1294,6 +1355,7 @@ fn stake_cross_txs() {
 fn stake_cross_rollback_tx() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
 
     let app = init_app(&[user], &[300]);
 
@@ -1309,7 +1371,7 @@ fn stake_cross_rollback_tx() {
     bond(&vault, user, 300);
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(300),
@@ -1328,7 +1390,7 @@ fn stake_cross_rollback_tx() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user_addr)
         .unwrap();
 
     // One pending tx
@@ -1338,7 +1400,7 @@ fn stake_cross_rollback_tx() {
     let last_tx = get_last_vault_pending_tx_id(&vault).unwrap();
     vault
         .rollback_tx(last_tx)
-        .call(cross_staking.contract_addr.as_str())
+        .call(&cross_staking.contract_addr)
         .unwrap();
 
     // No pending txs
@@ -1349,7 +1411,7 @@ fn stake_cross_rollback_tx() {
         .is_empty());
 
     // Funds are restored
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -1359,7 +1421,9 @@ fn stake_cross_rollback_tx() {
         }
     );
     // No non-empty claims
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(claims.claims, []);
     // Vault has the funds
     assert_eq!(
@@ -1375,6 +1439,7 @@ fn stake_cross_rollback_tx() {
 fn multiple_stakes() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     let local_validator = "local";
 
     let mut app = init_app(&[user], &[1000]);
@@ -1406,28 +1471,30 @@ fn multiple_stakes() {
     stake_remotely(&vault, &cross_staking2, user, &[validator], &[100]);
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse {
             denom: OSMO.to_owned(),
             bonded: Uint128::new(1000),
             free: ValueRange::new_val(Uint128::new(700)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(300))
+                lienholder: cross_staking2.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(100))
             },
             LienResponse {
                 lienholder: cross_staking1.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(200))
             },
             LienResponse {
-                lienholder: cross_staking2.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(100))
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(300))
             },
         ]
     );
@@ -1443,28 +1510,30 @@ fn multiple_stakes() {
     stake_remotely(&vault, &cross_staking2, user, &[validator], &[400]);
 
     assert_eq!(
-        vault.account(user.to_owned()).unwrap(),
+        vault.account(user_addr.to_string()).unwrap(),
         AccountResponse::new(
             OSMO,
             Uint128::new(1000),
             ValueRange::new_val(Uint128::new(430))
         ),
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(300))
+                lienholder: cross_staking2.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(500))
             },
             LienResponse {
                 lienholder: cross_staking1.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(400))
             },
             LienResponse {
-                lienholder: cross_staking2.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(500))
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(300))
             },
         ]
     );
@@ -1484,7 +1553,7 @@ fn multiple_stakes() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user_addr)
         .unwrap_err();
 
     assert_eq!(err, ContractError::InsufficentBalance);
@@ -1494,6 +1563,7 @@ fn multiple_stakes() {
 fn all_users_fetching() {
     let owner = "owner";
     let users = ["user1", "user2"];
+    let user_addrs = ["user1".into_bech32(), "user2".into_bech32()];
     let collaterals = [300, 300];
 
     let app = init_app(&users, &collaterals);
@@ -1515,7 +1585,7 @@ fn all_users_fetching() {
     assert_eq!(
         accounts.accounts,
         [AllAccountsResponseItem {
-            user: users[0].to_string(),
+            user: user_addrs[0].to_string(),
             account: AccountResponse::new(
                 OSMO,
                 Uint128::new(100),
@@ -1528,7 +1598,7 @@ fn all_users_fetching() {
     assert_eq!(
         accounts.accounts,
         [AllAccountsResponseItem {
-            user: users[0].to_string(),
+            user: user_addrs[0].to_string(),
             account: AccountResponse::new(
                 OSMO,
                 Uint128::new(100),
@@ -1545,7 +1615,7 @@ fn all_users_fetching() {
         accounts.accounts,
         [
             AllAccountsResponseItem {
-                user: users[0].to_string(),
+                user: user_addrs[0].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::new(100),
@@ -1553,7 +1623,7 @@ fn all_users_fetching() {
                 )
             },
             AllAccountsResponseItem {
-                user: users[1].to_string(),
+                user: user_addrs[1].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::new(200),
@@ -1568,7 +1638,7 @@ fn all_users_fetching() {
         accounts.accounts,
         [
             AllAccountsResponseItem {
-                user: users[0].to_string(),
+                user: user_addrs[0].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::new(100),
@@ -1576,7 +1646,7 @@ fn all_users_fetching() {
                 )
             },
             AllAccountsResponseItem {
-                user: users[1].to_string(),
+                user: user_addrs[1].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::new(200),
@@ -1588,14 +1658,14 @@ fn all_users_fetching() {
 
     // After unbonding some, but not all collateral, user shall still be visible
 
-    vault.unbond(coin(50, OSMO)).call(users[0]).unwrap();
+    vault.unbond(coin(50, OSMO)).call(&user_addrs[0]).unwrap();
 
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
         accounts.accounts,
         [
             AllAccountsResponseItem {
-                user: users[0].to_string(),
+                user: user_addrs[0].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::new(50),
@@ -1603,7 +1673,7 @@ fn all_users_fetching() {
                 )
             },
             AllAccountsResponseItem {
-                user: users[1].to_string(),
+                user: user_addrs[1].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::new(200),
@@ -1618,7 +1688,7 @@ fn all_users_fetching() {
         accounts.accounts,
         [
             AllAccountsResponseItem {
-                user: users[0].to_string(),
+                user: user_addrs[0].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::new(50),
@@ -1626,7 +1696,7 @@ fn all_users_fetching() {
                 )
             },
             AllAccountsResponseItem {
-                user: users[1].to_string(),
+                user: user_addrs[1].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::new(200),
@@ -1637,14 +1707,14 @@ fn all_users_fetching() {
     );
 
     // Unbonding all the collateral hides the user when the collateral flag is set
-    vault.unbond(coin(200, OSMO)).call(users[1]).unwrap();
+    vault.unbond(coin(200, OSMO)).call(&user_addrs[1]).unwrap();
 
     let accounts = vault.all_accounts(false, None, None).unwrap();
     assert_eq!(
         accounts.accounts,
         [
             AllAccountsResponseItem {
-                user: users[0].to_string(),
+                user: user_addrs[0].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::new(50),
@@ -1652,7 +1722,7 @@ fn all_users_fetching() {
                 )
             },
             AllAccountsResponseItem {
-                user: users[1].to_string(),
+                user: user_addrs[1].to_string(),
                 account: AccountResponse::new(
                     OSMO,
                     Uint128::zero(),
@@ -1666,7 +1736,7 @@ fn all_users_fetching() {
     assert_eq!(
         accounts.accounts,
         [AllAccountsResponseItem {
-            user: users[0].to_string(),
+            user: user_addrs[0].to_string(),
             account: AccountResponse::new(
                 OSMO,
                 Uint128::new(50),
@@ -1682,6 +1752,7 @@ fn all_users_fetching() {
 fn cross_slash_scenario_1() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     // Remote slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
@@ -1708,7 +1779,7 @@ fn cross_slash_scenario_1() {
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &validators, &[100, 50]);
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -1717,22 +1788,24 @@ fn cross_slash_scenario_1() {
             free: ValueRange::new_val(Uint128::new(10)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(local_stake))
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(150))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(local_stake))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
     // Total slashable
@@ -1747,37 +1820,39 @@ fn cross_slash_scenario_1() {
 
     // Cross stakes
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(100)));
     let cross_stake2 = cross_staking
-        .stake(user.to_string(), validator2.to_string())
+        .stake(user_addr.to_string(), validator2.to_string())
         .unwrap();
     assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50)));
 
     // Validator 1 is slashed
     cross_staking
         .test_handle_slashing(validator1.to_string(), Uint128::new(10))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(local_stake))
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(140))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(local_stake))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
     // Total slashable
@@ -1792,11 +1867,11 @@ fn cross_slash_scenario_1() {
 
     // Cross stake
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(90))); // 10% slashed
     let cross_stake2 = cross_staking
-        .stake(user.to_string(), validator2.to_string())
+        .stake(user_addr.to_string(), validator2.to_string())
         .unwrap();
     assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50))); // no slashing
 }
@@ -1807,6 +1882,7 @@ fn cross_slash_scenario_1() {
 fn cross_slash_scenario_2() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     // Remote slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
@@ -1832,22 +1908,24 @@ fn cross_slash_scenario_2() {
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &[validator1], &[200]);
 
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
+                lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(200))
             },
             LienResponse {
-                lienholder: cross_staking.contract_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(200))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(200)));
     // Total slashable
@@ -1862,33 +1940,35 @@ fn cross_slash_scenario_2() {
 
     // Cross stakes
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(200)));
 
     // Validator 1 is slashed
     cross_staking
         .test_handle_slashing(validator1.to_string(), Uint128::new(20))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
+                lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(180))
             },
             LienResponse {
-                lienholder: cross_staking.contract_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(180))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(180)));
     // Total slashable
@@ -1903,7 +1983,7 @@ fn cross_slash_scenario_2() {
 
     // Cross stakes
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(180))); // 10% slashed
 }
@@ -1914,6 +1994,7 @@ fn cross_slash_scenario_2() {
 fn cross_slash_scenario_3() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     // Remote slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
@@ -1939,22 +2020,24 @@ fn cross_slash_scenario_3() {
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &[validator1], &[150]);
 
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(190))
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(150))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(190))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
     // Total slashable
@@ -1969,33 +2052,35 @@ fn cross_slash_scenario_3() {
 
     // Cross stakes
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(150)));
 
     // Validator 1 is slashed
     cross_staking
         .test_handle_slashing(validator1.to_string(), Uint128::new(15))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(185))
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(135))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(185))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(185)));
     // Total slashable
@@ -2010,7 +2095,7 @@ fn cross_slash_scenario_3() {
 
     // Cross stakes
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(135))); // 10% slashed
 }
@@ -2021,6 +2106,7 @@ fn cross_slash_scenario_3() {
 fn cross_slash_scenario_4() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     // Remote slashing percentage
     let slashing_percentage = 10;
     let local_validator = "local";
@@ -2050,26 +2136,28 @@ fn cross_slash_scenario_4() {
     stake_remotely(&vault, &cross_staking_1, user, &validators_1, &[140, 40]);
     stake_remotely(&vault, &cross_staking_2, user, &validators_2, &[100, 88]);
 
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(190))
+                lienholder: cross_staking_2.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(188))
             },
             LienResponse {
                 lienholder: cross_staking_1.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(180))
             },
             LienResponse {
-                lienholder: cross_staking_2.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(188))
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(190))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
     // Total slashable
@@ -2084,40 +2172,58 @@ fn cross_slash_scenario_4() {
 
     // Cross stake
     let cross_stake1 = cross_staking_1
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake1.stakes,
         [
-            StakeInfo::new(user, validators_1[0], &Stake::from_amount(140u128.into())),
-            StakeInfo::new(user, validators_1[1], &Stake::from_amount(40u128.into()))
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_1[0],
+                &Stake::from_amount(140u128.into())
+            ),
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_1[1],
+                &Stake::from_amount(40u128.into())
+            )
         ]
     );
 
     let cross_stake2 = cross_staking_2
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake2.stakes,
         [
-            StakeInfo::new(user, validators_2[0], &Stake::from_amount(100u128.into())),
-            StakeInfo::new(user, validators_2[1], &Stake::from_amount(88u128.into()))
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_2[0],
+                &Stake::from_amount(100u128.into())
+            ),
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_2[1],
+                &Stake::from_amount(88u128.into())
+            )
         ]
     );
 
     // Validator 1 is slashed
     cross_staking_1
         .test_handle_slashing(validator1.to_string(), Uint128::new(14))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
+                lienholder: cross_staking_2.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(186))
             },
             LienResponse {
@@ -2125,13 +2231,13 @@ fn cross_slash_scenario_4() {
                 amount: ValueRange::new_val(Uint128::new(166))
             },
             LienResponse {
-                lienholder: cross_staking_2.contract_addr.to_string(),
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(186))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(186)));
     // Total slashable
@@ -2146,25 +2252,41 @@ fn cross_slash_scenario_4() {
 
     // Cross stake
     let cross_stake1 = cross_staking_1
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake1.stakes,
         [
-            StakeInfo::new(user, validators_1[0], &Stake::from_amount(126u128.into())),
-            StakeInfo::new(user, validators_1[1], &Stake::from_amount(40u128.into()))
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_1[0],
+                &Stake::from_amount(126u128.into())
+            ),
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_1[1],
+                &Stake::from_amount(40u128.into())
+            )
         ]
     );
 
     // Considering external-staking slashing propagation
     let cross_stake2 = cross_staking_2
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake2.stakes,
         [
-            StakeInfo::new(user, validators_2[0], &Stake::from_amount(99u128.into())),
-            StakeInfo::new(user, validators_2[1], &Stake::from_amount(87u128.into()))
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_2[0],
+                &Stake::from_amount(99u128.into())
+            ),
+            StakeInfo::new(
+                user_addr.as_str(),
+                validators_2[1],
+                &Stake::from_amount(87u128.into())
+            )
         ]
     );
 }
@@ -2175,6 +2297,7 @@ fn cross_slash_scenario_4() {
 fn cross_slash_scenario_5() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     // Remote slashing percentage
     let slashing_percentage = 50;
     let collateral = 200;
@@ -2208,30 +2331,32 @@ fn cross_slash_scenario_5() {
     stake_remotely(&vault, &cross_staking_2, user, &[validator2], &[80]);
     stake_remotely(&vault, &cross_staking_3, user, &[validator3], &[100]);
 
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
+                lienholder: cross_staking_3.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(100))
-            },
-            LienResponse {
-                lienholder: cross_staking_1.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(180))
             },
             LienResponse {
                 lienholder: cross_staking_2.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(80))
             },
             LienResponse {
-                lienholder: cross_staking_3.contract_addr.to_string(),
+                lienholder: cross_staking_1.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(180))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(100))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(180)));
     // Total slashable
@@ -2246,36 +2371,36 @@ fn cross_slash_scenario_5() {
 
     // Cross stake
     let cross_stake1 = cross_staking_1
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake1.stakes,
         [StakeInfo::new(
-            user,
+            user_addr.as_str(),
             validators[0],
             &Stake::from_amount(180u128.into())
         ),]
     );
 
     let cross_stake2 = cross_staking_2
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake2.stakes,
         [StakeInfo::new(
-            user,
+            user_addr.as_str(),
             validators[1],
             &Stake::from_amount(80u128.into())
         ),]
     );
 
     let cross_stake3 = cross_staking_3
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake3.stakes,
         [StakeInfo::new(
-            user,
+            user_addr.as_str(),
             validators[2],
             &Stake::from_amount(100u128.into())
         ),]
@@ -2285,36 +2410,38 @@ fn cross_slash_scenario_5() {
     cross_staking_1
         .test_handle_slashing(
             validator1.to_string(),
-            Uint128::new(180) * Decimal::percent(slashing_percentage),
+            Uint128::new(180).mul_floor(Decimal::percent(slashing_percentage)),
         )
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
+                lienholder: cross_staking_3.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(78)) // Rounded down
-            },
-            LienResponse {
-                lienholder: cross_staking_1.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(68)) // Rounded down
             },
             LienResponse {
                 lienholder: cross_staking_2.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(58)) // Rounded down
             },
             LienResponse {
-                lienholder: cross_staking_3.contract_addr.to_string(),
+                lienholder: cross_staking_1.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(68)) // Rounded down
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(78)) // Rounded down
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(78)));
     // Total slashable
@@ -2330,36 +2457,36 @@ fn cross_slash_scenario_5() {
     // Cross stake
     // Considering external-staking slashing propagation
     let cross_stake1 = cross_staking_1
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake1.stakes,
         [StakeInfo::new(
-            user,
+            user_addr.as_str(),
             validators[0],
             &Stake::from_amount(68u128.into())
         ),]
     );
 
     let cross_stake2 = cross_staking_2
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake2.stakes,
         [StakeInfo::new(
-            user,
+            user_addr.as_str(),
             validators[1],
             &Stake::from_amount(58u128.into())
         ),]
     );
 
     let cross_stake3 = cross_staking_3
-        .stakes(user.to_string(), None, None)
+        .stakes(user_addr.to_string(), None, None)
         .unwrap();
     assert_eq!(
         cross_stake3.stakes,
         [StakeInfo::new(
-            user,
+            user_addr.as_str(),
             validators[2],
             &Stake::from_amount(78u128.into())
         ),]
@@ -2372,6 +2499,7 @@ fn cross_slash_scenario_5() {
 fn cross_slash_no_native_staking() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     // Remote slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
@@ -2395,22 +2523,24 @@ fn cross_slash_no_native_staking() {
     stake_remotely(&vault, &cross_staking_1, user, &validators_1, &[140, 40]);
     stake_remotely(&vault, &cross_staking_2, user, &validators_2, &[100, 88]);
 
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: cross_staking_1.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(180))
-            },
-            LienResponse {
                 lienholder: cross_staking_2.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(188))
+            },
+            LienResponse {
+                lienholder: cross_staking_1.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(180))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(188)));
     // Total slashable
@@ -2426,26 +2556,28 @@ fn cross_slash_no_native_staking() {
     // Validator 1 is slashed
     cross_staking_1
         .test_handle_slashing(validator1.to_string(), Uint128::new(14))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: cross_staking_1.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(166))
-            },
-            LienResponse {
                 lienholder: cross_staking_2.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(186))
+            },
+            LienResponse {
+                lienholder: cross_staking_1.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(166))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(186)));
     // Total slashable
@@ -2464,6 +2596,7 @@ fn cross_slash_no_native_staking() {
 fn cross_slash_pending_unbonding() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     // Remote slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
@@ -2490,7 +2623,7 @@ fn cross_slash_pending_unbonding() {
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &validators, &[100, 50]);
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -2499,22 +2632,24 @@ fn cross_slash_pending_unbonding() {
             free: ValueRange::new_val(Uint128::new(10)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(local_stake))
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(150))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(local_stake))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
     // Total slashable
@@ -2529,26 +2664,26 @@ fn cross_slash_pending_unbonding() {
 
     // Cross stakes
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(100)));
     let cross_stake2 = cross_staking
-        .stake(user.to_string(), validator2.to_string())
+        .stake(user_addr.to_string(), validator2.to_string())
         .unwrap();
     assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50)));
 
     // Unbond half the stake of validator1
     cross_staking
         .unstake(validator1.to_owned(), coin(50, OSMO))
-        .call(user)
+        .call(&user_addr)
         .unwrap();
     cross_staking
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&cross_staking).unwrap())
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
     // Cross stakes amount
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(50)));
     assert_eq!(cross_stake1.pending_unbonds[0].amount, Uint128::new(50));
@@ -2556,26 +2691,28 @@ fn cross_slash_pending_unbonding() {
     // Validator 1 is slashed, over the current bond
     cross_staking
         .test_handle_slashing(validator1.to_string(), Uint128::new(5))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(local_stake))
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(140)) // 10% slashed
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(local_stake))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
     // Total slashable
@@ -2590,13 +2727,13 @@ fn cross_slash_pending_unbonding() {
 
     // Cross stake
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(45))); // 10% slashed
                                                                            // Pending unbondings have been slashed
     assert_eq!(cross_stake1.pending_unbonds[0].amount, Uint128::new(45)); // 10% slashed
     let cross_stake2 = cross_staking
-        .stake(user.to_string(), validator2.to_string())
+        .stake(user_addr.to_string(), validator2.to_string())
         .unwrap();
     assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50))); // no slashing
                                                                            // No pending unbondings
@@ -2607,8 +2744,10 @@ fn cross_slash_pending_unbonding() {
 /// Same as scenario 1 but with native slashing, because of double-signing.
 #[test]
 fn native_slashing_tombstoning() {
+    // TODO: not fix yet
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     // Native slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
@@ -2634,7 +2773,7 @@ fn native_slashing_tombstoning() {
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &validators, &[100, 50]);
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -2643,22 +2782,24 @@ fn native_slashing_tombstoning() {
             free: ValueRange::new_val(Uint128::new(10)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(190))
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(150))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(190))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
     // Total slashable
@@ -2673,37 +2814,39 @@ fn native_slashing_tombstoning() {
 
     // Cross stakes
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(100)));
     let cross_stake2 = cross_staking
-        .stake(user.to_string(), validator2.to_string())
+        .stake(user_addr.to_string(), validator2.to_string())
         .unwrap();
     assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50)));
 
     // Local validator is tombstoned (which implies slashing)
     local_staking
         .test_handle_jailing(vec![], vec![local_validator.to_string()])
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(171)) // 10% slashing
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(150))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(171)) // 10% slashing
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(171))); // Adjusted
                                                                               // Total slashable
@@ -2718,11 +2861,11 @@ fn native_slashing_tombstoning() {
 
     // Cross stake
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(100))); // no slashing
     let cross_stake2 = cross_staking
-        .stake(user.to_string(), validator2.to_string())
+        .stake(user_addr.to_string(), validator2.to_string())
         .unwrap();
     assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50))); // no slashing
 }
@@ -2733,6 +2876,7 @@ fn native_slashing_tombstoning() {
 fn native_slashing_jailing() {
     let owner = "owner";
     let user = "user1";
+    let user_addr = user.into_bech32();
     // Native slashing percentage
     let slashing_percentage = 10;
     let collateral = 200;
@@ -2758,7 +2902,7 @@ fn native_slashing_jailing() {
     // Stake some tokens remotely
     stake_remotely(&vault, &cross_staking, user, &validators, &[100, 50]);
 
-    let acc = vault.account(user.to_owned()).unwrap();
+    let acc = vault.account(user_addr.to_string()).unwrap();
     assert_eq!(
         acc,
         AccountResponse {
@@ -2767,22 +2911,24 @@ fn native_slashing_jailing() {
             free: ValueRange::new_val(Uint128::new(10)),
         }
     );
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(190))
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(150))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(190))
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(190)));
     // Total slashable
@@ -2797,37 +2943,39 @@ fn native_slashing_jailing() {
 
     // Cross stakes
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(100)));
     let cross_stake2 = cross_staking
-        .stake(user.to_string(), validator2.to_string())
+        .stake(user_addr.to_string(), validator2.to_string())
         .unwrap();
     assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50)));
 
     // Local validator is jailed (which implies slashing)
     local_staking
         .test_handle_jailing(vec![local_validator.to_string()], vec![])
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Liens
-    let claims = vault.account_claims(user.to_owned(), None, None).unwrap();
+    let claims = vault
+        .account_claims(user_addr.to_string(), None, None)
+        .unwrap();
     assert_eq!(
         claims.claims,
         [
             LienResponse {
-                lienholder: local_staking.contract_addr.to_string(),
-                amount: ValueRange::new_val(Uint128::new(171)) // 10% slashing
-            },
-            LienResponse {
                 lienholder: cross_staking.contract_addr.to_string(),
                 amount: ValueRange::new_val(Uint128::new(150))
+            },
+            LienResponse {
+                lienholder: local_staking.contract_addr.to_string(),
+                amount: ValueRange::new_val(Uint128::new(171)) // 10% slashing
             },
         ]
     );
 
-    let acc_details = vault.account_details(user.to_owned()).unwrap();
+    let acc_details = vault.account_details(user_addr.to_string()).unwrap();
     // Max lien
     assert_eq!(acc_details.max_lien, ValueRange::new_val(Uint128::new(171))); // Adjusted
                                                                               // Total slashable
@@ -2842,11 +2990,11 @@ fn native_slashing_jailing() {
 
     // Cross stake
     let cross_stake1 = cross_staking
-        .stake(user.to_string(), validator1.to_string())
+        .stake(user_addr.to_string(), validator1.to_string())
         .unwrap();
     assert_eq!(cross_stake1.stake, ValueRange::new_val(Uint128::new(100))); // no slashing
     let cross_stake2 = cross_staking
-        .stake(user.to_string(), validator2.to_string())
+        .stake(user_addr.to_string(), validator2.to_string())
         .unwrap();
     assert_eq!(cross_stake2.stake, ValueRange::new_val(Uint128::new(50))); // no slashing
 }

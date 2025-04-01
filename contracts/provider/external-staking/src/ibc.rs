@@ -164,8 +164,7 @@ pub fn ibc_packet_receive(
                 &slashed,
             )?;
             let ack = ack_success(&ValsetUpdateAck {})?;
-            IbcReceiveResponse::new()
-                .set_ack(ack)
+            IbcReceiveResponse::new(ack)
                 .add_event(evt)
                 .add_messages(msgs)
         }
@@ -178,17 +177,17 @@ pub fn ibc_packet_receive(
             let evt =
                 contract.internal_unstake(deps, env, delegator, validator, inverted_amount)?;
             let ack = ack_success(&DistributeAck {})?;
-            IbcReceiveResponse::new().set_ack(ack).add_event(evt)
+            IbcReceiveResponse::new(ack).add_event(evt)
         }
         ConsumerPacket::Distribute { validator, rewards } => {
             let evt = contract.distribute_rewards(deps, &validator, rewards)?;
             let ack = ack_success(&DistributeAck {})?;
-            IbcReceiveResponse::new().set_ack(ack).add_event(evt)
+            IbcReceiveResponse::new(ack).add_event(evt)
         }
         ConsumerPacket::DistributeBatch { rewards, denom } => {
             let evts = contract.distribute_rewards_batch(deps, &rewards, &denom)?;
             let ack = ack_success(&DistributeAck {})?;
-            IbcReceiveResponse::new().set_ack(ack).add_events(evts)
+            IbcReceiveResponse::new(ack).add_events(evts)
         }
     };
 

@@ -2,8 +2,8 @@ mod utils;
 
 use anyhow::Result as AnyResult;
 
-use cosmwasm_std::{coin, coins, to_json_binary, Decimal, Uint128};
-use cw_multi_test::App as MtApp;
+use cosmwasm_std::{coin, coins, to_json_binary, Addr, Decimal, Uint128};
+use cw_multi_test::{App as MtApp, IntoBech32};
 use mesh_native_staking::contract::sv::mt::CodeId as NativeStakingCodeId;
 use mesh_native_staking::contract::sv::InstantiateMsg as NativeStakingInstantiateMsg;
 use mesh_native_staking_proxy::mock::sv::mt::CodeId as NativeStakingProxyCodeId;
@@ -46,8 +46,8 @@ fn setup<'app>(
     owner: &'app str,
     unbond_period: u64,
 ) -> AnyResult<(
-    Proxy<'app, MtApp, VaultMock<'app>>,
-    Proxy<'app, MtApp, ExternalStakingContract<'app>>,
+    Proxy<'app, MtApp, VaultMock>,
+    Proxy<'app, MtApp, ExternalStakingContract>,
 )> {
     let native_staking_proxy_code = NativeStakingProxyCodeId::store_code(app);
     let native_staking_code = NativeStakingCodeId::store_code(app);
@@ -70,7 +70,7 @@ fn setup<'app>(
 
     let vault = vault_code
         .instantiate(OSMO.to_owned(), Some(LocalStakingInfo::New(staking_init)))
-        .call(owner)?;
+        .call(&owner.into_bech32())?;
 
     let remote_contact = AuthorizedEndpoint::new("connection-2", "wasm-osmo1foobarbaz");
 
@@ -86,7 +86,7 @@ fn setup<'app>(
                 offline: Decimal::percent(SLASHING_PERCENTAGE),
             },
         )
-        .call(owner)?;
+        .call(&owner.into_bech32())?;
 
     Ok((vault, contract))
 }
@@ -100,7 +100,9 @@ fn instantiate() {
 
     let (_, contract) = setup(&app, owner, 100).unwrap();
 
-    let stakes = contract.stakes(users[0].to_owned(), None, None).unwrap();
+    let stakes = contract
+        .stakes(users[0].into_bech32().to_string(), None, None)
+        .unwrap();
     assert_eq!(stakes.stakes, []);
 
     let max_slash = contract.max_slash().unwrap();
@@ -111,12 +113,15 @@ fn instantiate() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn staking() {
-    let users = ["user1", "user2"];
+    let users = ["user1".into_bech32(), "user2".into_bech32()];
     let owner = "owner";
 
-    let app =
-        App::new_with_balances(&[(users[0], &coins(300, OSMO)), (users[1], &coins(300, OSMO))]);
+    let app = App::new_with_balances(&[
+        (users[0].as_str(), &coins(300, OSMO)),
+        (users[1].as_str(), &coins(300, OSMO)),
+    ]);
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
@@ -126,13 +131,13 @@ fn staking() {
     vault
         .bond()
         .with_funds(&coins(300, OSMO))
-        .call(users[0])
+        .call(&users[0])
         .unwrap();
 
     vault
         .bond()
         .with_funds(&coins(300, OSMO))
-        .call(users[1])
+        .call(&users[1])
         .unwrap();
 
     /*
@@ -147,20 +152,32 @@ fn staking() {
     // Note that the error didn't happen in vault, but in a SubMsg, so this should be some StdError not ContractError...
     let res = vault
         .stake_remote(contract.contract_addr.to_string(), coin(100, OSMO), msg)
-        .call(users[0]);
+        .call(users_addr[0]);
     println!("GOT: {:?}", res);
     assert!(res.is_err());
     */
 
-    vault.stake(&contract, users[0], validators[0], coin(100, OSMO));
-    vault.stake(&contract, users[0], validators[1], coin(100, OSMO));
-    vault.stake(&contract, users[0], validators[0], coin(100, OSMO));
-    vault.stake(&contract, users[1], validators[0], coin(100, OSMO));
-    vault.stake(&contract, users[1], validators[1], coin(200, OSMO));
+    vault.stake(&contract, users[0].as_str(), validators[0], coin(100, OSMO));
+    vault.stake(&contract, users[0].as_str(), validators[1], coin(100, OSMO));
+    vault.stake(&contract, users[0].as_str(), validators[0], coin(100, OSMO));
+    vault.stake(&contract, users[1].as_str(), validators[0], coin(100, OSMO));
+    vault.stake(&contract, users[1].as_str(), validators[1], coin(200, OSMO));
 
     // All tokens should be only on the vault contract
-    assert_eq!(app.app().wrap().query_all_balances(users[0]).unwrap(), []);
-    assert_eq!(app.app().wrap().query_all_balances(users[1]).unwrap(), []);
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_all_balances(users[0].as_str())
+            .unwrap(),
+        []
+    );
+    assert_eq!(
+        app.app()
+            .wrap()
+            .query_all_balances(users[1].as_str())
+            .unwrap(),
+        []
+    );
     assert_eq!(
         app.app()
             .wrap()
@@ -178,51 +195,69 @@ fn staking() {
 
     // Querying for particular stakes
     let stake = contract
-        .stake(users[0].to_owned(), validators[0].to_owned())
+        .stake(users[0].to_string(), validators[0].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(200)));
 
     let stake = contract
-        .stake(users[0].to_owned(), validators[1].to_owned())
+        .stake(users[0].to_string(), validators[1].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
-        .stake(users[1].to_owned(), validators[0].to_owned())
+        .stake(users[1].to_string(), validators[0].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
-        .stake(users[1].to_owned(), validators[1].to_owned())
+        .stake(users[1].to_string(), validators[1].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(200)));
 
     // Querying fo all the stakes
-    let stakes = contract.stakes(users[0].to_owned(), None, None).unwrap();
+    let stakes = contract.stakes(users[0].to_string(), None, None).unwrap();
     assert_eq!(
         stakes.stakes,
         [
-            StakeInfo::new(users[0], validators[0], &Stake::from_amount(200u128.into())),
-            StakeInfo::new(users[0], validators[1], &Stake::from_amount(100u128.into()))
+            StakeInfo::new(
+                users[0].as_str(),
+                validators[0],
+                &Stake::from_amount(200u128.into())
+            ),
+            StakeInfo::new(
+                users[0].as_str(),
+                validators[1],
+                &Stake::from_amount(100u128.into())
+            )
         ]
     );
 
-    let stakes = contract.stakes(users[1].to_owned(), None, None).unwrap();
+    let stakes = contract.stakes(users[1].to_string(), None, None).unwrap();
     assert_eq!(
         stakes.stakes,
         [
-            StakeInfo::new(users[1], validators[0], &Stake::from_amount(100u128.into())),
-            StakeInfo::new(users[1], validators[1], &Stake::from_amount(200u128.into()))
+            StakeInfo::new(
+                users[1].as_str(),
+                validators[0],
+                &Stake::from_amount(100u128.into())
+            ),
+            StakeInfo::new(
+                users[1].as_str(),
+                validators[1],
+                &Stake::from_amount(200u128.into())
+            )
         ]
     );
 }
 
 #[test]
 fn unstaking() {
-    let users = ["user1", "user2"];
+    let users_addr = [&"user1".into_bech32(), &"user2".into_bech32()];
 
-    let app =
-        App::new_with_balances(&[(users[0], &coins(300, OSMO)), (users[1], &coins(300, OSMO))]);
+    let app = App::new_with_balances(&[
+        (users_addr[0].as_str(), &coins(300, OSMO)),
+        (users_addr[1].as_str(), &coins(300, OSMO)),
+    ]);
 
     let owner = "owner";
 
@@ -233,112 +268,139 @@ fn unstaking() {
     vault
         .bond()
         .with_funds(&coins(300, OSMO))
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     vault
         .bond()
         .with_funds(&coins(300, OSMO))
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
 
-    vault.stake(&contract, users[0], validators[0], coin(200, OSMO));
-    vault.stake(&contract, users[0], validators[1], coin(100, OSMO));
-    vault.stake(&contract, users[1], validators[0], coin(300, OSMO));
+    vault.stake(
+        &contract,
+        users_addr[0].as_str(),
+        validators[0],
+        coin(200, OSMO),
+    );
+    vault.stake(
+        &contract,
+        users_addr[0].as_str(),
+        validators[1],
+        coin(100, OSMO),
+    );
+    vault.stake(
+        &contract,
+        users_addr[1].as_str(),
+        validators[0],
+        coin(300, OSMO),
+    );
 
     // Properly unstake some tokens
     // users[0] unstakes 50 from validators[0] - 150 left staken in 2 batches
     // users[1] usntakes 60 from validators[0] - 240 left staken
     contract
         .unstake(validators[0].to_string(), coin(20, OSMO))
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     contract
         .unstake(validators[0].to_string(), coin(30, OSMO))
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     contract
         .unstake(validators[0].to_string(), coin(60, OSMO))
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Trying some unstakes over what is staken fails
     let err = contract
         .unstake(validators[1].to_string(), coin(110, OSMO))
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap_err();
     assert_eq!(err, ContractError::NotEnoughStake(100u128.into()));
 
     let err = contract
         .unstake(validators[0].to_string(), coin(300, OSMO))
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap_err();
     assert_eq!(err, ContractError::NotEnoughStake(240u128.into()));
 
     let err = contract
         .unstake(validators[1].to_string(), coin(1, OSMO))
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap_err();
     assert_eq!(err, ContractError::NotEnoughStake(0u128.into()));
 
     // Unstaken should be immediately visible on staken amount
     let stake = contract
-        .stake(users[0].to_string(), validators[0].to_string())
+        .stake(users_addr[0].to_string(), validators[0].to_string())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(150)));
 
     let stake = contract
-        .stake(users[0].to_string(), validators[1].to_string())
+        .stake(users_addr[0].to_string(), validators[1].to_string())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
-        .stake(users[1].to_string(), validators[0].to_string())
+        .stake(users_addr[1].to_string(), validators[0].to_string())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(240)));
 
     let stake = contract
-        .stake(users[1].to_string(), validators[1].to_string())
+        .stake(users_addr[1].to_string(), validators[1].to_string())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::zero()));
 
     // But not on vault side
     let claim = vault
-        .claim(users[0].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[0].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     let claim = vault
-        .claim(users[1].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[1].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     // Immediately withdrawing liens
-    contract.withdraw_unbonded().call(users[0]).unwrap();
-    contract.withdraw_unbonded().call(users[1]).unwrap();
+    contract.withdraw_unbonded().call(users_addr[0]).unwrap();
+    contract.withdraw_unbonded().call(users_addr[1]).unwrap();
 
     // Claims still not changed on the vault side
     let claim = vault
-        .claim(users[0].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[0].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     let claim = vault
-        .claim(users[1].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[1].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
@@ -349,17 +411,23 @@ fn unstaking() {
     });
 
     // Withdrawing liens
-    contract.withdraw_unbonded().call(users[0]).unwrap();
-    contract.withdraw_unbonded().call(users[1]).unwrap();
+    contract.withdraw_unbonded().call(users_addr[0]).unwrap();
+    contract.withdraw_unbonded().call(users_addr[1]).unwrap();
 
     // Claims still not changed on the vault side - withdrawal to early
     let claim = vault
-        .claim(users[0].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[0].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
     let claim = vault
-        .claim(users[1].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[1].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
@@ -368,40 +436,40 @@ fn unstaking() {
     // users[1] unstakes 90 from validators[1] = 10 left staken
     contract
         .unstake(validators[0].to_owned(), coin(70, OSMO))
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     contract
         .unstake(validators[1].to_owned(), coin(90, OSMO))
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Verify proper stake values
     let stake = contract
-        .stake(users[0].to_string(), validators[0].to_string())
+        .stake(users_addr[0].to_string(), validators[0].to_string())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(80)));
 
     let stake = contract
-        .stake(users[0].to_string(), validators[1].to_string())
+        .stake(users_addr[0].to_string(), validators[1].to_string())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(10)));
 
     let stake = contract
-        .stake(users[1].to_string(), validators[0].to_string())
+        .stake(users_addr[1].to_string(), validators[0].to_string())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(240)));
 
     let stake = contract
-        .stake(users[1].to_string(), validators[1].to_string())
+        .stake(users_addr[1].to_string(), validators[1].to_string())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(0)));
 
@@ -413,17 +481,23 @@ fn unstaking() {
     });
 
     // Withdrawing liens
-    contract.withdraw_unbonded().call(users[0]).unwrap();
-    contract.withdraw_unbonded().call(users[1]).unwrap();
+    contract.withdraw_unbonded().call(users_addr[0]).unwrap();
+    contract.withdraw_unbonded().call(users_addr[1]).unwrap();
 
     // Now claims on vault got reduced, but only for first batch amount
     let claim = vault
-        .claim(users[0].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[0].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 250);
 
     let claim = vault
-        .claim(users[1].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[1].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 240);
 
@@ -435,36 +509,48 @@ fn unstaking() {
 
     // Nothing gets released automatically, values just like before
     let claim = vault
-        .claim(users[0].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[0].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 250);
 
     let claim = vault
-        .claim(users[1].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[1].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 240);
 
     // Withdrawing liens
-    contract.withdraw_unbonded().call(users[0]).unwrap();
-    contract.withdraw_unbonded().call(users[1]).unwrap();
+    contract.withdraw_unbonded().call(users_addr[0]).unwrap();
+    contract.withdraw_unbonded().call(users_addr[1]).unwrap();
 
     // Now everything is released
     let claim = vault
-        .claim(users[0].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[0].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 90);
 
     let claim = vault
-        .claim(users[1].to_owned(), contract.contract_addr.to_string())
+        .claim(
+            users_addr[1].to_string(),
+            contract.contract_addr.to_string(),
+        )
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 240);
 }
 
 #[test]
 fn immediate_unstake_if_unbonded_validator() {
-    let user = "user1";
+    let user_addr = &"user1".into_bech32();
 
-    let app = App::new_with_balances(&[(user, &coins(200, OSMO))]);
+    let app = App::new_with_balances(&[(user_addr.as_str(), &coins(200, OSMO))]);
 
     let owner = "owner";
 
@@ -475,24 +561,29 @@ fn immediate_unstake_if_unbonded_validator() {
     vault
         .bond()
         .with_funds(&coins(200, OSMO))
-        .call(user)
+        .call(user_addr)
         .unwrap();
-    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+    vault.stake(
+        &contract,
+        user_addr.as_str(),
+        validators[0],
+        coin(200, OSMO),
+    );
 
     contract.remove_validator(validators[0]);
 
     contract
         .unstake(validators[0].to_string(), coin(200, OSMO))
-        .call(user)
+        .call(user_addr)
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
-    contract.withdraw_unbonded().call(user).unwrap();
+    contract.withdraw_unbonded().call(user_addr).unwrap();
 
     let err = vault
-        .claim(user.to_string(), contract.contract_addr.to_string())
+        .claim(user_addr.to_string(), contract.contract_addr.to_string())
         .unwrap_err();
     assert!(err
         .to_string()
@@ -501,9 +592,9 @@ fn immediate_unstake_if_unbonded_validator() {
 
 #[test]
 fn immediate_unstake_if_tombstoned_validator() {
-    let user = "user1";
+    let user_addr = &"user1".into_bech32();
 
-    let app = App::new_with_balances(&[(user, &coins(200, OSMO))]);
+    let app = App::new_with_balances(&[(user_addr.as_str(), &coins(200, OSMO))]);
 
     let owner = "owner";
 
@@ -514,24 +605,29 @@ fn immediate_unstake_if_tombstoned_validator() {
     vault
         .bond()
         .with_funds(&coins(200, OSMO))
-        .call(user)
+        .call(user_addr)
         .unwrap();
-    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+    vault.stake(
+        &contract,
+        user_addr.as_str(),
+        validators[0],
+        coin(200, OSMO),
+    );
 
     contract.tombstone_validator(validators[0]);
 
     contract
         .unstake(validators[0].to_string(), coin(200, OSMO))
-        .call(user)
+        .call(user_addr)
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
-    contract.withdraw_unbonded().call(user).unwrap();
+    contract.withdraw_unbonded().call(user_addr).unwrap();
 
     let err = vault
-        .claim(user.to_string(), contract.contract_addr.to_string())
+        .claim(user_addr.to_string(), contract.contract_addr.to_string())
         .unwrap_err();
     assert!(err
         .to_string()
@@ -541,12 +637,12 @@ fn immediate_unstake_if_tombstoned_validator() {
 #[test]
 fn distribution() {
     let owner = "owner";
-    let users = ["user1", "user2"];
+    let users_addr = [&"user1".into_bech32(), &"user2".into_bech32()];
     let remote = ["remote1", "remote2"];
 
     let app = App::new_with_balances(&[
-        (users[0], &coins(600, OSMO)),
-        (users[1], &coins(600, OSMO)),
+        (users_addr[0].as_str(), &coins(600, OSMO)),
+        (users_addr[1].as_str(), &coins(600, OSMO)),
         (owner, &[coin(1000, STAR), coin(1000, OSMO)]),
     ]);
 
@@ -561,62 +657,77 @@ fn distribution() {
     vault
         .bond()
         .with_funds(&coins(600, OSMO))
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     vault
         .bond()
         .with_funds(&coins(600, OSMO))
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
 
-    vault.stake(&contract, users[0], validators[0], coin(200, OSMO));
-    vault.stake(&contract, users[0], validators[1], coin(100, OSMO));
-    vault.stake(&contract, users[1], validators[0], coin(300, OSMO));
+    vault.stake(
+        &contract,
+        users_addr[0].as_str(),
+        validators[0],
+        coin(200, OSMO),
+    );
+    vault.stake(
+        &contract,
+        users_addr[0].as_str(),
+        validators[1],
+        coin(100, OSMO),
+    );
+    vault.stake(
+        &contract,
+        users_addr[1].as_str(),
+        validators[0],
+        coin(300, OSMO),
+    );
 
     // Start with equal distribution:
     // 20 tokens for users[0]
     // 30 tokens for users[1]
     contract
         .test_distribute_rewards(validators[0].to_owned(), coin(50, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Only users[0] stakes on validators[1]
     // 30 tokens for users[0]
     contract
         .test_distribute_rewards(validators[1].to_owned(), coin(30, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Check how much rewards are pending for withdrawal
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 20);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     // Show all rewards skips validators that were never staked on
     let all_rewards = contract
-        .all_pending_rewards(users[0].to_owned(), None, None)
+        .all_pending_rewards(users_addr[0].to_string(), None, None)
         .unwrap();
     let expected = vec![
         ValidatorPendingRewards::new(validators[0], 20, STAR),
@@ -625,7 +736,7 @@ fn distribution() {
     assert_eq!(all_rewards.rewards, expected);
 
     let all_rewards = contract
-        .all_pending_rewards(users[1].to_owned(), None, None)
+        .all_pending_rewards(users_addr[1].to_string(), None, None)
         .unwrap();
     let expected = vec![ValidatorPendingRewards::new(validators[0], 30, STAR)];
     assert_eq!(all_rewards.rewards, expected);
@@ -636,36 +747,36 @@ fn distribution() {
     // 1 token is not distributed
     contract
         .test_distribute_rewards(validators[0].to_owned(), coin(71, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Distribution in invalid coin should fail
     contract
         .test_distribute_rewards(validators[1].to_owned(), coin(100, OSMO))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap_err();
 
     // Check how much rewards are pending for withdrawal
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 48);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 72);
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 30);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 0);
@@ -673,55 +784,55 @@ fn distribution() {
     // Withdraw rewards
     contract
         .withdraw_rewards(validators[0].to_owned(), remote[0].to_owned())
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     contract
         .withdraw_rewards(validators[1].to_owned(), remote[0].to_owned())
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     contract
         .withdraw_rewards(validators[0].to_owned(), remote[1].to_owned())
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
 
     // Rewards withrawal should not affect the stake
     let stake = contract
-        .stake(users[0].to_owned(), validators[0].to_owned())
+        .stake(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(200)));
 
     let stake = contract
-        .stake(users[0].to_owned(), validators[1].to_owned())
+        .stake(users_addr[0].to_string(), validators[1].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
-        .stake(users[1].to_owned(), validators[0].to_owned())
+        .stake(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(300)));
 
     // error if 0 rewards available
     let err = contract
         .withdraw_rewards(validators[1].to_owned(), remote[1].to_owned())
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap_err();
     assert_eq!(err, ContractError::NoRewards);
     let tx_id = get_last_external_staking_pending_tx_id(&contract);
@@ -729,31 +840,31 @@ fn distribution() {
 
     // Stake remains unaffected after rewards withdrawal failure
     let stake = contract
-        .stake(users[1].to_owned(), validators[1].to_owned())
+        .stake(users_addr[1].to_string(), validators[1].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(0)));
 
     // Rewards should not be withdrawable anymore
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 0);
@@ -765,17 +876,17 @@ fn distribution() {
     // The additional 1 token is leftover after previous allocation
     contract
         .test_distribute_rewards(validators[0].to_owned(), coin(9, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 4);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 6);
@@ -787,7 +898,7 @@ fn distribution() {
     // 6 on users[1] (+ ~0.6)
     contract
         .test_distribute_rewards(validators[0].to_owned(), coin(11, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Also leaving some rewards on validator[1]
@@ -795,7 +906,7 @@ fn distribution() {
     // 11 on users[0]
     contract
         .test_distribute_rewards(validators[1].to_owned(), coin(11, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Unstaking some funds from validator should change weights - now users split validators[0]
@@ -805,11 +916,11 @@ fn distribution() {
     // 200 tokens staken by user[1]
     contract
         .unstake(validators[0].to_owned(), coin(100, OSMO))
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Staking also changes weights - now validators[1] also splits rewards:
@@ -827,34 +938,34 @@ fn distribution() {
             })
             .unwrap(),
         )
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Check if messing up with weights didn't affect withdrawable
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 8);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 12);
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 11);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 0);
@@ -864,7 +975,7 @@ fn distribution() {
     // 10 on users[1] (~0.6 still not distributed)
     contract
         .test_distribute_rewards(validators[0].to_owned(), coin(20, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Also for validator[1]
@@ -872,29 +983,29 @@ fn distribution() {
     // 30 on users[2]
     contract
         .test_distribute_rewards(validators[1].to_owned(), coin(40, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 18);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 22);
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 21);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 30);
@@ -907,17 +1018,17 @@ fn distribution() {
     //   back leaving ~0.1 accumulated)
     contract
         .test_distribute_rewards(validators[0].to_owned(), coin(5, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 20);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 25);
@@ -935,20 +1046,20 @@ fn distribution() {
     // 2/5 rewards to users[1]
     contract
         .unstake(validators[0].to_owned(), coin(50, OSMO))
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     contract
         .unstake(validators[0].to_owned(), coin(100, OSMO))
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Distribute 12 tokens to validator[0]:
@@ -957,17 +1068,17 @@ fn distribution() {
     // 4 to users[0] (~0.1 accumulated + ~0.8 -> leaving at ~0.9)
     contract
         .test_distribute_rewards(validators[0].to_owned(), coin(12, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 28);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 29);
@@ -975,77 +1086,77 @@ fn distribution() {
     // Withdraw only by users[0]
     contract
         .withdraw_rewards(validators[0].to_owned(), remote[0].to_owned())
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     contract
         .withdraw_rewards(validators[1].to_owned(), remote[0].to_owned())
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     // Rollback on users[1]
     contract
         .withdraw_rewards(validators[0].to_owned(), "bad_value".to_owned())
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_rollback_withdraw_rewards(tx_id)
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
 
     // Rewards withrawal should not affect the stake
     let stake = contract
-        .stake(users[0].to_owned(), validators[0].to_owned())
+        .stake(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(150)));
 
     let stake = contract
-        .stake(users[0].to_owned(), validators[1].to_owned())
+        .stake(users_addr[0].to_string(), validators[1].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
-        .stake(users[1].to_owned(), validators[0].to_owned())
+        .stake(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(100)));
 
     let stake = contract
-        .stake(users[1].to_owned(), validators[1].to_owned())
+        .stake(users_addr[1].to_string(), validators[1].to_owned())
         .unwrap();
     assert_eq!(stake.stake, ValueRange::new_val(Uint128::new(300)));
 
     // Check withdrawals and accounts
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 29);
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 0);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 30);
@@ -1057,41 +1168,41 @@ fn distribution() {
     // 7 tokens to users[1] via validators[1] (~0.5 lefover)
     contract
         .test_distribute_rewards(validators[0].to_owned(), coin(10, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     contract
         .test_distribute_rewards(validators[1].to_owned(), coin(10, STAR))
-        .call(owner)
+        .call(&Addr::unchecked(owner))
         .unwrap();
 
     // Check withdrawals and accounts
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 6);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[0].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[0].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 33);
 
     let rewards = contract
-        .pending_rewards(users[0].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[0].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 2);
 
     let rewards = contract
-        .pending_rewards(users[1].to_owned(), validators[1].to_owned())
+        .pending_rewards(users_addr[1].to_string(), validators[1].to_owned())
         .unwrap()
         .rewards;
     assert_eq!(rewards.amount.u128(), 37);
 
     let all_rewards = contract
-        .all_pending_rewards(users[0].to_owned(), None, None)
+        .all_pending_rewards(users_addr[0].to_string(), None, None)
         .unwrap();
     let expected = vec![
         ValidatorPendingRewards::new(validators[0], 6, STAR),
@@ -1100,7 +1211,7 @@ fn distribution() {
     assert_eq!(all_rewards.rewards, expected);
 
     let all_rewards = contract
-        .all_pending_rewards(users[1].to_owned(), None, None)
+        .all_pending_rewards(users_addr[1].to_string(), None, None)
         .unwrap();
     let expected = vec![
         ValidatorPendingRewards::new(validators[0], 33, STAR),
@@ -1111,52 +1222,54 @@ fn distribution() {
     // And try to withdraw all, previous balances:
     contract
         .withdraw_rewards(validators[0].to_string(), remote[0].to_owned())
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     contract
         .withdraw_rewards(validators[1].to_string(), remote[0].to_owned())
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     contract
         .withdraw_rewards(validators[0].to_string(), remote[1].to_owned())
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 
     contract
         .withdraw_rewards(validators[1].to_string(), remote[1].to_owned())
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
     let tx_id = get_last_external_staking_pending_tx_id(&contract).unwrap();
     contract
         .test_commit_withdraw_rewards(tx_id)
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
 }
 
 #[test]
 fn batch_distribution() {
     let owner = "owner";
-    let users = ["user1", "user2"];
+    let users_addr = [&"user1".into_bech32(), &"user2".into_bech32()];
 
-    let app =
-        App::new_with_balances(&[(users[0], &coins(600, OSMO)), (users[1], &coins(600, OSMO))]);
+    let app = App::new_with_balances(&[
+        (users_addr[0].as_str(), &coins(600, OSMO)),
+        (users_addr[1].as_str(), &coins(600, OSMO)),
+    ]);
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
@@ -1165,43 +1278,58 @@ fn batch_distribution() {
     vault
         .bond()
         .with_funds(&coins(600, OSMO))
-        .call(users[0])
+        .call(users_addr[0])
         .unwrap();
     vault
         .bond()
         .with_funds(&coins(600, OSMO))
-        .call(users[1])
+        .call(users_addr[1])
         .unwrap();
 
-    vault.stake(&contract, users[0], validators[0], coin(200, OSMO));
-    vault.stake(&contract, users[0], validators[1], coin(100, OSMO));
-    vault.stake(&contract, users[1], validators[0], coin(300, OSMO));
+    vault.stake(
+        &contract,
+        users_addr[0].as_str(),
+        validators[0],
+        coin(200, OSMO),
+    );
+    vault.stake(
+        &contract,
+        users_addr[0].as_str(),
+        validators[1],
+        coin(100, OSMO),
+    );
+    vault.stake(
+        &contract,
+        users_addr[1].as_str(),
+        validators[0],
+        coin(300, OSMO),
+    );
 
     contract
         .distribute_batch(owner, STAR, &[(validators[0], 50), (validators[1], 30)])
         .unwrap();
 
-    assert_rewards!(contract, users[0], validators[0], 20);
-    assert_rewards!(contract, users[1], validators[0], 30);
-    assert_rewards!(contract, users[0], validators[1], 30);
-    assert_rewards!(contract, users[1], validators[1], 0);
+    assert_rewards!(contract, users_addr[0], validators[0], 20);
+    assert_rewards!(contract, users_addr[1], validators[0], 30);
+    assert_rewards!(contract, users_addr[0], validators[1], 30);
+    assert_rewards!(contract, users_addr[1], validators[1], 0);
 
     contract
         .distribute_batch(owner, STAR, &[(validators[0], 100), (validators[1], 30)])
         .unwrap();
 
-    assert_rewards!(contract, users[0], validators[0], 60);
-    assert_rewards!(contract, users[1], validators[0], 90);
-    assert_rewards!(contract, users[0], validators[1], 60);
-    assert_rewards!(contract, users[1], validators[1], 0);
+    assert_rewards!(contract, users_addr[0], validators[0], 60);
+    assert_rewards!(contract, users_addr[1], validators[0], 90);
+    assert_rewards!(contract, users_addr[0], validators[1], 60);
+    assert_rewards!(contract, users_addr[1], validators[1], 0);
 }
 
 #[test]
 fn batch_distribution_invalid_token() {
     let owner = "owner";
-    let user = "user1";
+    let user = "user1".into_bech32();
 
-    let app = App::new_with_balances(&[(user, &coins(600, OSMO))]);
+    let app = App::new_with_balances(&[(user.as_str(), &coins(600, OSMO))]);
 
     let (vault, contract) = setup(&app, owner, 100).unwrap();
 
@@ -1210,10 +1338,10 @@ fn batch_distribution_invalid_token() {
     vault
         .bond()
         .with_funds(&coins(600, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
-    vault.stake(&contract, user, validator, coin(200, OSMO));
+    vault.stake(&contract, user.as_str(), validator, coin(200, OSMO));
 
     let err = contract
         .distribute_batch(owner, "supertoken", &[(validator, 50)])
@@ -1223,9 +1351,9 @@ fn batch_distribution_invalid_token() {
 
 #[test]
 fn slashing() {
-    let user = "user1";
+    let user = "user1".into_bech32();
 
-    let app = App::new_with_balances(&[(user, &coins(300, OSMO))]);
+    let app = App::new_with_balances(&[(user.as_str(), &coins(300, OSMO))]);
 
     let owner = "owner";
 
@@ -1236,21 +1364,21 @@ fn slashing() {
     vault
         .bond()
         .with_funds(&coins(300, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
-    vault.stake(&contract, user, validators[0], coin(200, OSMO));
-    vault.stake(&contract, user, validators[1], coin(100, OSMO));
+    vault.stake(&contract, user.as_str(), validators[0], coin(200, OSMO));
+    vault.stake(&contract, user.as_str(), validators[1], coin(100, OSMO));
 
     // Unstake some tokens
     // user unstakes 50 from validators[0] - 150 left staked in 2 batches
     contract
         .unstake(validators[0].to_string(), coin(50, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Unstaken should be immediately visible on staked amount
@@ -1266,7 +1394,7 @@ fn slashing() {
 
     // But not on vault side
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
@@ -1277,11 +1405,11 @@ fn slashing() {
     });
 
     // Withdrawing liens
-    contract.withdraw_unbonded().call(user).unwrap();
+    contract.withdraw_unbonded().call(&user).unwrap();
 
     // Claims still not changed on the vault side - withdrawal to early
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 300);
 
@@ -1289,20 +1417,20 @@ fn slashing() {
     // user unstakes 70 from validators[0] - 80 left staken
     contract
         .unstake(validators[0].to_owned(), coin(70, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     contract
         .unstake(validators[1].to_owned(), coin(90, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Verify proper stake values
@@ -1326,21 +1454,21 @@ fn slashing() {
     // But now validators[0] slashing happens
     contract
         .test_handle_slashing(validators[0].to_string(), Uint128::new(8))
-        .call("test")
+        .call(&Addr::unchecked("test"))
         .unwrap();
 
     // Claims on vault got reduced, but only for bonded and second batch amount slashing (10% of (80 + 70) = 15)
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 285);
 
     // Withdrawing liens
-    contract.withdraw_unbonded().call(user).unwrap();
+    contract.withdraw_unbonded().call(&user).unwrap();
 
     // Now claims on vault got reduced, but only for first batch amount (not slashed)
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 235);
 
@@ -1352,25 +1480,25 @@ fn slashing() {
 
     // Nothing gets released automatically, values just like before
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 235);
 
     // Withdrawing liens
-    contract.withdraw_unbonded().call(user).unwrap();
+    contract.withdraw_unbonded().call(&user).unwrap();
 
     // Now everything is released (235 - 90 - 70 + 7 = 82)
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 82);
 }
 
 #[test]
 fn slashing_pending_tx_partial_unbond() {
-    let user = "user1";
+    let user = "user1".into_bech32();
 
-    let app = App::new_with_balances(&[(user, &coins(300, OSMO))]);
+    let app = App::new_with_balances(&[(user.as_str(), &coins(300, OSMO))]);
 
     let owner = "owner";
 
@@ -1381,16 +1509,16 @@ fn slashing_pending_tx_partial_unbond() {
     vault
         .bond()
         .with_funds(&coins(300, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
-    vault.stake(&contract, user, validators[0], coin(200, OSMO));
-    vault.stake(&contract, user, validators[1], coin(100, OSMO));
+    vault.stake(&contract, user.as_str(), validators[0], coin(200, OSMO));
+    vault.stake(&contract, user.as_str(), validators[1], coin(100, OSMO));
 
     // Unstake some tokens
     contract
         .unstake(validators[0].to_string(), coin(50, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
     // Unstaken should be immediately visible on staked amount (as pending tx)
@@ -1410,24 +1538,24 @@ fn slashing_pending_tx_partial_unbond() {
     // Now validators[0] slashing happens
     contract
         .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault got reduced, for high end of pending unbond
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 280);
 
     // Now the unbond gets committed (i.e. successful)
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault are still unchanged
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 280);
 
@@ -1439,25 +1567,25 @@ fn slashing_pending_tx_partial_unbond() {
 
     // Claims on vault are still unchanged
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 280);
 
     // Withdrawing liens
-    contract.withdraw_unbonded().call(user).unwrap();
+    contract.withdraw_unbonded().call(&user).unwrap();
 
     // Now claims on vault got reduced by the (full) unbonded amount
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 230);
 }
 
 #[test]
 fn slashing_pending_tx_full_unbond() {
-    let user = "user1";
+    let user = "user1".into_bech32();
 
-    let app = App::new_with_balances(&[(user, &coins(200, OSMO))]);
+    let app = App::new_with_balances(&[(user.as_str(), &coins(200, OSMO))]);
 
     let owner = "owner";
 
@@ -1468,15 +1596,15 @@ fn slashing_pending_tx_full_unbond() {
     vault
         .bond()
         .with_funds(&coins(200, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
-    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+    vault.stake(&contract, user.as_str(), validators[0], coin(200, OSMO));
 
     // Unstake all tokens
     contract
         .unstake(validators[0].to_string(), coin(200, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
     // Unstaken should be immediately visible on staked amount (as pending tx)
@@ -1491,24 +1619,24 @@ fn slashing_pending_tx_full_unbond() {
     // Now validators[0] slashing happens
     contract
         .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault got reduced, for high end of pending unbond
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 180);
 
     // Now the unbond gets committed (i.e. successful)
     contract
         .test_commit_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault are still unchanged
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 180);
 
@@ -1520,16 +1648,16 @@ fn slashing_pending_tx_full_unbond() {
 
     // Claims on vault are still unchanged
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 180);
 
     // Withdrawing liens
-    contract.withdraw_unbonded().call(user).unwrap();
+    contract.withdraw_unbonded().call(&user).unwrap();
 
     // Now claims on vault got reduced by the (full) unbonded amount
     let err = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap_err();
     assert!(err
         .to_string()
@@ -1538,9 +1666,9 @@ fn slashing_pending_tx_full_unbond() {
 
 #[test]
 fn slashing_pending_tx_full_unbond_rolled_back() {
-    let user = "user1";
+    let user = "user1".into_bech32();
 
-    let app = App::new_with_balances(&[(user, &coins(200, OSMO))]);
+    let app = App::new_with_balances(&[(user.as_str(), &coins(200, OSMO))]);
 
     let owner = "owner";
 
@@ -1551,15 +1679,15 @@ fn slashing_pending_tx_full_unbond_rolled_back() {
     vault
         .bond()
         .with_funds(&coins(200, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
-    vault.stake(&contract, user, validators[0], coin(200, OSMO));
+    vault.stake(&contract, user.as_str(), validators[0], coin(200, OSMO));
 
     // Unstake all tokens
     contract
         .unstake(validators[0].to_string(), coin(200, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
     // Unstaken should be immediately visible on staked amount (as pending tx)
@@ -1574,24 +1702,24 @@ fn slashing_pending_tx_full_unbond_rolled_back() {
     // Now validators[0] slashing happens
     contract
         .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault got reduced, for high end of pending unbond
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 180);
 
     // Now the unbond gets rolled back (i.e. failed)
     contract
         .test_rollback_unstake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault are still unchanged
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 180);
 
@@ -1603,25 +1731,25 @@ fn slashing_pending_tx_full_unbond_rolled_back() {
 
     // Claims on vault are still unchanged
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 180);
 
     // Withdrawing liens
-    contract.withdraw_unbonded().call(user).unwrap();
+    contract.withdraw_unbonded().call(&user).unwrap();
 
     // Claims on vault are still unchanged
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 180);
 }
 
 #[test]
 fn slashing_pending_tx_bond() {
-    let user = "user1";
+    let user = "user1".into_bech32();
 
-    let app = App::new_with_balances(&[(user, &coins(300, OSMO))]);
+    let app = App::new_with_balances(&[(user.as_str(), &coins(300, OSMO))]);
 
     let owner = "owner";
 
@@ -1632,11 +1760,11 @@ fn slashing_pending_tx_bond() {
     vault
         .bond()
         .with_funds(&coins(300, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
-    vault.stake(&contract, user, validators[0], coin(200, OSMO));
-    vault.stake(&contract, user, validators[1], coin(50, OSMO));
+    vault.stake(&contract, user.as_str(), validators[0], coin(200, OSMO));
+    vault.stake(&contract, user.as_str(), validators[1], coin(50, OSMO));
 
     // Stake some more tokens (but don't commit them!)
     vault
@@ -1648,7 +1776,7 @@ fn slashing_pending_tx_bond() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user)
         .unwrap();
 
     // Staken should be immediately visible on staked amount (as pending tx)
@@ -1667,7 +1795,7 @@ fn slashing_pending_tx_bond() {
 
     // Claims on vault got adjusted, to account for pending bond
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(
         claim.amount,
@@ -1677,12 +1805,12 @@ fn slashing_pending_tx_bond() {
     // Now validators[0] slashing happens, over the amount included the pending bond
     contract
         .test_handle_slashing(validators[0].to_string(), Uint128::new(25))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault got reduced, for high end of pending slashed bond
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(
         claim.amount,
@@ -1692,21 +1820,21 @@ fn slashing_pending_tx_bond() {
     // Now the extra bond gets committed (i.e. successful)
     contract
         .test_commit_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault are now committed
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 275);
 }
 
 #[test]
 fn slashing_pending_tx_bond_rolled_back() {
-    let user = "user1";
+    let user = "user1".into_bech32();
 
-    let app = App::new_with_balances(&[(user, &coins(300, OSMO))]);
+    let app = App::new_with_balances(&[(user.as_str(), &coins(300, OSMO))]);
 
     let owner = "owner";
 
@@ -1717,11 +1845,11 @@ fn slashing_pending_tx_bond_rolled_back() {
     vault
         .bond()
         .with_funds(&coins(300, OSMO))
-        .call(user)
+        .call(&user)
         .unwrap();
 
-    vault.stake(&contract, user, validators[0], coin(200, OSMO));
-    vault.stake(&contract, user, validators[1], coin(50, OSMO));
+    vault.stake(&contract, user.as_str(), validators[0], coin(200, OSMO));
+    vault.stake(&contract, user.as_str(), validators[1], coin(50, OSMO));
 
     // Stake some more tokens (but don't commit them!)
     vault
@@ -1733,7 +1861,7 @@ fn slashing_pending_tx_bond_rolled_back() {
             })
             .unwrap(),
         )
-        .call(user)
+        .call(&user)
         .unwrap();
 
     // Staken should be immediately visible on staked amount (as pending tx)
@@ -1752,7 +1880,7 @@ fn slashing_pending_tx_bond_rolled_back() {
 
     // Claims on vault got adjusted, to account for pending bond
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(
         claim.amount,
@@ -1762,12 +1890,12 @@ fn slashing_pending_tx_bond_rolled_back() {
     // Now validators[0] slashing happens, but over the amount without the pending bond
     contract
         .test_handle_slashing(validators[0].to_string(), Uint128::new(20))
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault got reduced, for *low* end of pending slashed bond
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(
         claim.amount,
@@ -1777,12 +1905,12 @@ fn slashing_pending_tx_bond_rolled_back() {
     // Now the extra bond gets rolled back (i.e. failed)
     contract
         .test_rollback_stake(get_last_external_staking_pending_tx_id(&contract).unwrap())
-        .call("test")
+        .call(&"test".into_bech32())
         .unwrap();
 
     // Claims on vault are now committed
     let claim = vault
-        .claim(user.to_owned(), contract.contract_addr.to_string())
+        .claim(user.to_string(), contract.contract_addr.to_string())
         .unwrap();
     assert_eq!(claim.amount.val().unwrap().u128(), 230);
 }

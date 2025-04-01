@@ -11,8 +11,6 @@ repository       = { workspace = true }
 crate-type = ["cdylib", "rlib"]
 
 [features]
-# for more explicit tests, cargo test --features=backtraces
-backtraces = ["cosmwasm-std/backtraces"]
 # use library feature to disable all instantiate/execute/query exports
 library = []
 # enables generation of mt utilities
@@ -22,7 +20,6 @@ mt = ["library", "sylvia/mt"]
 mesh-apis           = { workspace = true }
 mesh-sync           = { workspace = true }
 mesh-bindings       = { workspace = true }
-mesh-native-staking = { workspace = true }
 
 sylvia = { workspace = true }
 cosmwasm-schema  = { workspace = true }
@@ -43,7 +40,7 @@ derivative                = { workspace = true }
 anyhow                    = { workspace = true }
 mesh-external-staking     = { workspace = true, features = ["mt"] }
 mesh-native-staking-proxy = { workspace = true, features = ["mt"] }
-
+mesh-native-staking       = { workspace = true, features = ["mt"] }
 [[bin]]
 name = "schema"
 doc  = false

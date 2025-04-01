@@ -203,7 +203,7 @@ pub struct InterchainQueryPacketData {
 
 pub fn ibc_query_packet(packet: CosmosQuery) -> InterchainQueryPacketData {
     InterchainQueryPacketData {
-        data: Binary(packet.encode_to_vec()),
+        data: Binary::new(packet.encode_to_vec()),
         memo: "".to_string(),
     }
 }

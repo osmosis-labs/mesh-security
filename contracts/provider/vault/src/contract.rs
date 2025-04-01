@@ -16,7 +16,9 @@ use mesh_bindings::{ProviderCustomMsg, ProviderMsg};
 use mesh_sync::Tx::InFlightStaking;
 use mesh_sync::{max_range, ValueRange};
 
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, ReplyCtx};
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx};
+#[allow(deprecated)]
+use sylvia::types::ReplyCtx;
 use sylvia::{contract, schemars};
 
 use crate::error::ContractError;
@@ -46,22 +48,22 @@ fn def_false() -> bool {
     false
 }
 
-pub struct VaultContract<'a> {
+pub struct VaultContract {
     /// General contract configuration
-    pub config: Item<'a, Config>,
+    pub config: Item<Config>,
     /// Local staking info
-    pub local_staking: Item<'a, Option<LocalStaking>>,
+    pub local_staking: Item<Option<LocalStaking>>,
     /// All liens in the protocol
     ///
     /// Liens are indexed with (user, lien_holder), as this pair has to be unique
-    pub liens: Map<'a, (&'a Addr, &'a Addr), Lien>,
+    pub liens: Map<(Addr, Addr), Lien>,
     /// Per-user information
-    pub users: Map<'a, &'a Addr, UserInfo>,
+    pub users: Map<Addr, UserInfo>,
     /// All active external staking contracts in use by this vault
-    pub active_external: Map<'a, &'a Addr, ()>,
+    pub active_external: Map<Addr, ()>,
     /// Pending txs information
-    pub tx_count: Item<'a, u64>,
-    pub pending: Txs<'a>,
+    pub tx_count: Item<u64>,
+    pub pending: Txs,
 }
 
 #[cfg_attr(not(feature = "library"), sylvia::entry_points)]
@@ -70,7 +72,7 @@ pub struct VaultContract<'a> {
 #[sv::messages(vault_api as VaultApi)]
 /// Workaround for lack of support in communication `Empty` <-> `Custom` Contracts.
 #[sv::custom(msg=ProviderCustomMsg)]
-impl VaultContract<'_> {
+impl VaultContract {
     pub fn new() -> Self {
         Self {
             config: Item::new("config"),
@@ -133,7 +135,7 @@ impl VaultContract<'_> {
                             .label
                             .unwrap_or_else(|| "Mesh Security Local Staking".to_string()),
                     };
-                    let sub_msg = SubMsg::reply_on_success(msg, REPLY_ID_INSTANTIATE);
+                    let sub_msg = SubMsg::new(msg);
                     Ok(Response::new().add_submessage(sub_msg))
                 }
             }
@@ -156,10 +158,11 @@ impl VaultContract<'_> {
 
         let mut user = self
             .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .may_load(ctx.deps.storage, ctx.info.sender.clone())?
             .unwrap_or_default();
         user.collateral += amount.amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users
+            .save(ctx.deps.storage, ctx.info.sender.clone(), &user)?;
         let amt = amount.amount;
         let msg = ProviderMsg::Bond {
             delegator: ctx.info.sender.clone().into_string(),
@@ -187,7 +190,7 @@ impl VaultContract<'_> {
 
         let mut user = self
             .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .may_load(ctx.deps.storage, ctx.info.sender.clone())?
             .unwrap_or_default();
 
         let free_collateral = user.free_collateral();
@@ -197,7 +200,8 @@ impl VaultContract<'_> {
         );
 
         user.collateral -= amount.amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users
+            .save(ctx.deps.storage, ctx.info.sender.clone(), &user)?;
         let amt = amount.amount;
         let msg = ProviderMsg::Unbond {
             delegator: ctx.info.sender.clone().into_string(),
@@ -226,10 +230,11 @@ impl VaultContract<'_> {
 
         let mut user = self
             .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .may_load(ctx.deps.storage, ctx.info.sender.clone())?
             .unwrap_or_default();
         user.collateral += amount.amount;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.users
+            .save(ctx.deps.storage, ctx.info.sender.clone(), &user)?;
 
         let amt = amount.amount;
         let mut resp = Response::new()
@@ -254,9 +259,15 @@ impl VaultContract<'_> {
                 false,
             )?;
 
+            /// The message that is binary encoded in `receive_stake(..msg)`
+            #[cosmwasm_schema::cw_serde]
+            struct StakeMsg {
+                pub validator: String,
+            }
+
             let stake_msg = local_staking.contract.receive_stake(
                 ctx.info.sender.to_string(),
-                to_json_binary(&mesh_native_staking::msg::StakeMsg { validator }).unwrap(),
+                to_json_binary(&StakeMsg { validator }).unwrap(),
                 vec![amount],
             )?;
 
@@ -304,7 +315,7 @@ impl VaultContract<'_> {
         )?;
 
         self.active_external
-            .save(ctx.deps.storage, &contract.0, &())?;
+            .save(ctx.deps.storage, contract.0, &())?;
 
         let resp = Response::new()
             .add_message(stake_msg)
@@ -364,7 +375,7 @@ impl VaultContract<'_> {
 
         let user = self
             .users
-            .may_load(ctx.deps.storage, &account)?
+            .may_load(ctx.deps.storage, account)?
             .unwrap_or_default();
         Ok(AccountResponse {
             denom,
@@ -384,7 +395,7 @@ impl VaultContract<'_> {
 
         let user = self
             .users
-            .may_load(ctx.deps.storage, &account)?
+            .may_load(ctx.deps.storage, account)?
             .unwrap_or_default();
         Ok(AccountDetailsResponse {
             denom,
@@ -437,7 +448,7 @@ impl VaultContract<'_> {
         let lienholder = ctx.deps.api.addr_validate(&lienholder)?;
 
         self.liens
-            .may_load(ctx.deps.storage, (&account, &lienholder))?
+            .may_load(ctx.deps.storage, (account, lienholder))?
             .ok_or(ContractError::NoClaim)
     }
 
@@ -454,12 +465,12 @@ impl VaultContract<'_> {
     ) -> Result<AccountClaimsResponse, ContractError> {
         let limit = clamp_page_limit(limit);
         let start_after = start_after.map(Addr::unchecked);
-        let bound = start_after.as_ref().and_then(Bounder::exclusive_bound);
+        let bound = start_after.and_then(Bounder::exclusive_bound);
 
         let account = Addr::unchecked(account);
         let claims = self
             .liens
-            .prefix(&account)
+            .prefix(account)
             .range(ctx.deps.storage, bound, None, Order::Ascending)
             .map(|item| {
                 let (lienholder, lien) = item?;
@@ -492,7 +503,7 @@ impl VaultContract<'_> {
     ) -> Result<AllAccountsResponse, ContractError> {
         let limit = clamp_page_limit(limit);
         let start_after = start_after.map(Addr::unchecked);
-        let bound = start_after.as_ref().and_then(Bounder::exclusive_bound);
+        let bound = start_after.and_then(Bounder::exclusive_bound);
 
         let denom = self.config.load(ctx.deps.storage)?.denom;
 
@@ -562,6 +573,7 @@ impl VaultContract<'_> {
     }
 
     #[sv::msg(reply)]
+    #[allow(deprecated)]
     fn reply(
         &self,
         ctx: ReplyCtx,
@@ -573,6 +585,7 @@ impl VaultContract<'_> {
         }
     }
 
+    #[allow(deprecated)]
     fn reply_init_callback(
         &self,
         deps: DepsMut,
@@ -626,14 +639,17 @@ impl VaultContract<'_> {
         let amount = amount.amount;
         let mut lien = self
             .liens
-            .may_load(ctx.deps.storage, (&ctx.info.sender, lienholder))?
+            .may_load(
+                ctx.deps.storage,
+                (ctx.info.sender.clone(), lienholder.clone()),
+            )?
             .unwrap_or_else(|| Lien {
                 amount: ValueRange::new_val(Uint128::zero()),
                 slashable,
             });
         let mut user = self
             .users
-            .may_load(ctx.deps.storage, &ctx.info.sender)?
+            .may_load(ctx.deps.storage, ctx.info.sender.clone())?
             .unwrap_or_default();
         if remote {
             lien.amount
@@ -642,7 +658,7 @@ impl VaultContract<'_> {
             // Tentative value
             user.max_lien = max_range(user.max_lien, lien.amount);
             user.total_slashable
-                .prepare_add(amount * lien.slashable, user.collateral)
+                .prepare_add(amount.mul_floor(lien.slashable), user.collateral)
                 .map_err(|_| ContractError::InsufficentBalance)?;
         } else {
             // Update lien immediately
@@ -652,15 +668,19 @@ impl VaultContract<'_> {
             // Update max lien and total slashable immediately
             user.max_lien = max_range(user.max_lien, lien.amount);
             user.total_slashable
-                .add(amount * lien.slashable, user.collateral)
+                .add(amount.mul_floor(lien.slashable), user.collateral)
                 .map_err(|_| ContractError::InsufficentBalance)?;
         }
 
         ensure!(user.verify_collateral(), ContractError::InsufficentBalance);
 
-        self.liens
-            .save(ctx.deps.storage, (&ctx.info.sender, lienholder), &lien)?;
-        self.users.save(ctx.deps.storage, &ctx.info.sender, &user)?;
+        self.liens.save(
+            ctx.deps.storage,
+            (ctx.info.sender.clone(), lienholder.clone()),
+            &lien,
+        )?;
+        self.users
+            .save(ctx.deps.storage, ctx.info.sender.clone(), &user)?;
         let tx_id = if remote {
             // Create new tx
             let tx_id = self.next_tx_id(ctx.deps.storage)?;
@@ -713,20 +733,24 @@ impl VaultContract<'_> {
         // Load lien
         let mut lien = self
             .liens
-            .load(ctx.deps.storage, (&tx_user, &tx_lienholder))?;
+            .load(ctx.deps.storage, (tx_user.clone(), tx_lienholder.clone()))?;
         // Commit it
         lien.amount.commit_add(tx_amount);
         // Save it
-        self.liens
-            .save(ctx.deps.storage, (&tx_user, &tx_lienholder), &lien)?;
+        self.liens.save(
+            ctx.deps.storage,
+            (tx_user.clone(), tx_lienholder.clone()),
+            &lien,
+        )?;
         // Load user
-        let mut user = self.users.load(ctx.deps.storage, &tx_user)?;
+        let mut user = self.users.load(ctx.deps.storage, tx_user.clone())?;
         // Update max lien definitive value (it depends on the lien's value range)
         user.max_lien = max_range(user.max_lien, lien.amount);
         // Commit total slashable
-        user.total_slashable.commit_add(tx_amount * lien.slashable);
+        user.total_slashable
+            .commit_add(tx_amount.mul_floor(lien.slashable));
         // Save it
-        self.users.save(ctx.deps.storage, &tx_user, &user)?;
+        self.users.save(ctx.deps.storage, tx_user, &user)?;
 
         // Remove tx
         self.pending.txs.remove(ctx.deps.storage, tx_id)?;
@@ -768,29 +792,33 @@ impl VaultContract<'_> {
         // Load lien
         let mut lien = self
             .liens
-            .load(ctx.deps.storage, (&tx_user, &tx_lienholder))?;
+            .load(ctx.deps.storage, (tx_user.clone(), tx_lienholder.clone()))?;
         // Rollback amount
         lien.amount.rollback_add(tx_amount);
         if lien.amount.high().u128() == 0 {
             // Remove lien if it's empty
             self.liens
-                .remove(ctx.deps.storage, (&tx_user, &tx_lienholder));
+                .remove(ctx.deps.storage, (tx_user.clone(), tx_lienholder.clone()));
         } else {
             // Save lien
-            self.liens
-                .save(ctx.deps.storage, (&tx_user, &tx_lienholder), &lien)?;
+            self.liens.save(
+                ctx.deps.storage,
+                (tx_user.clone(), tx_lienholder.clone()),
+                &lien,
+            )?;
         }
 
         // Load user
-        let mut user = self.users.load(ctx.deps.storage, &tx_user)?;
+        let mut user = self.users.load(ctx.deps.storage, tx_user.clone())?;
         // Rollback user's max_lien
 
         // Max lien has to be recalculated from scratch; the just rolled back lien
         // is already written to storage
         self.recalculate_max_lien(ctx.deps.storage, &tx_user, &mut user)?;
 
-        user.total_slashable.rollback_add(tx_amount * tx_slashable);
-        self.users.save(ctx.deps.storage, &tx_user, &user)?;
+        user.total_slashable
+            .rollback_add(tx_amount.mul_floor(tx_slashable));
+        self.users.save(ctx.deps.storage, tx_user, &user)?;
 
         // Remove tx
         self.pending.txs.remove(ctx.deps.storage, tx_id)?;
@@ -806,7 +834,7 @@ impl VaultContract<'_> {
     ) -> Result<(), ContractError> {
         user_info.max_lien = self
             .liens
-            .prefix(user)
+            .prefix(user.clone())
             .range(storage, None, None, Order::Ascending)
             .try_fold(ValueRange::new_val(Uint128::zero()), |max_lien, item| {
                 let (_, lien) = item?;
@@ -827,7 +855,7 @@ impl VaultContract<'_> {
         let owner = Addr::unchecked(owner);
         let mut lien = self
             .liens
-            .may_load(ctx.deps.storage, (&owner, &ctx.info.sender))?
+            .may_load(ctx.deps.storage, (owner.clone(), ctx.info.sender.clone()))?
             .ok_or(ContractError::UnknownLienholder)?;
 
         let slashable = lien.slashable;
@@ -838,22 +866,25 @@ impl VaultContract<'_> {
         if lien.amount.high().u128() == 0 {
             // Remove lien if it's empty
             self.liens
-                .remove(ctx.deps.storage, (&owner, &ctx.info.sender));
+                .remove(ctx.deps.storage, (owner.clone(), ctx.info.sender.clone()));
         } else {
             // Save lien
-            self.liens
-                .save(ctx.deps.storage, (&owner, &ctx.info.sender), &lien)?;
+            self.liens.save(
+                ctx.deps.storage,
+                (owner.clone(), ctx.info.sender.clone()),
+                &lien,
+            )?;
         }
 
-        let mut user = self.users.load(ctx.deps.storage, &owner)?;
+        let mut user = self.users.load(ctx.deps.storage, owner.clone())?;
 
         // Max lien has to be recalculated from scratch; the just saved lien
         // is already written to storage
         self.recalculate_max_lien(ctx.deps.storage, &owner, &mut user)?;
 
         user.total_slashable
-            .sub(amount * slashable, Uint128::zero())?;
-        self.users.save(ctx.deps.storage, &owner, &user)?;
+            .sub(amount.mul_floor(slashable), Uint128::zero())?;
+        self.users.save(ctx.deps.storage, owner, &user)?;
 
         Ok(())
     }
@@ -878,20 +909,23 @@ impl VaultContract<'_> {
             // User must have a lien with this lien holder
             let mut lien = self
                 .liens
-                .load(ctx.deps.storage, (&slash_user, &lien_holder))?;
+                .load(ctx.deps.storage, (slash_user.clone(), lien_holder.clone()))?;
             let slash_amount = slash.slash;
-            let mut user_info = self.users.load(ctx.deps.storage, &slash_user)?;
+            let mut user_info = self.users.load(ctx.deps.storage, slash_user.clone())?;
             let new_collateral = user_info.collateral - slash_amount;
 
             // Slash user
             lien.amount.sub(slash_amount, Uint128::zero())?;
             // Save lien
-            self.liens
-                .save(ctx.deps.storage, (&slash_user, &lien_holder), &lien)?;
+            self.liens.save(
+                ctx.deps.storage,
+                (slash_user.clone(), lien_holder.clone()),
+                &lien,
+            )?;
             // Adjust total slashable and max lien
             user_info
                 .total_slashable
-                .sub(slash_amount * lien.slashable, Uint128::zero())?;
+                .sub(slash_amount.mul_floor(lien.slashable), Uint128::zero())?;
             self.recalculate_max_lien(ctx.deps.storage, &slash_user, &mut user_info)?;
             // Get free collateral before adjusting collateral, but after slashing
             let free_collateral = user_info.free_collateral().low(); // For simplicity
@@ -913,7 +947,7 @@ impl VaultContract<'_> {
             // Recompute max lien
             self.recalculate_max_lien(ctx.deps.storage, &slash_user, &mut user_info)?;
             // Save user info
-            self.users.save(ctx.deps.storage, &slash_user, &user_info)?;
+            self.users.save(ctx.deps.storage, slash_user, &user_info)?;
         }
         Ok(msgs)
     }
@@ -936,7 +970,7 @@ impl VaultContract<'_> {
             // Liens adjustment
             let broken_liens = self
                 .liens
-                .prefix(user)
+                .prefix(user.clone())
                 .range(storage, None, None, Order::Ascending)
                 .filter(|item| {
                     item.as_ref()
@@ -951,12 +985,13 @@ impl VaultContract<'_> {
                 let adjust_amount_low = lien.amount.low() - new_low_amount;
                 let adjust_amount_high = lien.amount.high() - new_high_amount;
                 user_info.total_slashable = ValueRange::new(
-                    user_info.total_slashable.low() - adjust_amount_low * lien.slashable,
-                    user_info.total_slashable.high() - adjust_amount_high * lien.slashable,
+                    user_info.total_slashable.low() - adjust_amount_low.mul_floor(lien.slashable),
+                    user_info.total_slashable.high() - adjust_amount_high.mul_floor(lien.slashable),
                 );
                 // Keep the invariant over the lien
                 lien.amount = ValueRange::new(new_low_amount, new_high_amount);
-                self.liens.save(storage, (user, &lien_holder), &lien)?;
+                self.liens
+                    .save(storage, (user.clone(), lien_holder.clone()), &lien)?;
                 // Remove the required amount from the user's stake
                 let validator = if lien_holder == slashed_lien_holder {
                     Some(slashed_validator.to_string())
@@ -977,34 +1012,27 @@ impl VaultContract<'_> {
             // Total slashable adjustment
             let slash_ratio_sum = self
                 .liens
-                .prefix(user)
+                .prefix(user.clone())
                 .range(storage, None, None, Order::Ascending)
                 .try_fold(Decimal::zero(), |sum, item| {
                     let (_, lien) = item?;
                     Ok::<_, ContractError>(sum + lien.slashable)
                 })?;
-            let round_up = if (claimed_collateral * slash_ratio_sum.inv().unwrap())
-                * slash_ratio_sum
-                != claimed_collateral
-            {
-                Uint128::one()
-            } else {
-                Uint128::zero()
-            };
-            let sub_amount = claimed_collateral * slash_ratio_sum.inv().unwrap() + round_up;
+            let sub_amount = claimed_collateral.mul_ceil(slash_ratio_sum.inv().unwrap());
             let all_liens = self
                 .liens
-                .prefix(user)
+                .prefix(user.clone())
                 .range(storage, None, None, Order::Ascending)
                 .collect::<StdResult<Vec<_>>>()?;
             for (lien_holder, mut lien) in all_liens {
                 // Adjust the user's total slashable amount
                 user_info
                     .total_slashable
-                    .sub(sub_amount * lien.slashable, Uint128::zero())?;
+                    .sub(sub_amount.mul_floor(lien.slashable), Uint128::zero())?;
                 // Keep the invariant over the lien
                 lien.amount.sub(sub_amount, Uint128::zero())?;
-                self.liens.save(storage, (user, &lien_holder), &lien)?;
+                self.liens
+                    .save(storage, (user.clone(), lien_holder.clone()), &lien)?;
                 // Remove the required amount from the user's stake
                 let validator = if lien_holder == slashed_lien_holder {
                     Some(slashed_validator.to_string())
@@ -1049,13 +1077,13 @@ impl VaultContract<'_> {
     }
 }
 
-impl Default for VaultContract<'_> {
+impl Default for VaultContract {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl VaultApi for VaultContract<'_> {
+impl VaultApi for VaultContract {
     type Error = ContractError;
     type ExecC = ProviderCustomMsg;
 

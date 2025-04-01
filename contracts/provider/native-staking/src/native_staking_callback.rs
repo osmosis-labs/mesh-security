@@ -1,6 +1,6 @@
 use cosmwasm_std::Response;
 use cw_utils::must_pay;
-use sylvia::types::ExecCtx;
+use sylvia::ctx::ExecCtx;
 
 #[allow(unused_imports)]
 use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCallback};
@@ -8,7 +8,7 @@ use mesh_native_staking_proxy::native_staking_callback::{self, NativeStakingCall
 use crate::contract::NativeStakingContract;
 use crate::error::ContractError;
 
-impl NativeStakingCallback for NativeStakingContract<'_> {
+impl NativeStakingCallback for NativeStakingContract {
     type Error = ContractError;
 
     /// This sends tokens back from the proxy to native-staking. (See info.funds)
@@ -24,7 +24,7 @@ impl NativeStakingCallback for NativeStakingContract<'_> {
         // proxy
         let owner_addr = self
             .owner_by_proxy
-            .load(ctx.deps.storage, &ctx.info.sender)?;
+            .load(ctx.deps.storage, ctx.info.sender)?;
 
         // Send the tokens to the vault contract
         let msg = cfg

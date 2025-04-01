@@ -2,8 +2,8 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     to_json_binary, Addr, Binary, Coin, Decimal, Deps, Response, StdError, WasmMsg,
 };
-use sylvia::types::{ExecCtx, QueryCtx};
-use sylvia::{interface, schemars};
+use sylvia::ctx::{ExecCtx, QueryCtx};
+use sylvia::interface;
 
 #[cw_serde]
 pub struct SlashRatioResponse {

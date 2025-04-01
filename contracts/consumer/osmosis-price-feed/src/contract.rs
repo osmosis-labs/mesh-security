@@ -7,8 +7,8 @@ use cw_utils::nonpayable;
 use mesh_apis::ibc::{encode_request, ibc_query_packet, ArithmeticTwapToNowRequest, CosmosQuery};
 use osmosis_std::shim::Timestamp as OsmosisTimestamp;
 use osmosis_std::types::tendermint::abci::RequestQuery;
-use sylvia::types::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
-use sylvia::{contract, schemars};
+use sylvia::contract;
+use sylvia::ctx::{ExecCtx, InstantiateCtx, QueryCtx, SudoCtx};
 
 use mesh_apis::price_feed_api::{self, PriceFeedApi, PriceResponse};
 
@@ -23,8 +23,8 @@ pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const OSMOSIS_QUERY_TWAP_PATH: &str = "/osmosis.twap.v1beta1.Query/ArithmeticTwapToNow";
 
 pub struct RemotePriceFeedContract {
-    pub channel: Item<'static, IbcChannel>,
-    pub trading_pair: Item<'static, TradingPair>,
+    pub channel: Item<IbcChannel>,
+    pub trading_pair: Item<TradingPair>,
     pub price_keeper: PriceKeeper,
     pub scheduler: Scheduler<Box<dyn Action<ContractError>>, ContractError>,
 }
@@ -75,7 +75,7 @@ impl RemotePriceFeedContract {
 
     #[sv::msg(exec)]
     pub fn request(&self, ctx: ExecCtx) -> Result<Response, ContractError> {
-        let ExecCtx { deps, env, info: _ } = ctx;
+        let ExecCtx { deps, env, .. } = ctx;
         query_twap(deps, &env)
     }
 
@@ -151,9 +151,10 @@ pub fn query_twap(deps: DepsMut, env: &Env) -> Result<Response, ContractError> {
 mod tests {
     use cosmwasm_std::{
         from_json,
-        testing::{mock_dependencies, mock_env, mock_info},
+        testing::{message_info, mock_dependencies, mock_env},
         Binary,
     };
+    use cw_multi_test::IntoBech32;
     use mesh_apis::ibc::{
         decode_response, AcknowledgementResult, CosmosResponse, InterchainQueryPacketAck,
     };
@@ -164,7 +165,7 @@ mod tests {
     fn instantiation() {
         let mut deps = mock_dependencies();
         let env = mock_env();
-        let info = mock_info("sender", &[]);
+        let info = message_info(&"sender".into_bech32(), &[]);
         let contract = RemotePriceFeedContract::new();
 
         let trading_pair = TradingPair {
@@ -175,11 +176,7 @@ mod tests {
 
         contract
             .instantiate(
-                InstantiateCtx {
-                    deps: deps.as_mut(),
-                    env,
-                    info,
-                },
+                InstantiateCtx::from((deps.as_mut(), env, info)),
                 trading_pair,
                 10,
                 50,

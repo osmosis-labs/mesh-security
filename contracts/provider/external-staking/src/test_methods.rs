@@ -1,8 +1,8 @@
 use cosmwasm_std::{Coin, Response, StdError, Uint128};
 use mesh_apis::converter_api::RewardInfo;
 use mesh_apis::ibc::AddValidator;
+use sylvia::ctx::ExecCtx;
 use sylvia::interface;
-use sylvia::types::ExecCtx;
 
 /// Interface to work around lack of support for IBC in `cw-multi-test`
 /// This interface is for test usage only
