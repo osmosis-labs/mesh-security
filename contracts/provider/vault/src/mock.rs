@@ -32,7 +32,7 @@ use crate::state::{Config, Lien, LocalStaking, UserInfo};
 use crate::txs::Txs;
 
 fn clamp_page_limit(limit: Option<u32>) -> usize {
-    limit.unwrap_or(DEFAULT_PAGE_LIMIT).max(MAX_PAGE_LIMIT) as usize
+    limit.unwrap_or(DEFAULT_PAGE_LIMIT).min(MAX_PAGE_LIMIT) as usize
 }
 
 fn def_false() -> bool {
