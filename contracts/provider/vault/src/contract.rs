@@ -40,7 +40,7 @@ pub const MAX_PAGE_LIMIT: u32 = 30;
 
 /// Aligns pagination limit
 fn clamp_page_limit(limit: Option<u32>) -> usize {
-    limit.unwrap_or(DEFAULT_PAGE_LIMIT).max(MAX_PAGE_LIMIT) as usize
+    limit.unwrap_or(DEFAULT_PAGE_LIMIT).min(MAX_PAGE_LIMIT) as usize
 }
 
 /// Default falseness for serde
