@@ -940,7 +940,7 @@ impl VaultContract {
                     &lien_holder,
                     validator,
                 )?;
-                msgs.extend_from_slice(&burn_msgs);
+                msgs.extend_from_json(&burn_msgs);
             }
             // Adjust collateral
             user_info.collateral = new_collateral;
