@@ -38,7 +38,7 @@ pub const DISTRIBUTION_POINTS_SCALE: Uint256 = Uint256::from_u128(1_000_000_000)
 
 /// Aligns pagination limit
 fn clamp_page_limit(limit: Option<u32>) -> usize {
-    limit.unwrap_or(DEFAULT_PAGE_LIMIT).max(MAX_PAGE_LIMIT) as usize
+    limit.unwrap_or(DEFAULT_PAGE_LIMIT).min(MAX_PAGE_LIMIT) as usize
 }
 
 pub struct ExternalStakingContract {
