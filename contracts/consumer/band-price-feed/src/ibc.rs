@@ -135,7 +135,7 @@ fn do_ibc_packet_receive(
     if resp.resolve_status != ResolveStatus::Success {
         return Err(ContractError::RequestNotSuccess {});
     }
-    let result: Output = OBIDecode::try_from_slice(&resp.result)
+    let result: Output = OBIDecode::try_from_json(&resp.result)
         .map_err(|err| StdError::parse_err("Oracle response packet", err.to_string()))?;
 
     let trading_pair = contract.trading_pair.load(deps.storage)?;
